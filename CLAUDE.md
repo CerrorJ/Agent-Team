@@ -15,3 +15,13 @@ pnpm dev（tsx watch）/ pnpm start / pnpm build
 ## 错题本
 
 > 踩坑后追加一行：现象 → 原因 → 正确做法。给未来的 AI 和人看。
+
+<!-- OPENWIKI:START -->
+
+## OpenWiki
+
+This repository uses OpenWiki for recurring code documentation. Start with `openwiki/quickstart.md`, then follow its links to architecture, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
+
+The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+
+<!-- OPENWIKI:END -->
