@@ -35,7 +35,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 
 ### 启动检查
 
-启动成功标志：控制台输出 `Agent OS 启动，正在建立飞书长连接…`
+启动成功标志：控制台输出 `Agent Team 启动，正在建立飞书长连接…`
 
 启动失败常见原因：
 
@@ -90,7 +90,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 应用运行时输出结构化日志：
 
 ```
-Agent OS 启动，正在建立飞书长连接…
+Agent Team 启动，正在建立飞书长连接…
 [收到] chat=oc_xxx threadId= rootId= sender=ou_xxx
   原文: @_user_1 帮我看看
   还原: @MyBot 帮我看看
