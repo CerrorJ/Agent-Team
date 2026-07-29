@@ -5,6 +5,7 @@ import * as Lark from "@larksuiteoapi/node-sdk";
 import { parseMentions, type Mention } from "./message-parser.js";
 import { mkdir } from "node:fs/promises";
 import { extname, join } from "node:path";
+import type { CardJson } from "./card.js";
 
 export interface IncomingMessage {
   messageId: string;
@@ -39,6 +40,13 @@ export interface Bot {
     saveDir: string,
     fileName?: string,
   ) => Promise<string>;
+  replyCard: (
+    messageId: string,
+    card: CardJson,
+    replyInThread?: boolean
+  ) => Promise<string | undefined>;
+  updateCard: (messageId: string, card: CardJson) => Promise<void>;
+
 }
 // extractText 把飞书的富文本（post）或纯文本（text）消息正文剥成纯文本。
 const extractText = (messageType: string, content: string): string => {
@@ -117,6 +125,24 @@ export const startBot = (opts: BotOptions): Bot => {
       await res.writeFile(savePath);
       return savePath;
     },
+    async replyCard(messageId, card, replyInThread = false) {
+      const res = await client.im.v1.message.reply({
+        path: { message_id: messageId },
+        data: {
+          msg_type: 'interactive',
+          content: JSON.stringify(card),
+          ...(replyInThread ? { reply_in_thread: true } : {}),
+        },
+      });
+      return res.data?.message_id;
+    },
+    async updateCard(messageId, card) {
+      await client.im.v1.message.patch({
+        path: { message_id: messageId },
+        data: { content: JSON.stringify(card) },
+      });
+    },
+
   };
 
   // EventDispatcher 管分发。长连接上下来的事件五花八门，dispatcher 按事件名路由到对应的处理函数。
