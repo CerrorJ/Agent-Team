@@ -1,0 +1,9 @@
+node_modules
+dist
+data
+openwiki
+docs
+.github
+pnpm-lock.yaml
+.env
+.env.*
