@@ -1,8 +1,30 @@
 export type CliId = 'claude'
 
+export interface CliRunStats {
+  durationMs?: number
+  turns?: number
+  totalTokens?: number
+  inputTokens?: number
+  outputTokens?: number
+  cacheReadTokens?: number
+  cacheCreationTokens?: number
+  contextUsedTokens?: number
+  contextWindowTokens?: number
+}
+// tool_start 与 tool_end 通过 toolUseId 关联一次工具调用，
+// result.stats 则保存最终耗时、轮次与模型窗口
 export type CliEvent =
   | { type: 'session'; sessionId: string }
-  | { type: 'result'; answer: string; sessionId?: string }
+  | {
+      type: 'tool_start'
+      toolUseId: string
+      toolName: string
+      label: string
+      detail?: string
+    }
+  | { type: 'tool_end'; toolUseId: string; failed: boolean }
+  | { type: 'context'; usedTokens: number }
+  | { type: 'result'; answer: string; sessionId?: string; stats?: CliRunStats }
   | { type: 'error'; message: string; sessionId?: string }
 
 export interface CliAdapter {
@@ -14,10 +36,11 @@ export interface CliAdapter {
   // 已有会话续接
   buildResumeArgs(prompt: string, sessionId: string): string[]
   // 原始输出 -> 统一事件
-  parseEvent(line: string): CliEvent | undefined
+  parseEvents(line: string): CliEvent[]
 }
 
 export interface CliRunResult {
   answer: string
   sessionId?: string
+  stats?: CliRunStats
 }

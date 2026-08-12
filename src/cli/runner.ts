@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import type { CliAdapter, CliRunResult } from './types.js'
+import type { CliAdapter, CliEvent, CliRunResult } from './types.js'
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
 
@@ -11,6 +11,8 @@ export interface RunCliOptions {
   sessionId?: string
   signal?: AbortSignal
   timeoutMs?: number
+  // 调用方按需订阅
+  onEvent?: (event: CliEvent) => void
 }
 
 // Runner 只读取适配器翻译后的 CliEvent，不再关心供应商的原生字段。
@@ -22,6 +24,7 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     sessionId,
     signal,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    onEvent,
   } = options
   const args = sessionId
     ? adapter.buildResumeArgs(prompt, sessionId)
@@ -56,17 +59,22 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     }
 
     lines.on('line', (line) => {
-      const event = adapter.parseEvent(line)
-      if (!event) return
-      if (event.sessionId) observedSessionId = event.sessionId
-      if (event.type === 'error') {
-        resultError = new Error(event.message)
-        return
-      }
-      if (event.type === 'result') {
-        finalResult = {
-          answer: event.answer,
-          sessionId: event.sessionId ?? observedSessionId,
+      // 遍历适配器翻译后的事件，先进入onEvent，再进入 Runner 原有会话，错误，最终结果
+      for (const event of adapter.parseEvents(line)) {
+        onEvent?.(event)
+        if ('sessionId' in event && event.sessionId) {
+          observedSessionId = event.sessionId
+        }
+        if (event.type === 'error') {
+          resultError = new Error(event.message)
+          continue
+        }
+        if (event.type === 'result') {
+          finalResult = {
+            answer: event.answer,
+            sessionId: event.sessionId ?? observedSessionId,
+            ...(event.stats ? { stats: event.stats } : {}),
+          }
         }
       }
     })

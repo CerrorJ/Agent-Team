@@ -1,7 +1,8 @@
 /**
- * Agent Team 入口。
- * 当前阶段：一个话题对应一个内存会话。
+ * Agent OS 入口。
+ * 当前阶段：飞书消息驱动 Claude Code 完成任务。
  */
+
 import 'dotenv/config'
 import { join, resolve } from 'node:path'
 import { startBot } from './im/lark.js'
@@ -10,6 +11,7 @@ import { resolveMentions, extractResourceKeys } from './im/message-parser.js'
 import { parseCommand } from './core/command-parser.js'
 import { SessionManager, type Session } from './core/session-manager.js'
 import { JsonSessionStore } from './core/session-store.js'
+import { TaskProgressTracker } from './core/task-progress.js'
 import { ClaudeAdapter } from './cli/claude-adapter.js'
 import { runCli } from './cli/runner.js'
 
@@ -37,6 +39,7 @@ const executeCli = (
   prompt: string,
   sessionId: string | undefined,
   signal: AbortSignal,
+  onEvent: Parameters<typeof runCli>[0]['onEvent'],
 ) => {
   return runCli({
     adapter: cliAdapter,
@@ -44,6 +47,7 @@ const executeCli = (
     cwd: cliWorkdir,
     sessionId,
     signal,
+    onEvent,
   })
 }
 
@@ -67,7 +71,7 @@ const formatSessionStatus = (session: Session): string => {
 
 const markSessionIdle = async (sessionId: string): Promise<void> => {
   if (sessions.get(sessionId)?.status !== 'active') return
-  sessions.transition(sessionId, 'idle')
+  await sessions.transition(sessionId, 'idle')
   console.log(`[会话] id=${sessionId} status=idle`)
 }
 
@@ -107,7 +111,8 @@ startBot({
     }
     if (command?.name === 'close') {
       activeRuns.get(session.id)?.abort()
-      if (session.status !== 'closed') sessions.transition(session.id, 'closed')
+      if (session.status !== 'closed')
+        await sessions.transition(session.id, 'closed')
       await bot.reply(
         msg.messageId,
         '当前会话已关闭。需要继续时，请新开一个话题。',
@@ -141,7 +146,7 @@ startBot({
       return
     }
 
-    sessions.transition(session.id, 'active')
+    await sessions.transition(session.id, 'active')
     const run = new AbortController()
     activeRuns.set(session.id, run)
 
@@ -161,7 +166,6 @@ startBot({
         console.error(`  [下载失败] ${res.key}:`, (e as Error).message)
       }
     }
-
     // 先回复一张卡片，让用户知道任务已经进入执行队列。
     let cardId: string | undefined
     try {
@@ -189,10 +193,30 @@ startBot({
     }
     console.log(`[卡片] 已发送 message_id=${cardId} inThread=${hasThread}`)
 
+    const progress = new TaskProgressTracker()
+
     // 让事件回调尽快返回，Claude Code 在后台继续执行。
-    void executeCli(resolved, session.cliSessionId, run.signal)
+    void executeCli(resolved, session.cliSessionId, run.signal, (event) => {
+      if (
+        event.type !== 'tool_start' &&
+        event.type !== 'tool_end' &&
+        event.type !== 'context'
+      )
+        return
+
+      const snapshot = progress.accept(event)
+      const currentDetail = snapshot.currentDetail
+        ? ` detail=${snapshot.currentDetail}`
+        : ''
+      const context =
+        snapshot.contextUsedTokens === undefined
+          ? ''
+          : ` context=${snapshot.contextUsedTokens}`
+      console.log(
+        `[进度] ${snapshot.current}${currentDetail} tools=${snapshot.completedCount}/${snapshot.toolCount}${context}`,
+      )
+    })
       .then(async (result) => {
-        // 入口只看 cliSessionId：没有值就新建，有值就续接原来的会话。
         if (result.sessionId && result.sessionId !== session.cliSessionId) {
           await sessions.setCliSessionId(session.id, result.sessionId)
         }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { CliId } from '../cli/types.js'
 import type { SessionStore } from './session-store.js'
 
 export interface Session {
@@ -22,8 +23,6 @@ export interface SessionManagerOptions {
   createId?: () => string
   store?: SessionStore
 }
-
-export type CliId = 'claude'
 
 // 创建，运行时，上一轮结束，会话结束
 export type SessionStatus = 'creating' | 'active' | 'idle' | 'closed'
