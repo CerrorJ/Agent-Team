@@ -9,9 +9,9 @@ tags: [domain, ai-cli, claude-code, codex, headless]
 
 ## 概述
 
-Agent-Team 的终极目标是把飞书消息路由到 AI 编程 CLI（Claude Code 或 Codex），解析其 headless 输出，驱动任务卡片更新。当前项目中，`src/probe-cli.ts` 是一个独立的调试工具，用于从 stdin 读取并格式化输出 Claude Code / Codex 的 JSON 事件流。
+Agent-Team 的目标是把飞书消息路由到 AI 编程 CLI（Claude Code 或 Codex），解析其 headless 输出，驱动任务卡片更新。Claude Code 这条链路已经在主流程落地：`src/cli/claude-adapter.ts` 把 `stream-json` 输出翻译成统一 `CliEvent`（详见 [消息处理流程](../workflows/message-flow.md)）；`src/probe-cli.ts` 仍是独立的调试工具，用于从 stdin 读取并格式化输出 Claude Code / Codex 的 JSON 事件流。
 
-> 这一模块是未来 [消息处理流程](../workflows/message-flow.md) 中替换 `DEMO_STEPS` 模拟逻辑的基础。
+> Codex 侧目前只有本页的输出结构调研，适配器尚未实现（`CliId` 只有 `'claude'`）。
 
 ## 两种 CLI 的输出结构对比
 
@@ -87,14 +87,15 @@ claude --headless "实现一个函数" | pnpm probe:cli
 codex exec "实现一个函数" | pnpm probe:cli
 ```
 
-## 未来集成方向
+## 集成现状
 
-当前 `probe-cli.ts` 是独立工具，未来需要将其解析逻辑集成到主流程中：
+Claude Code 的解析逻辑已经集成进主流程，`probe-cli.ts` 仍可作为调试工具独立使用：
 
-1. **消息路由**：飞书消息 → 选择 Claude Code 或 Codex
-2. **进程管理**：spawn CLI 子进程，通过 stdin/stdout 管道交互
-3. **事件解析**：复用 probe-cli 的事件路由逻辑
-4. **卡片驱动**：将解析结果映射到 [任务卡片系统](task-card.md) 的进度更新
+- **统一事件协议**：`src/cli/types.ts` 定义 `CliAdapter` / `CliEvent`，Runner 与卡片只消费翻译后的事件
+- **Claude 适配器**：`src/cli/claude-adapter.ts` 实现 `CliAdapter`，覆盖 `system/init`、`assistant`、`user`、`result` 四类原生事件（事件翻译对照表见 [消息处理流程](../workflows/message-flow.md)）
+- **进程管理**：`src/cli/runner.ts` spawn 子进程、逐行读 stdout、10 分钟超时、支持 AbortSignal 取消
+- **卡片驱动**：`CliEvent` 经 `TaskProgressTracker` 折叠成进度快照，驱动 [任务卡片系统](task-card.md) 刷新
+- **待办**：Codex 适配器未实现，接入时按上表对照翻译成同一套 `CliEvent` 即可
 
 ## 源文件索引
 

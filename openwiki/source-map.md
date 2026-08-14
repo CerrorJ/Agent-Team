@@ -12,12 +12,22 @@ tags: [reference, source-map, navigation]
 ```
 Agent-Team/
 ├── src/
-│   ├── index.ts              # 应用入口，启动 bot + 消息处理业务逻辑
+│   ├── index.ts              # 应用入口，启动 bot + 消息/卡片回调业务编排
 │   ├── probe-cli.ts          # AI CLI headless 输出解析工具（独立运行）
-│   └── im/
-│       ├── lark.ts           # 飞书 SDK 封装：WS 连接 + 事件分发 + Bot 接口
-│       ├── message-parser.ts # 消息解析纯函数：@ 提及还原 + 资源提取
-│       └── card.ts           # 飞书卡片构建 + 节流更新机制
+│   ├── im/
+│   │   ├── lark.ts           # 飞书 SDK 封装：WS 连接 + 事件分发 + Bot 接口
+│   │   ├── message-parser.ts # 消息解析纯函数：@ 提及还原 + 资源提取
+│   │   └── card.ts           # 飞书卡片构建 + 节流更新机制
+│   ├── core/
+│   │   ├── session-manager.ts # 会话状态机（话题 → 会话）
+│   │   ├── session-store.ts   # 会话 JSON 持久化（zod 校验 + 原子写）
+│   │   ├── task-progress.ts   # CLI 事件 → 进度快照
+│   │   ├── task-abort.ts      # 停止任务的权限校验
+│   │   └── command-parser.ts  # 斜杠命令解析
+│   └── cli/
+│       ├── types.ts           # CliAdapter / CliEvent 统一事件协议
+│       ├── claude-adapter.ts  # Claude Code 输出 → 统一事件
+│       └── runner.ts          # CLI 子进程生命周期（spawn/超时/取消）
 ├── docs/
 │   └── ClaudeCode和Codex在headless输出结构.md  # 两种 CLI 输出对照表
 ├── .github/
@@ -37,14 +47,14 @@ Agent-Team/
 
 ### src/index.ts — 应用入口
 
-**职责：** 读取环境变量 → 启动飞书 bot → 定义消息处理业务逻辑
+**职责：** 读取环境变量 → 恢复会话 → 启动飞书 bot → 编排消息与卡片回调业务逻辑
 
 **关键导出：** 无（入口文件，直接执行）
 
 **核心逻辑：**
-- `DEMO_STEPS`：8 步模拟任务数组（未来替换为真实 AI CLI 调用）
-- `runCardDemo()`：模拟任务执行 + 卡片节流更新演示
-- `startBot({ onMessage })`：启动飞书连接并注册消息回调
+- `onCardAction`：处理卡片「停止任务」回调，调用 `requestTaskAbort` 并映射 toast
+- `onMessage`：斜杠命令处理 → 会话守卫 → 下载资源 → 回复初始卡片 → 后台 `executeCli`（`runCli` + `ClaudeAdapter`）→ 进度心跳驱动卡片刷新 → 成功/取消/失败三分支收尾
+- `activeRuns` / `contextWindows` 两个内存 Map：登记运行中任务、记住各会话上下文窗口大小
 
 **参见：** [消息处理流程](workflows/message-flow.md)
 
@@ -62,7 +72,8 @@ Agent-Team/
 | `startBot` | function | 创建 Lark.Client + 注册 dispatcher + 启动 WS 连接 |
 
 **内部函数：**
-- `extractText()` — 从 text/post 消息中提取纯文本
+- `extractMessageText()` — 从 text/post 消息中提取纯文本
+- `parseCardAction()` — 从卡片回调数据中取出操作者、消息 id 和按钮 value
 - `resourceExtension()` — 推断下载资源的文件扩展名
 - `getHeader()` — 兼容不同 headers 类型的响应头读取
 
@@ -90,12 +101,35 @@ Agent-Team/
 | 导出 | 类型 | 说明 |
 |------|------|------|
 | `CardJson` | type | 卡片 JSON 结构（`Record<string, unknown>`） |
-| `TaskStatus` | type | 任务状态：`running` / `success` / `failed` |
+| `TaskStatus` | type | 任务状态：`running` / `success` / `failed` / `cancelled` |
 | `TaskCardOptions` | interface | 构建卡片的输入参数 |
 | `buildTaskCard` | function | 根据 options 构建飞书卡片 JSON |
-| `ThrottledCardUpdater` | class | 2 秒窗口节流 + 串行更新的卡片更新器 |
+| `answerNeedsContinuation` / `answerContinuation` / `splitLongText` | function | 超长回答的卡片截断与续发拆分 |
+| `ThrottledCardUpdater` | class | 1 秒窗口节流 + 串行更新的卡片更新器 |
 
 **参见：** [任务卡片系统](domain/task-card.md)
+
+### src/core/ — 会话与任务核心域
+
+| 文件 | 关键导出 | 说明 |
+|------|----------|------|
+| `session-manager.ts` | `SessionManager` / `Session` / `SessionStatus` | 话题级会话状态机，`resolve` 按话题查找或创建，`transition` 校验合法流转 |
+| `session-store.ts` | `JsonSessionStore` / `SessionStore` | zod 校验 + 临时文件重命名的原子写 + 串行写队列，重启时把 creating/active 恢复为 idle |
+| `task-progress.ts` | `TaskProgressTracker` / `TaskProgressSnapshot` | 以 `toolUseId` 配对 tool_start/tool_end，维护最近 12 条活动与上下文 token 基线 |
+| `task-abort.ts` | `requestTaskAbort` / `ActiveRun` / `AbortTaskOutcome` | 停止任务时的存在性/发起人/重复取消校验 |
+| `command-parser.ts` | `parseCommand` / `SlashCommand` | 匹配「可选 @提及 + /close /status /help」的纯文本命令 |
+
+**参见：** [会话与任务管理](domain/session.md)
+
+### src/cli/ — CLI 执行层
+
+| 文件 | 关键导出 | 说明 |
+|------|----------|------|
+| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` | 统一事件协议：session / tool_start / tool_end / context / result / error |
+| `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译 |
+| `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、10 分钟默认超时、AbortSignal 取消 |
+
+**参见：** [AI CLI 输出解析](domain/ai-cli-probe.md)、[消息处理流程](workflows/message-flow.md)
 
 ### src/probe-cli.ts — AI CLI 输出解析工具
 
@@ -125,18 +159,3 @@ Agent-Team/
 ### pnpm-workspace.yaml
 
 允许构建的原生依赖：`esbuild`、`protobufjs`
-
-## 未提交的变更
-
-以下文件在初始提交后有未提交的修改（`git diff` vs HEAD）：
-
-| 文件 | 状态 | 说明 |
-|------|------|------|
-| `.env.example` | M | 环境变量模板更新 |
-| `CLAUDE.md` | M | 约定文档更新 |
-| `src/im/lark.ts` | M | 飞书集成改动 |
-| `src/im/message-parser.ts` | M | 消息解析改动 |
-| `src/index.ts` | M | 入口逻辑改动 |
-| `src/im/card.ts` | 新增 | 卡片系统新文件 |
-| `.github/` | 新增 | OpenWiki 工作流 |
-| `AGENTS.md` | 新增 | OpenWiki 引用 |
