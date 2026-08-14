@@ -17,7 +17,9 @@ export interface TaskProgressSnapshot {
   completedCount: number
   activities: TaskActivity[]
   contextUsedTokens?: number
+  contextStartTokens?: number;
   contextWindowTokens?: number
+  startedNewSession?: boolean;
 }
 
 interface ActiveTool {
@@ -36,16 +38,20 @@ export class TaskProgressTracker {
   private toolCount = 0
   private completedCount = 0
   private contextUsedTokens: number | undefined
-
+  private contextStartTokens: number | undefined;
   constructor(
     private readonly now: () => number = Date.now,
     private readonly contextWindowTokens?: number,
+    // 是否新会话首跑：影响结束卡片上增量起点的措辞
+    private readonly startedNewSession = false,
   ) {
     this.startedAt = now()
   }
   // 所有事件入口，用 ID 配对避免多个工具同时运行串线
   accept(event: CliEvent): TaskProgressSnapshot {
     if (event.type === 'context') {
+      // 首个 context 事件的用量作为本轮基线
+      this.contextStartTokens ??= event.usedTokens;
       this.contextUsedTokens = event.usedTokens
     }
     if (event.type === 'tool_start') {
@@ -89,9 +95,14 @@ export class TaskProgressTracker {
       ...(this.contextUsedTokens !== undefined
         ? { contextUsedTokens: this.contextUsedTokens }
         : {}),
+      ...(this.contextStartTokens !== undefined
+        ? { contextStartTokens: this.contextStartTokens }
+        : {}),
       ...(this.contextWindowTokens !== undefined
         ? { contextWindowTokens: this.contextWindowTokens }
         : {}),
+      ...(this.startedNewSession ? { startedNewSession: true } : {}),
     }
   }
 }
+
