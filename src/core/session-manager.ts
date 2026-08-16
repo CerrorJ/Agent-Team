@@ -95,7 +95,11 @@ export class SessionManager {
   }
 
   // 每次收到消息都会先查一次：查到就返回原会话，查不到才创建。
-  async resolve(message: MessageAddress): Promise<ResolvedSession> {
+  // cliId 只影响新会话；已有会话沿用创建时选定的执行引擎。
+  async resolve(
+    message: MessageAddress,
+    cliId: CliId = 'claude',
+  ): Promise<ResolvedSession> {
     const threadId = topicIdOf(message)
     const key = sessionKey(message.chatId, threadId)
     const existing = this.sessions.get(key)
@@ -106,7 +110,7 @@ export class SessionManager {
       id: this.createId(),
       threadId,
       chatId: message.chatId,
-      cliId: 'claude',
+      cliId,
       status: 'creating',
       createdAt: now,
       updatedAt: now,

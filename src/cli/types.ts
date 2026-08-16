@@ -1,4 +1,11 @@
-export type CliId = 'claude'
+export type CliId = 'claude' | 'codex'
+
+export type CliPromptInput = 'argument' | 'stdin'
+
+/** Windows 上 prompt 必须走 stdin（避免 cmd 对命令行参数转义/乱码），其他平台直接走参数。 */
+export const promptInputForPlatform = (
+  platform: NodeJS.Platform,
+): CliPromptInput => (platform === 'win32' ? 'stdin' : 'argument')
 
 export interface CliRunStats {
   durationMs?: number
@@ -32,9 +39,13 @@ export interface CliAdapter {
   readonly command: string
   readonly displayName: string
   // 新会话组装参数
-  buildArgs(prompt: string): string[]
-  // 已有会话续接
-  buildResumeArgs(prompt: string, sessionId: string): string[]
+  buildArgs(prompt: string, promptInput: CliPromptInput): string[]
+  // 已有会话续接组装参数
+  buildResumeArgs(
+    prompt: string,
+    sessionId: string,
+    promptInput: CliPromptInput,
+  ): string[]
   // 原始输出 -> 统一事件
   parseEvents(line: string): CliEvent[]
 }

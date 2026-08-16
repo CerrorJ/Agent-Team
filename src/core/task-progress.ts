@@ -17,9 +17,9 @@ export interface TaskProgressSnapshot {
   completedCount: number
   activities: TaskActivity[]
   contextUsedTokens?: number
-  contextStartTokens?: number;
+  contextStartTokens?: number
   contextWindowTokens?: number
-  startedNewSession?: boolean;
+  startedNewSession?: boolean
 }
 
 interface ActiveTool {
@@ -38,7 +38,7 @@ export class TaskProgressTracker {
   private toolCount = 0
   private completedCount = 0
   private contextUsedTokens: number | undefined
-  private contextStartTokens: number | undefined;
+  private contextStartTokens: number | undefined
   constructor(
     private readonly now: () => number = Date.now,
     private readonly contextWindowTokens?: number,
@@ -51,7 +51,7 @@ export class TaskProgressTracker {
   accept(event: CliEvent): TaskProgressSnapshot {
     if (event.type === 'context') {
       // 首个 context 事件的用量作为本轮基线
-      this.contextStartTokens ??= event.usedTokens;
+      this.contextStartTokens ??= event.usedTokens
       this.contextUsedTokens = event.usedTokens
     }
     if (event.type === 'tool_start') {
@@ -105,4 +105,3 @@ export class TaskProgressTracker {
     }
   }
 }
-

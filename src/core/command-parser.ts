@@ -1,3 +1,5 @@
+import type { CliId } from '../cli/types.js'
+
 export type CommandName = 'close' | 'status' | 'help'
 
 export interface SlashCommand {
@@ -12,4 +14,21 @@ export const parseCommand = (text: string): SlashCommand | undefined => {
   const match = COMMAND_RE.exec(text.trim())
   if (!match) return undefined
   return { name: match[1] as CommandName }
+}
+
+const CLI_REQUEST_RE = /^(?:@\S+\s+)?\/(claude|codex)(?:\s+([\s\S]*))?$/
+
+export interface CliRequest {
+  cliId: CliId
+  prompt: string
+}
+
+// 显式选择执行引擎的请求，如 “@Bot /codex 修复登录 bug”；没带任务文本时 prompt 为空。
+export const parseCliRequest = (text: string): CliRequest | undefined => {
+  const match = CLI_REQUEST_RE.exec(text.trim())
+  if (!match) return undefined
+  return {
+    cliId: match[1] as CliId,
+    prompt: (match[2] ?? '').trim(),
+  }
 }
