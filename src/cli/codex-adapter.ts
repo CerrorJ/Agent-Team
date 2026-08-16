@@ -130,6 +130,7 @@ export class CodexAdapter implements CliAdapter {
     args.push(promptInput === 'stdin' ? '-' : prompt)
     return args
   }
+
   // 多轮询问使用
   buildResumeArgs(
     prompt: string,

@@ -11,6 +11,7 @@ export interface BotConfig {
   systemPrompt: string
   workspaceDir: string
   reviewBy?: string
+  collaborationMaxRounds: number
 }
 
 type Environment = Record<string, string | undefined>
@@ -33,6 +34,9 @@ const BotSchema = z.object({
     .string()
     .regex(/^[a-z0-9][a-z0-9_-]{0,31}$/)
     .optional(),
+  // 协作允许的交接总次数：2（默认）= 发起审查 + 回传反馈各一次；
+  // 上限 4 意味着反馈之后还能再来一轮「返工 + 复审」
+  collaborationMaxRounds: z.number().int().min(1).max(4).optional().default(2),
   enabled: z.boolean().optional().default(true),
 })
 
@@ -70,6 +74,7 @@ export const parseBotConfigs = (
         defaultCliId: bot.defaultCli,
         systemPrompt: bot.systemPrompt,
         reviewBy: bot.reviewBy,
+        collaborationMaxRounds: bot.collaborationMaxRounds,
         workspaceDir: resolveWorkspacePath(
           bot.workspace ?? env.CLI_WORKDIR ?? env.CLAUDE_WORKDIR ?? '.',
           baseDirectory,

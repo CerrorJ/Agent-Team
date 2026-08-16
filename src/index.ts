@@ -143,6 +143,8 @@ const sendCollaborationMessage = async (options: {
   replyToMessageId: string
   targetBotId: string
   taskId: string
+  round: number
+  maxRounds: number
   workspaceDir: string
   prompt: string
 }): Promise<void> => {
@@ -154,6 +156,8 @@ const sendCollaborationMessage = async (options: {
     taskId: options.taskId,
     fromBotId: options.senderConfig.id,
     toBotId: options.targetBotId,
+    round: options.round,
+    maxRounds: options.maxRounds,
     workspaceDir: options.workspaceDir,
     prompt: options.prompt,
   }
@@ -169,6 +173,8 @@ const sendCollaborationMessage = async (options: {
         targetName: target.identity.name,
         workspaceName: basename(options.workspaceDir),
         prompt: options.prompt,
+        round: options.round,
+        maxRounds: options.maxRounds,
       }),
       true,
     )
@@ -178,7 +184,9 @@ const sendCollaborationMessage = async (options: {
     const mentionMessageId = await options.senderBot.replyMention(
       cardMessageId,
       target.identity,
-      `新的代码审查任务（任务编号：${collaboration.dispatchId}），请查看上方卡片。`,
+      options.round === 1
+        ? `新的代码审查任务（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
+        : `审查反馈已经返回（任务编号：${collaboration.dispatchId}），请查看上方卡片。`,
       true,
     )
 
@@ -188,7 +196,7 @@ const sendCollaborationMessage = async (options: {
     throw error
   }
   console.log(
-    `[协作] task=${options.taskId} ${options.senderConfig.id} -> ${options.targetBotId}`,
+    `[协作] task=${options.taskId} ${options.senderConfig.id} -> ${options.targetBotId} round=${options.round}/${options.maxRounds}`,
   )
 }
 
@@ -787,13 +795,34 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
           }
           if (!isCompacting) {
             try {
-              if (!collaboration && config.reviewBy) {
+              // 协作路由三分支：
+              // 1) 本次是协作任务且未到轮次上限 → 结果带着 round+1 交回派发 bot，继续返工/复审；
+              // 2) 普通任务完成且配置了 reviewBy → 发起第 1 轮独立审查；
+              // 3) 协作已到轮次上限 → 流程结束，把最终结果 @ 回派发方
+              if (
+                collaboration &&
+                collaboration.round < collaboration.maxRounds
+              ) {
+                await sendCollaborationMessage({
+                  senderConfig: config,
+                  senderBot: bot,
+                  replyToMessageId: msg.messageId,
+                  targetBotId: collaboration.fromBotId,
+                  taskId: collaboration.taskId,
+                  round: collaboration.round + 1,
+                  maxRounds: collaboration.maxRounds,
+                  workspaceDir: session.workspaceDir,
+                  prompt: result.answer || '任务已完成，请检查当前工作目录。',
+                })
+              } else if (!collaboration && config.reviewBy) {
                 await sendCollaborationMessage({
                   senderConfig: config,
                   senderBot: bot,
                   replyToMessageId: msg.messageId,
                   targetBotId: config.reviewBy,
                   taskId: randomUUID(),
+                  round: 1,
+                  maxRounds: config.collaborationMaxRounds,
                   workspaceDir: session.workspaceDir,
                   prompt: [
                     '请独立检查当前工作目录中刚完成的实现。',
@@ -806,7 +835,7 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
                   bot,
                   replyToMessageId: msg.messageId,
                   target: senderRuntime.identity,
-                  text: '代码审查已完成，请查看上方结果。',
+                  text: '本轮协作已完成，请查看上方结果。',
                   replyInThread: hasThread,
                 })
               }
