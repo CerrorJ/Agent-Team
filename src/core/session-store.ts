@@ -10,6 +10,7 @@ export interface SessionStore {
 
 const SessionSchema = z.object({
   id: z.string().min(1),
+  botId: z.string().min(1),
   threadId: z.string().min(1),
   chatId: z.string().min(1),
   cliId: z.enum(['claude', 'codex']),
@@ -27,8 +28,11 @@ const recoverInterruptedSession = (session: Session): Session => {
 
 export class JsonSessionStore implements SessionStore {
   private writeQueue: Promise<void> = Promise.resolve()
-
-  constructor(private readonly filePath: string) {}
+  // legacyBotId 表示旧记录应该归到哪台 bot。
+  constructor(
+    private readonly filePath: string,
+    private readonly legacyBotId = "default",
+  ) { }
 
   async load(): Promise<Session[]> {
     let content: string
@@ -48,12 +52,15 @@ export class JsonSessionStore implements SessionStore {
     let needsCleanup = false
     for (const row of rows) {
       // 磁盘数据交给 zod 验证，过滤坏掉数据，active/creating 会被恢复成 idle，重启会话进程，active/creating 已经不存在了
-      const result = SessionSchema.safeParse(row)
+      const isLegacy =
+        typeof row === "object" && row !== null && !("botId" in row);
+      const candidate = isLegacy ? { ...row, botId: this.legacyBotId } : row;
+      const result = SessionSchema.safeParse(candidate);
       if (!result.success) {
         needsCleanup = true
         continue
       }
-
+      if (isLegacy) needsCleanup = true;
       const recovered = recoverInterruptedSession(result.data)
       if (recovered.status !== result.data.status) needsCleanup = true
       sessions.push(recovered)
