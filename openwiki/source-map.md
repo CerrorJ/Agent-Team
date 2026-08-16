@@ -12,29 +12,38 @@ tags: [reference, source-map, navigation]
 ```
 Agent-Team/
 ├── src/
-│   ├── index.ts              # 应用入口，启动 bot + 消息/卡片回调业务编排
+│   ├── index.ts              # 应用入口，多 bot 启动 + 消息/卡片回调业务编排
 │   ├── probe-cli.ts          # AI CLI headless 输出解析工具（独立运行）
 │   ├── im/
 │   │   ├── lark.ts           # 飞书 SDK 封装：WS 连接 + 事件分发 + Bot 接口
 │   │   ├── message-parser.ts # 消息解析纯函数：@ 提及还原 + 资源提取
 │   │   └── card.ts           # 飞书卡片构建 + 节流更新机制
 │   ├── core/
-│   │   ├── session-manager.ts # 会话状态机（话题 → 会话）
-│   │   ├── session-store.ts   # 会话 JSON 持久化（zod 校验 + 原子写）
+│   │   ├── bot-registry.ts   # bots.json 解析校验 + 凭证环境变量解析 + systemPrompt 拼接
+│   │   ├── session-manager.ts # 会话状态机（botId:chatId:threadId → 会话）
+│   │   ├── session-store.ts   # 会话 JSON 持久化（zod 校验 + 原子写 + 旧记录迁移）
 │   │   ├── task-progress.ts   # CLI 事件 → 进度快照
 │   │   ├── task-abort.ts      # 停止任务的权限校验
-│   │   └── command-parser.ts  # 斜杠命令解析
+│   │   ├── command-parser.ts  # 斜杠命令与 /claude /codex 引擎选择解析
+│   │   └── workspace.ts       # 工作目录解析与存在性校验
 │   └── cli/
 │       ├── types.ts           # CliAdapter / CliEvent 统一事件协议
+│       ├── registry.ts        # 按 CliId 取适配器（claude / codex）
 │       ├── claude-adapter.ts  # Claude Code 输出 → 统一事件
-│       └── runner.ts          # CLI 子进程生命周期（spawn/超时/取消）
+│       ├── codex-adapter.ts   # Codex 输出 → 统一事件
+│       ├── runner.ts          # CLI 子进程生命周期（spawn/超时/取消）
+│       └── spawn-cli.ts       # 跨平台 spawn：Windows shell 启动 + 进程树清理
+├── config/
+│   └── bots.example.json      # bot 注册文件模板（id、凭证变量名、defaultCli、systemPrompt）
 ├── docs/
 │   └── ClaudeCode和Codex在headless输出结构.md  # 两种 CLI 输出对照表
 ├── .github/
 │   └── workflows/
 │       └── openwiki-update.yml    # OpenWiki 文档自动更新工作流
-├── .env.example              # 环境变量模板
+├── .env.example              # 环境变量模板（BOTS_CONFIG、FEISHU_* 凭证、CLI_WORKDIR）
 ├── .gitignore                # 忽略 node_modules/ dist/ .env data/ *.log
+├── .prettierrc / .prettierignore  # Prettier 格式化配置
+├── eslint.config.js          # ESLint：箭头函数 + 声明间空行规则
 ├── CLAUDE.md                 # AI Agent 约定 + 运行说明 + 错题本
 ├── AGENTS.md                 # OpenWiki 引用说明
 ├── package.json              # 项目配置与脚本
@@ -47,13 +56,14 @@ Agent-Team/
 
 ### src/index.ts — 应用入口
 
-**职责：** 读取环境变量 → 恢复会话 → 启动飞书 bot → 编排消息与卡片回调业务逻辑
+**职责：** 读取 bots.json → 校验工作目录 → 恢复会话 → 逐 bot 启动飞书连接 → 编排消息与卡片回调业务逻辑
 
 **关键导出：** 无（入口文件，直接执行）
 
 **核心逻辑：**
+- `startConfiguredBot`：为每个 bot 调 `startBot` 建立独立长连接，注册同一套业务回调
 - `onCardAction`：处理卡片「停止任务」回调，调用 `requestTaskAbort` 并映射 toast
-- `onMessage`：斜杠命令处理 → 会话守卫 → 下载资源 → 回复初始卡片 → 后台 `executeCli`（`runCli` + `ClaudeAdapter`）→ 进度心跳驱动卡片刷新 → 成功/取消/失败三分支收尾
+- `onMessage`：命令与引擎选择解析 → 会话守卫 → 下载资源 → 回复初始卡片 → 后台 `executeCli`（`runCli` + 所选适配器）→ 进度心跳驱动卡片刷新 → 成功/取消/失败三分支收尾
 - `activeRuns` / `contextWindows` 两个内存 Map：登记运行中任务、记住各会话上下文窗口大小
 
 **参见：** [消息处理流程](workflows/message-flow.md)
@@ -113,11 +123,13 @@ Agent-Team/
 
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
-| `session-manager.ts` | `SessionManager` / `Session` / `SessionStatus` | 话题级会话状态机，`resolve` 按话题查找或创建，`transition` 校验合法流转 |
-| `session-store.ts` | `JsonSessionStore` / `SessionStore` | zod 校验 + 临时文件重命名的原子写 + 串行写队列，重启时把 creating/active 恢复为 idle |
+| `bot-registry.ts` | `loadBotConfigs` / `parseBotConfigs` / `buildBotPrompt` / `BotConfig` | bots.json 的 zod 校验、凭证环境变量解析、工作目录优先级、角色提示词拼接（详见 [多 bot 注册](domain/bot-registry.md)） |
+| `session-manager.ts` | `SessionManager` / `Session` / `SessionStatus` | 话题级会话状态机，`resolve` 按 `botId:chatId:threadId` 查找或创建，`transition` 校验合法流转，`setWorkspaceDir` 切目录时清空 `cliSessionId` |
+| `session-store.ts` | `JsonSessionStore` / `SessionStore` | zod 校验 + 临时文件重命名的原子写 + 串行写队列，重启时把 creating/active 恢复为 idle，`migrateLegacySession` 给旧记录补 `botId` / `workspaceDir` |
 | `task-progress.ts` | `TaskProgressTracker` / `TaskProgressSnapshot` | 以 `toolUseId` 配对 tool_start/tool_end，维护最近 12 条活动与上下文 token 基线 |
 | `task-abort.ts` | `requestTaskAbort` / `ActiveRun` / `AbortTaskOutcome` | 停止任务时的存在性/发起人/重复取消校验 |
-| `command-parser.ts` | `parseCommand` / `SlashCommand` | 匹配「可选 @提及 + /close /status /help」的纯文本命令 |
+| `command-parser.ts` | `parseCommand` / `parseCliRequest` / `SlashCommand` / `CliRequest` | 匹配 `/close /status /help /cd` 命令与 `/claude` `/codex` 引擎选择 |
+| `workspace.ts` | `resolveWorkspacePath` / `ensureWorkspaceDirectory` | 工作目录路径解析（相对路径基于基准目录）与存在性校验 |
 
 **参见：** [会话与任务管理](domain/session.md)
 
@@ -125,9 +137,12 @@ Agent-Team/
 
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
-| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` | 统一事件协议：session / tool_start / tool_end / context / result / error |
+| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / result / error；Windows 下 prompt 走 stdin |
+| `registry.ts` | `getCliAdapter` / `listCliAdapters` / `parseCliId` | 按 `CliId` 取适配器（claude / codex）并列出引擎清单 |
 | `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译 |
+| `codex-adapter.ts` | `CodexAdapter` | `codex exec --json --skip-git-repo-check --yolo` 的参数组装与事件翻译（Windows 用 stdin prompt 与 `--dangerously-bypass-approvals-and-sandbox`） |
 | `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、10 分钟默认超时、AbortSignal 取消 |
+| `spawn-cli.ts` | `spawnCli` / `killCli` | Windows 下 shell 启动 `.cmd` 包装的 CLI；`killCli` 用 `taskkill /t /f` 连进程树清理避免孤儿进程 |
 
 **参见：** [AI CLI 输出解析](domain/ai-cli-probe.md)、[消息处理流程](workflows/message-flow.md)
 
