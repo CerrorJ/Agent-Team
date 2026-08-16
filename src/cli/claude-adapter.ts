@@ -132,6 +132,7 @@ const parseStats = (event: ClaudeEvent): CliRunStats | undefined => {
 }
 
 const outputArgs = (prompt: string, promptInput: CliPromptInput): string[] => [
+  '--dangerously-skip-permissions',
   '-p',
   ...(promptInput === 'argument' ? [prompt] : []),
   '--output-format',
