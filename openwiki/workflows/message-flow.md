@@ -28,7 +28,7 @@ sequenceDiagram
     CB->>CB: resolveMentions 还原 @ 提及
     CB->>SM: resolve 按话题解析会话
     SM-->>CB: session + isNew
-    alt 斜杠命令 /help /status /close
+    alt 斜杠命令 /help /status /close /cd
         CB->>Bot: reply 文本，流程结束
     else 会话守卫拦截
         CB->>Bot: closed/creating/active 拒绝追问
@@ -36,8 +36,8 @@ sequenceDiagram
         CB->>SM: transition active
         CB->>Bot: 下载图片/文件附件
         CB->>Bot: replyCard 初始卡片（含停止任务按钮）
-        CB->>Run: 后台 spawn claude
-        Run-->>CB: stream-json 事件流
+        CB->>Run: 后台 spawn claude 或 codex
+        Run-->>CB: 统一 CliEvent 事件流
         CB->>Card: TaskProgressTracker + 节流刷新
         Run-->>CB: result / error / 取消
         Card->>Bot: finish 最终卡片
@@ -80,13 +80,15 @@ sequenceDiagram
 
 ### 斜杠命令
 
-`src/core/command-parser.ts` 的 `parseCommand()` 用正则匹配「可选 @ 提及 + 一条命令」，只认 `/close`、`/status`、`/help` 三个命令；「帮我运行 /status 看看」这类句子不会命中。
+`src/core/command-parser.ts` 的 `parseCommand()` 用正则匹配「可选 @ 提及 + 一条命令」，只认 `/close`、`/status`、`/help`、`/cd` 四个命令；「帮我运行 /status 看看」这类句子不会命中。另有 `parseCliRequest()` 单独识别 `/claude <任务>` 与 `/codex <任务>` 的引擎选择请求。
 
 | 命令 | 行为 |
 |------|------|
 | `/help` | 回复命令列表 |
-| `/status` | 回复会话 id、状态、执行引擎、CLI 会话 id、话题、更新时间 |
+| `/status` | 回复机器人、会话 id、状态、执行引擎、工作目录、CLI 会话 id、话题、更新时间 |
+| `/cd` | 无参数查看当前工作目录；带参数切换话题工作目录（active 状态下拒绝，切换成功后清空 `cliSessionId`，下一条任务新建 CLI 会话） |
 | `/close` | 中止运行中任务（`cancelMode = "close"`）并把会话置为 `closed` |
+| `/claude` / `/codex` | 新话题显式选择执行引擎；已有话题引擎不同会被拒绝；不带任务文本时提示补写任务 |
 
 ### 资源提取与下载
 
@@ -102,7 +104,10 @@ sequenceDiagram
 
 ## 会话守卫
 
-`onMessage` 在执行任务前先做会话级检查（详见 [会话与任务管理](../domain/session.md)）：
+`onMessage` 在执行任务前先做会话级检查（详见 [会话与任务管理](../domain/session.md)）。此外有两个前置分支：
+
+- **引擎切换守卫**：已有话题里用 `/claude` 或 `/codex` 请求了与会话当前不同的引擎时，回复「当前话题已经在使用 X。如需切换执行引擎，请新开一个话题」
+- **空任务守卫**：`/claude` / `/codex` 后面没有任务文本时，提示补写任务示例
 
 | 会话状态 | 处理 |
 |----------|------|
@@ -128,13 +133,15 @@ const hasThread = !!msg.threadId || !!msg.rootId;
 
 后台执行链路由 [架构总览](../architecture/overview.md) 中的执行层组成：
 
-1. `runCli()`（`src/cli/runner.ts`）`spawn` `claude` 子进程，参数由 `ClaudeAdapter.buildArgs` / `buildResumeArgs` 生成（`-p <prompt> --output-format stream-json --verbose`，续跑加 `--resume <sessionId>`）
-2. stdout 逐行进入 `ClaudeAdapter.parseEvents()`，翻译成统一 `CliEvent`
+1. `runCli()`（`src/cli/runner.ts`）`spawn` CLI 子进程，命令与参数由所选适配器的 `buildArgs` / `buildResumeArgs` 生成：Claude Code 为 `-p <prompt> --output-format stream-json --verbose`（续跑加 `--resume <sessionId>`），Codex 为 `exec --json --skip-git-repo-check --yolo <prompt>`（续跑为 `exec resume --json ... <sessionId>`；Windows 下以 stdin 传 prompt 并用 `--dangerously-bypass-approvals-and-sandbox` 替代 `--yolo`）
+2. stdout 逐行进入适配器的 `parseEvents()`，翻译成统一 `CliEvent`（两套引擎的翻译对照见 [AI CLI 输出解析](../domain/ai-cli-probe.md)）
 3. `onEvent` 回调只处理 `tool_start` / `tool_end` / `context` 三类事件，喂给 `TaskProgressTracker`
 4. `TaskProgressTracker` 用 `toolUseId` 配对起止事件，维护当前工具、最近完成轨迹（上限 12 条）和上下文 token 基线，`snapshot()` 输出卡片所需快照
 5. 每秒一次心跳 `renderProgress()` 把快照经 `ThrottledCardUpdater` 节流推送到飞书
 
 ### Claude Code 事件翻译
+
+`ClaudeAdapter`（`src/cli/claude-adapter.ts`）：
 
 | 原生事件 | 翻译为 | 说明 |
 |----------|--------|------|
@@ -146,6 +153,19 @@ const hasThread = !!msg.threadId || !!msg.rootId;
 | `result`（`is_error`） | `error` | 带错误信息 |
 
 > `result.usage` 是整次执行的累计消耗（写入 `totalTokens`），与 `assistant.message.usage` 的运行时上下文用量是两回事；上下文窗口大小要等 `result.modelUsage` 才知道。
+
+### Codex 事件翻译
+
+`CodexAdapter`（`src/cli/codex-adapter.ts`）把 `codex exec --json` 的事件流翻成同一套 `CliEvent`：
+
+| 原生事件 | 翻译为 | 说明 |
+|----------|--------|------|
+| `thread.started` | `session` | 捕获 Codex 的 `thread_id`，续跑用 `exec resume <id>` |
+| `item.started`（command_execution / file_change / web_search / mcp_tool_call） | `tool_start` | 工具类型映射为 Bash / Edit / WebSearch / MCP 标签，command、path、query 等做 detail 摘要 |
+| `item.completed`（同上） | `tool_end` | `status === "failed"` 或非 0 `exit_code` 标记失败 |
+| `item.completed` + `agent_message` | `result` | 模型回答文本 |
+| `turn.completed` | `result` | 仅 `usage` 统计（input/output/cached token），此时若无回答则不产生最终结果 |
+| `error` / `turn.failed` | `error` | 取 `message` 或 `error.message` |
 
 ## 任务收尾的三条路径
 
@@ -187,7 +207,9 @@ flowchart TD
 | `src/im/lark.ts` | WS 连接、事件分发、Bot 接口实现、消息文本提取 |
 | `src/im/message-parser.ts` | @ 提及解析、资源 key 提取（纯函数） |
 | `src/im/card.ts` | 卡片构建与节流更新（详见 [任务卡片系统](../domain/task-card.md)） |
-| `src/core/command-parser.ts` | 斜杠命令解析 |
+| `src/core/command-parser.ts` | 斜杠命令与 `/claude` `/codex` 引擎选择解析 |
 | `src/core/task-progress.ts` | CLI 事件 → 进度快照 |
+| `src/cli/registry.ts` | 按 `CliId` 取适配器 |
 | `src/cli/runner.ts` | CLI 子进程生命周期 |
 | `src/cli/claude-adapter.ts` | Claude Code 输出 → 统一事件 |
+| `src/cli/codex-adapter.ts` | Codex 输出 → 统一事件 |

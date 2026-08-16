@@ -13,12 +13,14 @@ tags: [operations, runbook, configuration, troubleshooting]
 
 | 变量名 | 用途 | 必需 |
 |--------|------|------|
-| `BOT_A_APP_ID` | 飞书自建应用 App ID | 是 |
-| `BOT_A_APP_SECRET` | 飞书自建应用 App Secret | 是 |
-| `CLAUDE_WORKDIR` | Claude Code 执行任务的项目目录，默认 Agent Team 当前目录 | 否 |
-| `OWNER_OPEN_ID` | 应用所有者的 open_id（预留，当前代码未使用） | 否 |
+| `BOTS_CONFIG` | bot 注册文件路径，默认 `config/bots.json` | 否 |
+| `FEISHU_*_APP_ID` / `FEISHU_*_APP_SECRET` | 各 bot 的飞书自建应用凭证；具体变量名由 `bots.json` 中每个 bot 的 `appIdEnv` / `appSecretEnv` 决定 | 是（按启用的 bot） |
+| `CLI_WORKDIR` | 全局默认工作目录（bot 未配 `workspace` 时使用；旧键 `CLAUDE_WORKDIR` 仍兼容作兜底） | 否 |
+| `TEST_CHAT_ID` / `OWNER_OPEN_ID` | 测试群与所有者 open_id（`.env.example` 预留） | 否 |
 
-> Bot B（`BOT_B_APP_ID` / `BOT_B_APP_SECRET`）与 `TEST_CHAT_ID` 在 `.env.example` 中预留，代码尚未使用。Claude Code 的模型后端由 `~/.claude/settings.json` 管理，不经过本项目环境变量。
+首次配置需要两步：`cp .env.example .env` 填凭证，再 `cp config/bots.example.json config/bots.json` 注册 bot（字段含义见 [多 bot 注册](../domain/bot-registry.md)）。
+
+> Claude Code 与 Codex 的模型后端使用各自的用户级配置（如 `~/.claude/settings.json` 或 CC Switch），不经过本项目环境变量。
 
 ### 安全约定
 
@@ -30,23 +32,28 @@ tags: [operations, runbook, configuration, troubleshooting]
 
 | 命令 | 等价脚本 | 用途 |
 |------|----------|------|
-| `pnpm dev` | `tsx watch --include .env src/index.ts` | 开发模式，文件变更自动重载，.env 变更也触发重启 |
+| `pnpm dev` | `tsx watch --include .env --include "config/*.json" src/index.ts` | 开发模式，源码、`.env`、bot 配置变更均自动重载 |
 | `pnpm start` | 同 dev | 启动应用 |
 | `pnpm start:once` | `tsx src/index.ts` | 单次运行（无 watch） |
 | `pnpm build` | `tsc` | 类型检查 + 编译到 `dist/` |
 | `pnpm probe:cli` | `tsx src/probe-cli.ts` | 运行 AI CLI 输出解析工具 |
+| `pnpm lint` / `pnpm lint:fix` | `eslint . [--fix]` | 检查/修复箭头函数与声明间空行规则（`eslint.config.js`） |
+| `pnpm format` / `pnpm format:check` | `prettier --write/--check .` | 格式化/检查格式（`.prettierrc`） |
 
 ### 启动检查
 
-启动成功标志：控制台输出 `Agent Team 启动，正在建立飞书长连接…`、`[CLI] command=claude cwd=...` 和 `[会话] 已恢复 N 个会话`。
+启动成功标志：控制台输出 `Agent Team 启动，正在建立飞书长连接…`、`[配置] 已注册 N 个 bot，已恢复 M 个会话`、各 `[CLI] id=... command=...` 引擎行与 `[Bot XXX] 已连接`。
 
 启动失败常见原因：
 
 | 现象 | 原因 | 解决 |
 |------|------|------|
-| `缺少 BOT_A_APP_ID / BOT_A_APP_SECRET` | 环境变量未配置 | 检查 `.env` 文件 |
+| `找不到 bot 配置文件` | 未创建 `config/bots.json` | `cp config/bots.example.json config/bots.json` 后填写 |
+| `bot xxx 缺少环境变量 XXX` | `.env` 缺少该 bot 的凭证变量 | 按 `bots.json` 里的 `appIdEnv` / `appSecretEnv` 名字补齐 |
+| `bot id 不能重复` / 校验失败 | `bots.json` 结构不合法 | 对照 zod 校验规则，见 [多 bot 注册](../domain/bot-registry.md) |
+| `工作目录不存在` | bot `workspace` / `CLI_WORKDIR` 指向的路径无效 | 修正路径或创建目录 |
 | 连接超时 | 网络问题或凭证错误 | 确认 App ID / Secret 正确，网络可达飞书 OpenAPI |
-| 任务一直不执行 | 本机没有 `claude` CLI 或未登录 | `claude --version` 验证安装，先在本机跑通 `claude -p "hi"` |
+| 任务一直不执行 | 本机没有对应 CLI 或未登录 | `claude --version` / `codex --version` 验证安装，先在本机跑通一次 |
 | `Claude Code 执行超时` | 单任务超过 10 分钟（`runner.ts` 的 `DEFAULT_TIMEOUT_MS`） | 拆小任务或调大超时 |
 
 ## 飞书应用配置
@@ -79,8 +86,9 @@ tags: [operations, runbook, configuration, troubleshooting]
 来自 `CLAUDE.md` 的约定（适用于开发者和 AI Agent）：
 
 - **ESM only**，Node 22+，pnpm
-- **凭证安全**：绝不硬编码、绝不提交
-- **错题本**：`CLAUDE.md` 中有错题本区域，踩坑后追加一行：现象 → 原因 → 正确做法
+- **凭证安全**：绝不硬编码、绝不提交；bot 凭证变量名写在 `bots.json`，值只放 `.env`
+- **代码风格**：格式以 `.prettierrc` 为准；箭头函数（不用 `function` 声明）与声明间空行由 ESLint 强制；提交前跑 `pnpm lint` 与 `pnpm format:check`
+- **错题本**：`CLAUDE.md` 中有错题本区域，踩坑后追加一行：现象 → 原因 → 正确做法（如 pnpm v11 需在 `pnpm-workspace.yaml` 放行 `esbuild` 构建脚本）
 
 ## 数据目录
 
@@ -98,8 +106,11 @@ tags: [operations, runbook, configuration, troubleshooting]
 
 ```
 Agent Team 启动，正在建立飞书长连接…
-[CLI] command=claude cwd=/path/to/workdir
-[会话] 已恢复 2 个会话
+[配置] 已注册 2 个 bot，已恢复 3 个会话
+[CLI] id=claude command=claude
+[CLI] id=codex command=codex
+[Bot DEVELOPER] default_cli=claude workspace=/path/to/workdir
+[Bot DEVELOPER] 已连接
 [收到] chat=oc_xxx threadId= rootId= sender=ou_xxx
   原文: @_user_1 帮我看看
   还原: @MyBot 帮我看看
@@ -107,15 +118,16 @@ Agent Team 启动，正在建立飞书长连接…
   [会话] 新建 id=uuid status=creating
 [下载] image → data/downloads/img_xxx.png
 [卡片] 已发送 message_id=om_xxx inThread=false
-[CLI] 完成 session_id=claude-session-id
+[CLI] claude 完成 session_id=claude-session-id
 ```
 
 ### 关键日志含义
 
 | 日志 | 含义 |
 |------|------|
-| `[CLI] command=...` | 启动时打印将要调用的 CLI 命令与工作目录 |
-| `[会话] 已恢复 N 个会话` | 从 `data/sessions.json` 恢复的会话数量 |
+| `[配置] 已注册 N 个 bot` | 从 `bots.json` 启用的 bot 数量与恢复的会话数量 |
+| `[CLI] id=... command=...` | 启动时打印已注册的执行引擎清单 |
+| `[Bot XXX] 已连接` | 该 bot 的 WS 长连接建立成功 |
 | `[收到]` | 收到飞书消息，含会话/话题/发送者信息 |
 | `原文 vs 还原` | @ 提及还原前后对比 |
 | `[会话] 新建/复用` | 按话题解析会话的结果与当前状态 |

@@ -9,9 +9,7 @@ tags: [domain, ai-cli, claude-code, codex, headless]
 
 ## 概述
 
-Agent-Team 的目标是把飞书消息路由到 AI 编程 CLI（Claude Code 或 Codex），解析其 headless 输出，驱动任务卡片更新。Claude Code 这条链路已经在主流程落地：`src/cli/claude-adapter.ts` 把 `stream-json` 输出翻译成统一 `CliEvent`（详见 [消息处理流程](../workflows/message-flow.md)）；`src/probe-cli.ts` 仍是独立的调试工具，用于从 stdin 读取并格式化输出 Claude Code / Codex 的 JSON 事件流。
-
-> Codex 侧目前只有本页的输出结构调研，适配器尚未实现（`CliId` 只有 `'claude'`）。
+Agent-Team 的目标是把飞书消息路由到 AI 编程 CLI（Claude Code 或 Codex），解析其 headless 输出，驱动任务卡片更新。两个引擎都已落地：`src/cli/claude-adapter.ts` 与 `src/cli/codex-adapter.ts` 分别把各家输出翻译成统一 `CliEvent`（详见 [消息处理流程](../workflows/message-flow.md)），`src/cli/registry.ts` 按 `CliId` 分发；`src/probe-cli.ts` 仍是独立的调试工具，用于从 stdin 读取并格式化输出 Claude Code / Codex 的 JSON 事件流。
 
 ## 两种 CLI 的输出结构对比
 
@@ -89,13 +87,14 @@ codex exec "实现一个函数" | pnpm probe:cli
 
 ## 集成现状
 
-Claude Code 的解析逻辑已经集成进主流程，`probe-cli.ts` 仍可作为调试工具独立使用：
+两个引擎均已集成进主流程，`probe-cli.ts` 仍可作为调试工具独立使用：
 
-- **统一事件协议**：`src/cli/types.ts` 定义 `CliAdapter` / `CliEvent`，Runner 与卡片只消费翻译后的事件
+- **统一事件协议**：`src/cli/types.ts` 定义 `CliAdapter` / `CliEvent`，Runner 与卡片只消费翻译后的事件；Windows 上 prompt 一律走 stdin（`promptInputForPlatform`）
 - **Claude 适配器**：`src/cli/claude-adapter.ts` 实现 `CliAdapter`，覆盖 `system/init`、`assistant`、`user`、`result` 四类原生事件（事件翻译对照表见 [消息处理流程](../workflows/message-flow.md)）
-- **进程管理**：`src/cli/runner.ts` spawn 子进程、逐行读 stdout、10 分钟超时、支持 AbortSignal 取消
+- **Codex 适配器**：`src/cli/codex-adapter.ts` 把 `thread.started` / `item.started` / `item.completed` / `turn.completed` / `error` 翻译成同一套 `CliEvent`；命令行加 `--yolo`（Windows 用 `--dangerously-bypass-approvals-and-sandbox`），续跑走 `exec resume <thread_id>`
+- **注册表**：`src/cli/registry.ts` 的 `getCliAdapter` / `listCliAdapters` 是取适配器的唯一入口，新增引擎在此登记
+- **进程管理**：`src/cli/runner.ts` spawn 子进程、逐行读 stdout、10 分钟超时、支持 AbortSignal 取消；`src/cli/spawn-cli.ts` 处理 Windows 下 `.cmd` 启动与进程树清理
 - **卡片驱动**：`CliEvent` 经 `TaskProgressTracker` 折叠成进度快照，驱动 [任务卡片系统](task-card.md) 刷新
-- **待办**：Codex 适配器未实现，接入时按上表对照翻译成同一套 `CliEvent` 即可
 
 ## 源文件索引
 
