@@ -29,6 +29,7 @@ export const extractResourceKeys = (
   content: string,
 ): { type: 'image' | 'file'; key: string; fileName?: string }[] => {
   const parsed = JSON.parse(content)
+
   const resources: {
     type: 'image' | 'file'
     key: string

@@ -26,6 +26,7 @@ interface ClaudeContentBlock {
   tool_use_id?: unknown
   is_error?: unknown
 }
+
 // 卡片展示的tool名称映射
 const TOOL_LABELS: Record<string, string> = {
   Agent: '启动子任务',
@@ -78,33 +79,41 @@ const messageBlocks = (message: unknown): ClaudeContentBlock[] => {
   if (!isRecord(message) || !Array.isArray(message.content)) return []
   return message.content.filter(isRecord)
 }
+
 // 累计token数
 const usageTokens = (usage: unknown): number | undefined => {
   if (!isRecord(usage)) return undefined
+
   const values = [
     asNumber(usage.input_tokens),
     asNumber(usage.output_tokens),
     asNumber(usage.cache_read_input_tokens),
     asNumber(usage.cache_creation_input_tokens),
   ].filter((value): value is number => value !== undefined)
+
   return values.length
     ? values.reduce((sum, value) => sum + value, 0)
     : undefined
 }
+
 // 上下文窗口token数
 const contextWindowTokens = (modelUsage: unknown): number | undefined => {
   if (!isRecord(modelUsage)) return undefined
+
   const windows = Object.values(modelUsage)
     .filter(isRecord)
     .map((usage) => asNumber(usage.contextWindow))
     .filter((value): value is number => value !== undefined && value > 0)
+
   return windows.length ? Math.max(...windows) : undefined
 }
+
 // 耗时轮次token数统计
 const parseStats = (event: ClaudeEvent): CliRunStats | undefined => {
   const usage = isRecord(event.usage) ? event.usage : {}
   const totalTokens = usageTokens(usage)
   const windowTokens = contextWindowTokens(event.modelUsage)
+
   const stats: CliRunStats = {
     durationMs: asNumber(event.duration_ms),
     turns: asNumber(event.num_turns),
@@ -115,6 +124,7 @@ const parseStats = (event: ClaudeEvent): CliRunStats | undefined => {
     cacheCreationTokens: asNumber(usage.cache_creation_input_tokens),
     contextWindowTokens: windowTokens,
   }
+
   return Object.values(stats).some((value) => value !== undefined)
     ? stats
     : undefined
@@ -156,9 +166,11 @@ export class ClaudeAdapter implements CliAdapter {
     } catch {
       return []
     }
+
     //session_id是Claude自己的ID，和session.id不是同一个值session.id 由 Agent Team 生成
     const sessionId =
       typeof event.session_id === 'string' ? event.session_id : undefined
+
     // Claude Code 启动后会发出 system/init
     if (event.type === 'system' && event.subtype === 'init' && sessionId) {
       return [{ type: 'session', sessionId }]
@@ -167,8 +179,10 @@ export class ClaudeAdapter implements CliAdapter {
       const message = isRecord(event.message) ? event.message : {}
       // message.usage 是运行时token数,随执行过程到达，转化成 context，可以实时更新卡片
       const usedTokens = usageTokens(message.usage)
+
       const contextEvent: CliEvent[] =
         usedTokens === undefined ? [] : [{ type: 'context', usedTokens }]
+
       // 遍历全部内容，保留带有 id 和工具名的 tool_use,每次调用会生成独立的 tool_start
       const toolEvents = messageBlocks(event.message).flatMap(
         (block): CliEvent[] => {
@@ -190,6 +204,7 @@ export class ClaudeAdapter implements CliAdapter {
           ]
         },
       )
+
       return [...contextEvent, ...toolEvents]
     }
     if (event.type === 'user') {

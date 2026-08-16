@@ -27,9 +27,11 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     onEvent,
   } = options
+
   // Windows 下 prompt 走 stdin（规避 cmd 转义/乱码），其他平台直接作为命令行参数。
   const promptInput = promptInputForPlatform(process.platform)
   const useStdin = promptInput === 'stdin'
+
   const args = sessionId
     ? adapter.buildResumeArgs(prompt, sessionId, promptInput)
     : adapter.buildArgs(prompt, promptInput)
@@ -41,6 +43,7 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
       signal,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
+
     // stdin 模式下把 prompt 写入子进程；否则 prompt 已在命令行参数里，stdin 直接收口。
     if (child.stdin) {
       if (useStdin) child.stdin.end(prompt, 'utf8')
@@ -66,6 +69,7 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     }, timeoutMs)
 
     const finish = () => clearTimeout(timer)
+
     const fail = (error: Error) => {
       if (settled) return
       settled = true

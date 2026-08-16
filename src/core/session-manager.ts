@@ -5,7 +5,7 @@ import type { SessionStore } from './session-store.js'
 export interface Session {
   // Agent Team 自己的会话 ID，通过 Node.js 的 randomUUID() 生成
   id: string
-  botId: string;
+  botId: string
   // 负责找到飞书话题
   threadId: string
   // 划定群聊范围
@@ -14,6 +14,7 @@ export interface Session {
   cliId: CliId
   // 执行引擎自己的会话 ID，首轮执行后补录
   cliSessionId?: string
+  workspaceDir: string
   status: SessionStatus
   createdAt: string
   updatedAt: string
@@ -42,7 +43,7 @@ export interface ResolvedSession {
 
 // 状态流转约束
 const ALLOWED_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
-  creating: ['active', 'closed'],
+  creating: ['active', 'idle', 'closed'],
   active: ['idle', 'closed'],
   idle: ['active', 'closed'],
   closed: [],
@@ -52,8 +53,12 @@ const topicIdOf = (message: MessageAddress): string => {
   return message.threadId || message.rootId || message.messageId
 }
 
-const sessionKey = (botId: string, chatId: string, threadId: string): string => {
-  return `${botId}:${chatId}:${threadId}`;
+const sessionKey = (
+  botId: string,
+  chatId: string,
+  threadId: string,
+): string => {
+  return `${botId}:${chatId}:${threadId}`
 }
 
 export class SessionManager {
@@ -90,7 +95,7 @@ export class SessionManager {
       manager.sessions.set(
         sessionKey(session.botId, session.chatId, session.threadId),
         session,
-      );
+      )
     }
     return manager
   }
@@ -100,24 +105,28 @@ export class SessionManager {
   async resolve(
     message: MessageAddress,
     cliId: CliId = 'claude',
-    botId = "default",
+    botId = 'default',
+    workspaceDir = process.cwd(),
   ): Promise<ResolvedSession> {
     const threadId = topicIdOf(message)
-    const key = sessionKey(botId, message.chatId, threadId);
+    const key = sessionKey(botId, message.chatId, threadId)
     const existing = this.sessions.get(key)
     if (existing) return { session: existing, isNew: false }
 
     const now = this.now().toISOString()
+
     const session: Session = {
       id: this.createId(),
       botId,
       threadId,
       chatId: message.chatId,
       cliId,
+      workspaceDir,
       status: 'creating',
       createdAt: now,
       updatedAt: now,
     }
+
     this.sessions.set(key, session)
     try {
       await this.persist()
@@ -144,7 +153,37 @@ export class SessionManager {
       status: nextStatus,
       updatedAt: this.now().toISOString(),
     }
-    const key = sessionKey(updated.botId, updated.chatId, updated.threadId);
+
+    const key = sessionKey(updated.botId, updated.chatId, updated.threadId)
+    this.sessions.set(key, updated)
+    try {
+      await this.persist()
+    } catch (error) {
+      if (this.sessions.get(key) === updated) this.sessions.set(key, current)
+      throw error
+    }
+    return updated
+  }
+
+  //负责切换当前话题，并在目录变化时清除旧的 cliSessionId
+  async setWorkspaceDir(
+    sessionId: string,
+    workspaceDir: string,
+  ): Promise<Session> {
+    const current = this.get(sessionId)
+    if (!current) throw new Error(`会话不存在: ${sessionId}`)
+    if (!workspaceDir) throw new Error('工作目录不能为空')
+    if (current.workspaceDir === workspaceDir) return current
+
+    const { cliSessionId: _previousCliSessionId, ...rest } = current
+
+    const updated: Session = {
+      ...rest,
+      workspaceDir,
+      updatedAt: this.now().toISOString(),
+    }
+
+    const key = sessionKey(updated.botId, updated.chatId, updated.threadId)
     this.sessions.set(key, updated)
     try {
       await this.persist()
@@ -170,7 +209,8 @@ export class SessionManager {
       cliSessionId,
       updatedAt: this.now().toISOString(),
     }
-    const key = sessionKey(updated.botId, updated.chatId, updated.threadId);
+
+    const key = sessionKey(updated.botId, updated.chatId, updated.threadId)
     this.sessions.set(key, updated)
     try {
       await this.persist()

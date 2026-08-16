@@ -19,25 +19,38 @@ import { JsonSessionStore } from './core/session-store.js'
 import { TaskProgressTracker } from './core/task-progress.js'
 import { requestTaskAbort, type ActiveRun } from './core/task-abort.js'
 import {
+  ensureWorkspaceDirectory,
+  resolveWorkspacePath,
+} from './core/workspace.js'
+import {
   buildBotPrompt,
   loadBotConfigs,
   type BotConfig,
-} from "./core/bot-registry.js";
+} from './core/bot-registry.js'
 import { getCliAdapter, listCliAdapters } from './cli/registry.js'
 import type { CliAdapter } from './cli/types.js'
 import { runCli } from './cli/runner.js'
 
-
-const cliWorkdir = resolve(
-  process.env.CLI_WORKDIR ?? process.env.CLAUDE_WORKDIR ?? process.cwd(),
-)
 const botConfigPath = resolve(
-  process.env.BOTS_CONFIG ?? join("config", "bots.json"),
-);
-const botConfigs = await loadBotConfigs(botConfigPath);
+  process.env.BOTS_CONFIG ?? join('config', 'bots.json'),
+)
+
+const botConfigs = await loadBotConfigs(botConfigPath)
+
+await Promise.all(
+  botConfigs.map((config) => ensureWorkspaceDirectory(config.workspaceDir)),
+)
+
+const defaultWorkspaces = Object.fromEntries(
+  botConfigs.map((config) => [config.id, config.workspaceDir]),
+)
 
 const sessions = await SessionManager.open({
-  store: new JsonSessionStore(join("data", "sessions.json"), botConfigs[0]?.id),
+  store: new JsonSessionStore(
+    join('data', 'sessions.json'),
+    botConfigs[0]?.id,
+    defaultWorkspaces,
+  ),
 })
 
 // 运行中的任务：sessionId → 中止控制器 + 发起人（停止任务时校验权限）
@@ -45,25 +58,24 @@ const activeRuns = new Map<string, ActiveRun>()
 // 记住各会话的上下文窗口大小，供下一轮执行的进度计算
 const contextWindows = new Map<string, number>()
 
-console.log("Agent OS 启动，正在建立飞书长连接…");
+console.log('Agent Team 启动，正在建立飞书长连接…')
 console.log(
   `[配置] 已注册 ${botConfigs.length} 个 bot，已恢复 ${sessions.size} 个会话`,
-);
+)
 for (const adapter of listCliAdapters()) {
-  console.log(
-    `[CLI] id=${adapter.id} command=${adapter.command} cwd=${cliWorkdir}`,
-  );
+  console.log(`[CLI] id=${adapter.id} command=${adapter.command}`)
 }
 for (const config of botConfigs) {
   console.log(
-    `[Bot ${config.id.toUpperCase()}] default_cli=${config.defaultCliId}`,
-  );
+    `[Bot ${config.id.toUpperCase()}] default_cli=${config.defaultCliId} workspace=${config.workspaceDir}`,
+  )
 }
 
 // 拉起 cli
 const executeCli = (
   adapter: CliAdapter,
   prompt: string,
+  workspaceDir: string,
   sessionId: string | undefined,
   signal: AbortSignal,
   onEvent: Parameters<typeof runCli>[0]['onEvent'],
@@ -71,7 +83,7 @@ const executeCli = (
   return runCli({
     adapter,
     prompt,
-    cwd: cliWorkdir,
+    cwd: workspaceDir,
     sessionId,
     signal,
     onEvent,
@@ -92,6 +104,7 @@ const formatSessionStatus = (session: Session, botId: string): string => {
     `会话：${session.id}`,
     `状态：${STATUS_LABELS[session.status]}`,
     `执行引擎：${adapter.displayName}`,
+    `工作目录：${session.workspaceDir}`,
     `CLI 会话：${session.cliSessionId ?? '(尚未建立)'}`,
     `话题：${session.threadId}`,
     `更新时间：${session.updatedAt}`,
@@ -104,6 +117,7 @@ const markSessionIdle = async (sessionId: string): Promise<void> => {
   await sessions.transition(sessionId, 'idle')
   console.log(`[会话] id=${sessionId} status=idle`)
 }
+
 const startConfiguredBot = async (config: BotConfig): Promise<void> => {
   startBot({
     appId: config.appId,
@@ -111,13 +125,16 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
     // 卡片「停止任务」回调：定位任务并校验发起人，结果映射成不同的 toast
     onCardAction: async (action) => {
       if (action.value.action !== 'abort_task') return undefined
+
       const sessionId =
         typeof action.value.sessionId === 'string' ? action.value.sessionId : ''
+
       const outcome = requestTaskAbort(
         activeRuns,
         sessionId,
         action.operatorOpenId,
       )
+
       if (outcome === 'not_found') {
         return {
           toast: { type: 'info', content: '任务已经结束，无需再次停止。' },
@@ -136,6 +153,7 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
     onMessage: async (msg, bot) => {
       const resolved = resolveMentions(msg.text, msg.mentions)
       const hasThread = !!msg.threadId || !!msg.rootId
+      const command = parseCommand(resolved)
       const cliRequest = parseCliRequest(resolved)
       if (cliRequest && !cliRequest.prompt) {
         await bot.reply(
@@ -145,16 +163,26 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
         )
         return
       }
-      const { session, isNew } = await sessions.resolve(
+
+      const resolvedSession = await sessions.resolve(
         msg,
         cliRequest?.cliId ?? config.defaultCliId,
         config.id,
+        config.workspaceDir,
       )
+
+      let { session } = resolvedSession
+      const { isNew } = resolvedSession
+      if (command && isNew && session.status === 'creating') {
+        session = await sessions.transition(session.id, 'idle')
+      }
       const cliAdapter = getCliAdapter(session.cliId)
+
       const prompt = buildBotPrompt(
         config.systemPrompt,
         cliRequest?.prompt ?? resolved,
-      );
+      )
+
       console.log(
         `[收到] chat=${msg.chatId} threadId=${msg.threadId} rootId=${msg.rootId} sender=${msg.senderOpenId}`,
       )
@@ -175,13 +203,13 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
         )
         return
       }
-
-      const command = parseCommand(resolved)
       if (command?.name === 'help') {
         await bot.reply(
           msg.messageId,
           [
             '/status 查看当前会话',
+            '/cd 查看当前工作目录',
+            '/cd <目录> 切换当前话题的工作目录',
             '/close 关闭当前会话',
             '/help 查看命令',
             '/claude <任务> 新话题使用 Claude Code',
@@ -192,7 +220,53 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
         return
       }
       if (command?.name === 'status') {
-        await bot.reply(msg.messageId, formatSessionStatus(session, config.id), hasThread)
+        await bot.reply(
+          msg.messageId,
+          formatSessionStatus(session, config.id),
+          hasThread,
+        )
+        return
+      }
+      if (command?.name === 'cd') {
+        if (!command.path) {
+          await bot.reply(
+            msg.messageId,
+            `当前工作目录：${session.workspaceDir}`,
+            hasThread,
+          )
+          return
+        }
+        if (session.status === 'active') {
+          await bot.reply(
+            msg.messageId,
+            '当前任务仍在执行，结束后再切换工作目录。',
+            hasThread,
+          )
+          return
+        }
+        try {
+          const workspaceDir = resolveWorkspacePath(
+            command.path,
+            session.workspaceDir,
+          )
+
+          await ensureWorkspaceDirectory(workspaceDir)
+          const changed = workspaceDir !== session.workspaceDir
+          await sessions.setWorkspaceDir(session.id, workspaceDir)
+          await bot.reply(
+            msg.messageId,
+            changed
+              ? `工作目录已切换到：${workspaceDir}\n下一条任务会在这里建立新的 CLI 会话。`
+              : `当前工作目录已经是：${workspaceDir}`,
+            hasThread,
+          )
+        } catch (error) {
+          await bot.reply(
+            msg.messageId,
+            `无法切换工作目录：${(error as Error).message}`,
+            hasThread,
+          )
+        }
         return
       }
       if (command?.name === 'close') {
@@ -238,10 +312,12 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
 
       await sessions.transition(session.id, 'active')
       const run = new AbortController()
+
       const activeRun: ActiveRun = {
         controller: run,
         ownerOpenId: msg.senderOpenId,
       }
+
       activeRuns.set(session.id, activeRun)
 
       // 图片/文件下载
@@ -255,6 +331,7 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
             join('data', 'downloads'),
             res.fileName,
           )
+
           console.log(`  [下载] ${res.type} → ${savePath}`)
         } catch (e) {
           console.error(`  [下载失败] ${res.key}:`, (e as Error).message)
@@ -295,9 +372,11 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
         contextWindows.get(session.id),
         !session.cliSessionId,
       )
+
       const cardUpdater = new ThrottledCardUpdater((card) =>
         bot.updateCard(cardId, card),
       )
+
       const renderProgress = () => {
         const snapshot = progress.snapshot()
         cardUpdater.push(
@@ -310,6 +389,7 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
           }),
         )
       }
+
       const progressHeartbeat = setInterval(renderProgress, 1_000)
       progressHeartbeat.unref()
 
@@ -317,6 +397,7 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
       void executeCli(
         cliAdapter,
         prompt,
+        session.workspaceDir,
         session.cliSessionId,
         run.signal,
         (event) => {
@@ -409,8 +490,7 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
         })
     },
   })
-  console.log(`[Bot ${config.id.toUpperCase()}] 已连接`);
+  console.log(`[Bot ${config.id.toUpperCase()}] 已连接`)
 }
 
-await Promise.all(botConfigs.map(startConfiguredBot));
-
+await Promise.all(botConfigs.map(startConfiguredBot))

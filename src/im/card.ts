@@ -68,13 +68,16 @@ const escapeFeishuMarkdown = (value: string): string =>
 
 const activityLine = (activity: TaskActivity): string => {
   const icon = activity.failed ? '⚠️' : (TOOL_ICONS[activity.toolName] ?? '⚙️')
+
   const detail = activity.detail
     ? ` · \`${escapeInlineCode(activity.detail)}\``
     : ''
+
   const duration =
     activity.durationMs >= 1_000
       ? ` · ${formatDuration(activity.durationMs)}`
       : ''
+
   return `${icon} ${activity.label}${detail}${duration}`
 }
 
@@ -100,9 +103,11 @@ const markdownPreview = (text: string, maxLength: number): string =>
 const compactAnswerPreview = (answer: string): string => {
   const fenceIndex = answer.search(/\n```/)
   const prose = fenceIndex > 0 ? answer.slice(0, fenceIndex) : answer
+
   const preview = markdownPreview(prose, COMPACT_ANSWER_LENGTH)
     .replace(/\n(?:---|#{1,6}\s+[^\n]+)\s*$/, '')
     .trim()
+
   return preview.length >= 40
     ? preview
     : '回答包含较多代码与细节，展开后可以查看完整内容。'
@@ -112,12 +117,14 @@ const compactAnswerPreview = (answer: string): string => {
 const usageTotal = (stats: CliRunStats | undefined): number | undefined => {
   if (!stats) return undefined
   if (stats.totalTokens !== undefined) return stats.totalTokens
+
   const values = [
     stats.inputTokens,
     stats.outputTokens,
     stats.cacheReadTokens,
     stats.cacheCreationTokens,
   ].filter((value): value is number => value !== undefined)
+
   return values.length
     ? values.reduce((sum, value) => sum + value, 0)
     : undefined
@@ -145,10 +152,12 @@ const formatContextGrowth = (
 ): string | undefined => {
   if (usedTokens === undefined || startTokens === undefined) return undefined
   const delta = usedTokens - startTokens
+
   const change =
     delta >= 0
       ? `新增 ${formatCount(delta)}`
       : `减少 ${formatCount(Math.abs(delta))}`
+
   const startLabel = startedNewSession ? '新会话基础' : '本轮开始'
   return `${startLabel} ${formatCount(startTokens)} · ${change}`
 }
@@ -158,30 +167,37 @@ const buildRunningElements = (
   options: TaskCardOptions,
 ): Record<string, unknown>[] => {
   const progress = options.progress
+
   const currentIcon = progress?.currentToolName
     ? `${TOOL_ICONS[progress.currentToolName] ?? '⚙️'} `
     : ''
+
   const currentDetail = progress?.currentDetail
     ? `\n\`${escapeInlineCode(progress.currentDetail)}\``
     : ''
+
   const meta = progress
     ? `${formatDuration(progress.elapsedMs)} · ${progress.toolCount} 次工具调用`
     : '刚刚开始'
+
   const context = formatContextUsage(
     progress?.contextUsedTokens,
     progress?.contextWindowTokens,
   )
+
   const contextGrowth = formatContextGrowth(
     progress?.contextUsedTokens,
     progress?.contextStartTokens,
     progress?.startedNewSession,
   )
+
   const elements: Record<string, unknown>[] = [
     {
       tag: 'markdown',
       content: `**${currentIcon}${progress?.current ?? options.detail}**${currentDetail}\n\n${meta}${context ? `\n_${context}_` : ''}${contextGrowth ? `\n_${contextGrowth}_` : ''}`,
     },
   ]
+
   if (progress?.activities.length) {
     const visible = progress.activities.slice(0, RUNNING_ACTIVITY_LIMIT)
     elements.push({
@@ -217,15 +233,18 @@ const buildFinishedElements = (
   const progress = options.progress
   const durationMs = options.stats?.durationMs ?? progress?.elapsedMs
   const totalTokens = usageTotal(options.stats)
+
   const context = formatContextUsage(
     progress?.contextUsedTokens ?? options.stats?.contextUsedTokens,
     options.stats?.contextWindowTokens ?? progress?.contextWindowTokens,
   )
+
   const contextGrowth = formatContextGrowth(
     progress?.contextUsedTokens ?? options.stats?.contextUsedTokens,
     progress?.contextStartTokens,
     progress?.startedNewSession,
   )
+
   const executionMeta = [
     durationMs !== undefined
       ? `**耗时** ${formatDuration(durationMs)}`
@@ -234,6 +253,7 @@ const buildFinishedElements = (
   ]
     .filter(Boolean)
     .join(' · ')
+
   const usageMeta = [
     totalTokens !== undefined
       ? `**累计消耗** ${formatCount(totalTokens)} tokens`
@@ -245,6 +265,7 @@ const buildFinishedElements = (
   ]
     .filter(Boolean)
     .join('\n')
+
   const meta = [executionMeta, usageMeta].filter(Boolean).join('\n\n')
   const elements: Record<string, unknown>[] = []
 
@@ -300,9 +321,11 @@ const buildFinishedElements = (
 
   if (meta || progress?.activities.length) {
     const visible = progress?.activities.slice(0, FINISHED_ACTIVITY_LIMIT) ?? []
+
     const activityText = visible.length
       ? `\n\n**最近执行轨迹**\n${visible.map(activityLine).join('\n')}`
       : ''
+
     elements.push({
       tag: 'collapsible_panel',
       expanded: false,

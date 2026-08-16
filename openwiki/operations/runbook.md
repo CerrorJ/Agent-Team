@@ -38,7 +38,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 
 ### 启动检查
 
-启动成功标志：控制台输出 `Agent OS 启动，正在建立飞书长连接…`、`[CLI] command=claude cwd=...` 和 `[会话] 已恢复 N 个会话`。
+启动成功标志：控制台输出 `Agent Team 启动，正在建立飞书长连接…`、`[CLI] command=claude cwd=...` 和 `[会话] 已恢复 N 个会话`。
 
 启动失败常见原因：
 
@@ -97,7 +97,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 应用运行时输出结构化日志：
 
 ```
-Agent OS 启动，正在建立飞书长连接…
+Agent Team 启动，正在建立飞书长连接…
 [CLI] command=claude cwd=/path/to/workdir
 [会话] 已恢复 2 个会话
 [收到] chat=oc_xxx threadId= rootId= sender=ou_xxx

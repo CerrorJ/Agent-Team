@@ -86,8 +86,10 @@ const getHeader = (headers: any, name: string): string => {
     typeof headers?.get === 'function'
       ? headers.get(name)
       : (headers?.[name] ?? headers?.[name.toLowerCase()])
+
   return Array.isArray(value) ? (value[0] ?? '') : (value ?? '')
 }
+
 // 根据飞书消息类型和下载 res 获取扩展名
 const resourceExtension = (
   type: 'image' | 'file',
@@ -155,6 +157,7 @@ export const startBot = (opts: BotOptions): Bot => {
           ...(replyInThread ? { reply_in_thread: true } : {}),
         },
       })
+
       return res.data?.message_id
     },
 
@@ -167,6 +170,7 @@ export const startBot = (opts: BotOptions): Bot => {
           ...(replyInThread ? { reply_in_thread: true } : {}),
         },
       })
+
       return res.data?.message_id
     },
 
@@ -182,6 +186,7 @@ export const startBot = (opts: BotOptions): Bot => {
         path: { message_id: messageId, file_key: fileKey },
         params: { type },
       })
+
       const contentType = getHeader(res.headers, 'content-type')
       const extension = resourceExtension(type, fileName, contentType)
       const savePath = join(saveDir, `${fileKey}.${extension}`)
@@ -190,6 +195,7 @@ export const startBot = (opts: BotOptions): Bot => {
       return savePath
     },
   }
+
   // Lark.EventDispatcher 管分发。长连接上下来的事件五花八门，dispatcher 按事件名路由到对应的处理函数。
   const dispatcher = new Lark.EventDispatcher({}).register({
     'card.action.trigger': async (data: any) => {
@@ -198,6 +204,7 @@ export const startBot = (opts: BotOptions): Bot => {
     },
     'im.message.receive_v1': async (data) => {
       const m = data.message
+
       const msg: IncomingMessage = {
         messageId: m.message_id,
         chatId: m.chat_id,
@@ -210,9 +217,11 @@ export const startBot = (opts: BotOptions): Bot => {
         mentions: parseMentions(m.mentions),
         rawContent: m.content,
       }
+
       await onMessage(msg, bot)
     },
   })
+
   // Lark.WSClient 管进。它负责建立并维持那条 WebSocket 长连接，断了自动重连。
   const wsClient = new Lark.WSClient({ appId, appSecret })
   wsClient.start({ eventDispatcher: dispatcher })

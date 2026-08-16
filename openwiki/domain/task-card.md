@@ -71,7 +71,7 @@ CardJson
 - **成功**：回答不超过 900 字符（`COMPACT_ANSWER_LENGTH`）直接展示；超过则展示收起态预览（优先取第一个代码块之前的正文）+「查看完整回答」折叠面板（上限 6000 字符）；仍超长时卡片提示「剩余内容已继续发送」，由消息流程按 4000 字符拆条续发（`splitLongText`）
 - **失败/取消**：展示 `detail` 文案；失败的 `technicalDetail` 放「查看错误详情」折叠面板
 - **执行详情折叠面板**：耗时、工具调用次数、累计 token、当前上下文、本轮变化 + 最近执行轨迹（上限 `FINISHED_ACTIVITY_LIMIT = 8` 条）
-- **署名**：成功且传入 `recipientOpenId` 时追加「Agent OS · 发送给：@某人」
+- **署名**：成功且传入 `recipientOpenId` 时追加「Agent Team · 发送给：@某人」
 
 ### Markdown 安全处理
 

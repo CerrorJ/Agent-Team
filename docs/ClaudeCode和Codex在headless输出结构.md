@@ -3,7 +3,7 @@
 横向对照两者在 headless（无界面）模式下的事件与字段结构，便于做统一封装。
 
 | 概念 | Claude Code | Codex |
-|------|-------------|-------|
+| ------ | ------------- | ------- |
 | 会话标识 | `session_id`（出现在 `init` 事件） | `thread_id`（出现在 `thread.started` 事件） |
 | 模型文本输出 | `assistant` 事件 | `item.completed` + `agent_message` |
 | 执行命令 | `tool_use` 内容块 | `item.completed` + `command_execution` |

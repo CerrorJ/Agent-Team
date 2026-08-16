@@ -50,7 +50,7 @@ pnpm start:once
 pnpm build
 ```
 
-启动后控制台输出 `Agent OS 启动，正在建立飞书长连接…` 与 `[会话] 已恢复 N 个会话`，随后监听飞书消息。本机需要安装 `claude` CLI 并已登录，任务会通过子进程在 `CLAUDE_WORKDIR`（默认当前目录）中执行。
+启动后控制台输出 `Agent Team 启动，正在建立飞书长连接…` 与 `[会话] 已恢复 N 个会话`，随后监听飞书消息。本机需要安装 `claude` CLI 并已登录，任务会通过子进程在 `CLAUDE_WORKDIR`（默认当前目录）中执行。
 
 ## 核心概念导航
 

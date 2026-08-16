@@ -87,16 +87,19 @@ const parseStats = (usage: unknown): CliRunStats | undefined => {
   const inputTokens = asNumber(usage.input_tokens)
   const outputTokens = asNumber(usage.output_tokens)
   const cacheReadTokens = asNumber(usage.cached_input_tokens)
+
   const totalTokens =
     inputTokens === undefined && outputTokens === undefined
       ? undefined
       : (inputTokens ?? 0) + (outputTokens ?? 0)
+
   const stats: CliRunStats = {
     totalTokens,
     inputTokens,
     outputTokens,
     cacheReadTokens,
   }
+
   return Object.values(stats).some((value) => value !== undefined)
     ? stats
     : undefined
@@ -140,6 +143,7 @@ export class CodexAdapter implements CliAdapter {
       '--skip-git-repo-check',
       sessionId,
     ]
+
     // Windows 上沙箱功能不支持，必须完全禁用。
     if (process.platform === 'win32') {
       args.push('--dangerously-bypass-approvals-and-sandbox')
