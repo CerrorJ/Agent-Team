@@ -94,6 +94,8 @@ codex exec "实现一个函数" | pnpm probe:cli
 - **Codex 适配器**：`src/cli/codex-adapter.ts` 把 `thread.started` / `item.started` / `item.completed` / `turn.completed` / `error` 翻译成同一套 `CliEvent`；命令行加 `--yolo`（Windows 用 `--dangerously-bypass-approvals-and-sandbox`），续跑走 `exec resume <thread_id>`
 - **注册表**：`src/cli/registry.ts` 的 `getCliAdapter` / `listCliAdapters` 是取适配器的唯一入口，新增引擎在此登记
 - **进程管理**：`src/cli/runner.ts` spawn 子进程、逐行读 stdout、10 分钟超时、支持 AbortSignal 取消；`src/cli/spawn-cli.ts` 处理 Windows 下 `.cmd` 启动与进程树清理
+- **原生压缩（native-compact）**：`src/cli/native-compact.ts` 的 `compactCliSession()` 支撑 `/compact` 命令，两家协议不同各走各的通道——Claude Code 用 `-p - --resume <id>` 把 `/compact` 指令写进 stdin 并解析 stream-json，收到 `compact_boundary` 才算完成；Codex 的 exec 模式不支持压缩指令，起 `app-server --stdio` 走 JSON-RPC（`initialize` → `thread/resume` → `thread/compact/start`），收到 `contextCompaction` item 即成功。结果包装成与普通任务相同的形状，复用成功/取消/失败收尾
+- **原生会话清单（native-sessions）**：`src/cli/native-sessions.ts` 的 `listNativeCliSessions()` 支撑 `/resume` 命令，同样双协议——Claude Code 直接扫 `~/.claude/projects/<cwd 转义目录>` 下的会话 JSONL（标题取 ai-title > last-prompt > 首条用户消息，并校验记录里的 cwd 防串目录）；Codex 起 `app-server` 调 `thread/list`（按 cwd 精确过滤、按更新时间倒序，上限 8 条）
 - **卡片驱动**：`CliEvent` 经 `TaskProgressTracker` 折叠成进度快照，驱动 [任务卡片系统](task-card.md) 刷新
 
 ## 源文件索引

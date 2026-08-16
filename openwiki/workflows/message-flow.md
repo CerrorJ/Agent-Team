@@ -80,12 +80,15 @@ sequenceDiagram
 
 ### 斜杠命令
 
-`src/core/command-parser.ts` 的 `parseCommand()` 用正则匹配「可选 @ 提及 + 一条命令」，只认 `/close`、`/status`、`/help`、`/cd` 四个命令；「帮我运行 /status 看看」这类句子不会命中。另有 `parseCliRequest()` 单独识别 `/claude <任务>` 与 `/codex <任务>` 的引擎选择请求。
+`src/core/command-parser.ts` 的 `parseCommand()` 用正则匹配「可选 @ 提及 + 一条命令」，识别 `/close`、`/status`、`/help`、`/new`、`/resume`、`/compact`、`/cd`；「帮我运行 /status 看看」这类句子不会命中。另有 `parseCliRequest()` 单独识别 `/claude <任务>` 与 `/codex <任务>` 的引擎选择请求。
 
 | 命令 | 行为 |
 |------|------|
 | `/help` | 回复命令列表 |
 | `/status` | 回复机器人、会话 id、状态、执行引擎、工作目录、CLI 会话 id、话题、更新时间 |
+| `/new` | 清空话题绑定的 CLI 会话，下一条任务开新会话；旧会话保留，可用 `/resume` 找回 |
+| `/resume` | 列出当前工作目录的 CLI 会话（`listNativeCliSessions`，上限 8 条），卡片「恢复」按钮完成实际切换 |
+| `/compact [要求]` | 在当前 CLI 会话内执行原生上下文压缩（`compactCliSession`），无需整理时回「暂时无需整理」卡片 |
 | `/cd` | 无参数查看当前工作目录；带参数切换话题工作目录（active 状态下拒绝，切换成功后清空 `cliSessionId`，下一条任务新建 CLI 会话） |
 | `/close` | 中止运行中任务（`cancelMode = "close"`）并把会话置为 `closed` |
 | `/claude` / `/codex` | 新话题显式选择执行引擎；已有话题引擎不同会被拒绝；不带任务文本时提示补写任务 |
@@ -104,7 +107,7 @@ sequenceDiagram
 
 ## 会话守卫
 
-`onMessage` 在执行任务前先做会话级检查（详见 [会话与任务管理](../domain/session.md)）。此外有两个前置分支：
+`onMessage` 入口最先处理**协作消息**：`senderType` 为 `app`/`bot` 的富文本消息先确认 @ 了当前 bot，再从文本提取「任务编号」取件码，向共享 `CollaborationInbox` 领取交接单（详见 [多 bot 协作](../domain/collaboration.md)）；领取不到直接忽略。人类消息则按会话级检查放行（详见 [会话与任务管理](../domain/session.md)）。此外有两个前置分支：
 
 - **引擎切换守卫**：已有话题里用 `/claude` 或 `/codex` 请求了与会话当前不同的引擎时，回复「当前话题已经在使用 X。如需切换执行引擎，请新开一个话题」
 - **空任务守卫**：`/claude` / `/codex` 后面没有任务文本时，提示补写任务示例
@@ -185,7 +188,7 @@ flowchart TD
 
 成功、失败、取消三条收尾路径的处理逻辑。
 
-- **成功**：把 CLI 会话 id 补录进 Session（`setCliSessionId`），记录上下文窗口大小供下一轮进度计算，发 success 卡片；回答超过单卡上限时折叠展示并按 4000 字符拆条续发
+- **成功**：把 CLI 会话 id 补录进 Session（`setCliSessionId`），记录上下文窗口大小供下一轮进度计算，发 success 卡片；回答超过单卡上限时折叠展示并按 4000 字符拆条续发。非协作任务完成后若 bot 配置了 `reviewBy`，还会自动发起独立审查（见 [多 bot 协作](../domain/collaboration.md)）；协作任务完成后的回传/收尾路由也在该分支内
 - **取消**：卡片停止按钮或 `/close` 触发 `AbortController.abort()`，发 cancelled 卡片，文案按 `cancelMode`（`stop` / `close`）区分
 - **失败**：发 failed 卡片，`technicalDetail` 放进「查看错误详情」折叠面板
 - **收尾**：`finally` 中注销 `activeRuns` 登记并把会话从 `active` 回落 `idle`（仅 active 状态回落，避免覆盖 `closed` 终态）

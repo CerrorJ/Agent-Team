@@ -38,7 +38,11 @@ Agent-Team 通过 `config/bots.json`（路径由环境变量 `BOTS_CONFIG` 指�
 | `defaultCli` | `claude` 或 `codex` | 该 bot 新话题的默认执行引擎 |
 | `workspace` | 可选非空字符串 | 该 bot 的工作目录，相对路径按进程 cwd 解析 |
 | `systemPrompt` | 可选，默认空串 | 角色说明，拼接在任务前 |
+| `reviewBy` | 可选，bot id 格式 | 指定审查 bot：该 bot 的普通任务完成后自动发起第 1 轮独立审查，交接机制见 [多 bot 协作](collaboration.md) |
+| `collaborationMaxRounds` | 整数 1–4，默认 2 | 协作允许的交接总次数：2 = 发起审查 + 回传反馈各一次，4 = 之后还能再来一轮「返工 + 复审」 |
 | `enabled` | 可选，默认 `true` | 为 `false` 的 bot 在解析阶段即被过滤，不索取凭证、不建连接 |
+
+`reviewBy` 有两条启动期校验：指向未启用的 bot、或指向 bot 自己，都会直接报错退出。
 
 ## 启动流程
 
@@ -91,3 +95,4 @@ bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键
 - **新增配置字段**：同时改 `BotSchema` 与 `BotConfig` 接口；字段是可选的注意给默认值，否则旧 bots.json 启动即失败
 - **会话迁移**：`JsonSessionStore` 用 `legacyBotId`（取 `botConfigs[0].id`）和 `defaultWorkspaces` 给缺 `botId` / `workspaceDir` 的旧记录补值，改动字段时要同步 `migrateLegacySession`，详见 [会话与任务管理](session.md)
 - **凭证安全**：bots.json 只写环境变量**名**，真实凭证放 `.env`（见 [运维手册](../operations/runbook.md)），不要把密钥写进配置文件
+- **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseBotConfigs` 里的指向校验与 [多 bot 协作](collaboration.md) 的路由分支

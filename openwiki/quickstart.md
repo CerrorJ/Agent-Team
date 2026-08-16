@@ -15,7 +15,7 @@ Agent-Team 把**飞书**变成 AI 编程 CLI（Claude Code / Codex）的**指挥
 - **Bot 互相 @ 协作**——多 agent 分工
 - **任务进度实时可视化**——通过可刷新的飞书卡片展示
 
-> **当前阶段：** 飞书消息已经可以真实驱动 Claude Code 与 Codex 执行任务：会话按话题持久化、卡片实时展示工具级进度、发起人可从卡片停止任务。可在 `config/bots.json` 注册多个 bot，每个 bot 独立建立长连接并指定默认执行引擎（详见 [多 bot 注册](domain/bot-registry.md)）。多 bot 互相 @ 协作尚未接入。整体链路见 [消息处理流程](workflows/message-flow.md)，CLI 事件解析见 [AI CLI 输出解析](domain/ai-cli-probe.md)。
+> **当前阶段：** 飞书消息已经可以真实驱动 Claude Code 与 Codex 执行任务：会话按话题持久化、卡片实时展示工具级进度、发起人可从卡片停止任务。可在 `config/bots.json` 注册多个 bot，每个 bot 独立建立长连接并指定默认执行引擎（详见 [多 bot 注册](domain/bot-registry.md)）。配置 `reviewBy` 后，开发 bot 完成的任务会自动交给审查 bot 独立检查并按轮次回传反馈（详见 [多 bot 协作](domain/collaboration.md)）。整体链路见 [消息处理流程](workflows/message-flow.md)，CLI 事件解析见 [AI CLI 输出解析](domain/ai-cli-probe.md)。
 
 ## 技术栈
 
@@ -64,6 +64,7 @@ pnpm format:check
 | 消息处理流程 | 从收到消息到卡片更新的完整链路（含 CLI 执行与取消） | [消息处理流程](workflows/message-flow.md) |
 | 会话与任务管理 | 话题级会话状态机、持久化、斜杠命令、任务中止 | [会话与任务管理](domain/session.md) |
 | 多 bot 注册 | config/bots.json 注册多个 bot，各自长连接与默认引擎 | [多 bot 注册](domain/bot-registry.md) |
+| 多 bot 协作 | reviewBy 触发的 bot 间审查交接与轮次回传 | [多 bot 协作](domain/collaboration.md) |
 | 任务卡片系统 | 飞书卡片构建 + 节流刷新机制 | [任务卡片系统](domain/task-card.md) |
 | AI CLI 输出解析 | Claude Code / Codex headless 输出解析与统一事件协议 | [AI CLI 输出解析](domain/ai-cli-probe.md) |
 | 运维手册 | 环境变量、运行命令、飞书配置、排查 | [运维手册](operations/runbook.md) |
@@ -92,7 +93,7 @@ flowchart LR
 
 | 领域 | 锚点 | 延后原因 |
 |------|------|----------|
-| 多 bot 协作路由 | `CLAUDE.md` 中 "bot 之间可互相 @"；注册与连接已支持（[多 bot 注册](domain/bot-registry.md)） | 消息仅在 bot 间互相 @ 转发或任务分派的逻辑未实现 |
+| 任意 @ 触发协作 | 当前协作仅由 `reviewBy` 配置自动触发（[多 bot 协作](domain/collaboration.md)） | 用户手动 @ 其他 bot 分派任意任务的通用路由未实现 |
 | Cron 定时巡检 | `CLAUDE.md` 中 "cron 定时巡检" | 代码中无定时任务 |
 | 测试体系 | 无测试文件 | 当前无测试目录和测试框架 |
 | 部署/CI | `.github/workflows/openwiki-update.yml` | 仅有 OpenWiki 文档自动更新，无应用部署 CI |

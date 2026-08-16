@@ -58,10 +58,11 @@ flowchart TD
 
 入口文件 `src/index.ts` 中、每个 bot 各自注册的业务逻辑。当前实现：
 
-1. 调用 [消息解析](../workflows/message-flow.md) 还原 @ 提及，识别 `/help`、`/status`、`/close`、`/cd` 斜杠命令与 `/claude` `/codex` 引擎选择
-2. 通过 [会话管理](../domain/session.md) 按话题解析或创建会话（会话键含 `botId`），并按会话状态守卫（closed/creating/active 拒绝追问）
-3. 提取并下载图片/文件附件，回复一张带「停止任务」按钮的初始任务卡片
-4. 后台异步执行所选引擎（`runCli` + `ClaudeAdapter` / `CodexAdapter`），用工具级进度事件驱动卡片节流刷新
+1. 机器消息（`senderType` 为 `app`/`bot`）先走 [多 bot 协作](../domain/collaboration.md) 的取件逻辑：确认 @ 了当前 bot、提取任务编号、领取交接单，领取不到即忽略
+2. 调用 [消息解析](../workflows/message-flow.md) 还原 @ 提及，识别 `/help`、`/status`、`/close`、`/new`、`/resume`、`/compact`、`/cd` 斜杠命令与 `/claude` `/codex` 引擎选择
+3. 通过 [会话管理](../domain/session.md) 按话题解析或创建会话（会话键含 `botId`），并按会话状态守卫（closed/creating/active 拒绝追问）
+4. 提取并下载图片/文件附件，回复一张带「停止任务」按钮的初始任务卡片
+5. 后台异步执行所选引擎（`runCli` + `ClaudeAdapter` / `CodexAdapter`，或 `/compact` 走 `compactCliSession`），用工具级进度事件驱动卡片节流刷新；任务完成后按 [多 bot 协作](../domain/collaboration.md) 的路由回传或发起审查
 
 ### Bot 接口（出站）
 
@@ -91,6 +92,7 @@ flowchart TD
 ### 核心域（src/core/）
 
 - `bot-registry.ts` — 读取并校验 `config/bots.json`，解析凭证环境变量、默认引擎与工作目录（详见 [多 bot 注册](../domain/bot-registry.md)）
+- `collaboration.ts` — bot 间协作的交接单（`CollaborationMessage`）、共享收件箱 `CollaborationInbox` 与按「任务 + 轮次 + 接收方」的去重键（详见 [多 bot 协作](../domain/collaboration.md)）
 - `session-manager.ts` / `session-store.ts` — 话题级会话状态机与 JSON 持久化（zod 校验、原子写入、重启恢复、旧记录迁移）
 - `task-progress.ts` — 把 CLI 事件折叠成工具级进度快照，供卡片渲染
 - `task-abort.ts` — 「停止任务」的发起人权限校验
@@ -106,6 +108,8 @@ flowchart TD
 - `claude-adapter.ts` — 把 Claude Code `--output-format stream-json` 的一行输出翻译为 `CliEvent`
 - `codex-adapter.ts` — 把 Codex `exec --json` 的事件流翻译为同一套 `CliEvent`
 - `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、10 分钟超时、支持 `AbortSignal` 取消
+- `native-compact.ts` — `/compact` 的原生上下文压缩：Claude 走 stream-json，Codex 走 app-server JSON-RPC
+- `native-sessions.ts` — `/resume` 的会话清单：Claude 扫本地 JSONL，Codex 走 app-server `thread/list`
 - `spawn-cli.ts` — Windows 下以 shell 启动 `.cmd` 包装的 CLI，并用 `taskkill /t /f` 连进程树清理
 
 详见 [消息处理流程](../workflows/message-flow.md)。
