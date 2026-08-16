@@ -196,13 +196,25 @@ export class SessionManager {
 
   // 将 Claude CLI 创建出的会话 ID 补录到 Session 记录里,
   // 保存失败时回滚内存状态，避免磁盘没有 cliSessionId、内存却以为已经保存
+  // 用于任务完成和恢复按钮，
   async setCliSessionId(
     sessionId: string,
     cliSessionId: string,
   ): Promise<Session> {
+    if (!cliSessionId) throw new Error('CLI 会话 ID 不能为空')
+    return this.updateCliSelection(sessionId, cliSessionId)
+  }
+  //clearCliSessionId() 用于 /new
+  async clearCliSessionId(sessionId: string): Promise<Session> {
+    return this.updateCliSelection(sessionId, undefined)
+  }
+
+  private async updateCliSelection(
+    sessionId: string,
+    cliSessionId: string | undefined,
+  ): Promise<Session> {
     const current = this.get(sessionId)
     if (!current) throw new Error(`会话不存在: ${sessionId}`)
-    if (!cliSessionId) throw new Error('CLI 会话 ID 不能为空')
 
     const updated: Session = {
       ...current,

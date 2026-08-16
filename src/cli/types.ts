@@ -1,5 +1,23 @@
 export type CliId = 'claude' | 'codex'
 
+// 原生压缩的执行计划：两家 CLI 能力不同，只能各走各的协议——
+// Claude Code 用 `-p --resume <id>` 执行 /compact 指令并解析 stream-json 输出；
+// Codex 的 exec 模式不支持压缩指令，必须起 app-server 走 JSON-RPC（thread/resume + thread/compact/start）。
+// 详见 native-compact.ts 的两个分支实现。
+export type CliCompactPlan =
+  | {
+      protocol: 'claude-stream-json'
+      command: string
+      args: string[]
+      prompt: string
+    }
+  | {
+      protocol: 'codex-app-server'
+      command: string
+      args: string[]
+      sessionId: string
+    }
+
 export type CliPromptInput = 'argument' | 'stdin'
 
 /** Windows 上 prompt 必须走 stdin（避免 cmd 对命令行参数转义/乱码），其他平台直接走参数。 */
@@ -18,6 +36,14 @@ export interface CliRunStats {
   contextUsedTokens?: number
   contextWindowTokens?: number
 }
+
+//恢复卡片只需要统一的三项信息：会话 ID、标题和最后更新时间
+export interface CliSessionSummary {
+  id: string
+  title: string
+  updatedAt: string
+}
+
 // tool_start 与 tool_end 通过 toolUseId 关联一次工具调用，
 // result.stats 则保存最终耗时、轮次与模型窗口
 export type CliEvent =
@@ -46,6 +72,8 @@ export interface CliAdapter {
     sessionId: string,
     promptInput: CliPromptInput,
   ): string[]
+  // 组装在已有会话内执行原生压缩的子进程计划
+  buildCompactPlan(sessionId: string, instructions?: string): CliCompactPlan
   // 原始输出 -> 统一事件
   parseEvents(line: string): CliEvent[]
 }

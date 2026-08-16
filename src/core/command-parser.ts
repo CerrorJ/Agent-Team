@@ -1,20 +1,32 @@
 import type { CliId } from '../cli/types.js'
 
 export type SlashCommand =
-  { name: 'close' | 'status' | 'help' } | { name: 'cd'; path?: string }
+  | { name: 'close' | 'status' | 'help' | 'new' | 'resume' }
+  | { name: 'compact'; instructions?: string }
+  | { name: 'cd'; path?: string }
 
 // 匹配 at 机器人+指令 的情况，如 “@AT-Test /close”，也支持没有 @ 的纯指令
-const COMMAND_RE = /^(?:@.+\s+)?\/(close|status|help)\s*$/
+const COMMAND_RE = /^(?:@.+\s+)?\/(close|status|help|new|resume)\s*$/
 const CD_RE = /^(?:@\S+\s+)?\/cd(?:\s+([\s\S]+?))?\s*$/
+const COMPACT_RE = /^(?:@\S+\s+)?\/compact(?:\s+([\s\S]+?))?\s*$/
 
 // 「帮我运行 /status 看看」不会被当成命令,文本必须符合「可选的 @提及 + 一条受支持命令」，解析才会成功
 export const parseCommand = (text: string): SlashCommand | undefined => {
   const value = text.trim()
   const cdMatch = CD_RE.exec(value)
   if (cdMatch) return { name: 'cd', path: cdMatch[1]?.trim() || undefined }
+  const compactMatch = COMPACT_RE.exec(value)
+  if (compactMatch) {
+    return {
+      name: 'compact',
+      instructions: compactMatch[1]?.trim() || undefined,
+    }
+  }
   const match = COMMAND_RE.exec(value)
   if (!match) return undefined
-  return { name: match[1] as 'close' | 'status' | 'help' }
+  return {
+    name: match[1] as 'close' | 'status' | 'help' | 'new' | 'resume',
+  }
 }
 
 const CLI_REQUEST_RE = /^(?:@\S+\s+)?\/(claude|codex)(?:\s+([\s\S]*))?$/

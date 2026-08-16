@@ -1,3 +1,4 @@
+import { promptInputForPlatform } from './types.js'
 import type {
   CliAdapter,
   CliPromptInput,
@@ -153,6 +154,24 @@ export class ClaudeAdapter implements CliAdapter {
     promptInput: CliPromptInput,
   ): string[] {
     return ['--resume', sessionId, ...outputArgs(prompt, promptInput)]
+  }
+
+  buildCompactPlan(sessionId: string, instructions?: string) {
+    const command = instructions?.trim()
+      ? `/compact ${instructions.trim()}`
+      : '/compact'
+
+    return {
+      protocol: 'claude-stream-json' as const,
+      command: this.command,
+      // prompt 走 stdin（`-p -`），runClaudeCompact 需要这份文本写入子进程。
+      prompt: command,
+      args: this.buildResumeArgs(
+        command,
+        sessionId,
+        promptInputForPlatform(process.platform),
+      ),
+    }
   }
 
   parseEvent(line: string): CliEvent | undefined {

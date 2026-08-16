@@ -155,6 +155,16 @@ export class CodexAdapter implements CliAdapter {
     return args
   }
 
+  // exec 模式没有压缩指令，压缩只能通过 app-server 的 JSON-RPC 通道发起（thread/compact/start）
+  buildCompactPlan(sessionId: string) {
+    return {
+      protocol: 'codex-app-server' as const,
+      command: this.command,
+      args: ['app-server', '--stdio'],
+      sessionId,
+    }
+  }
+
   parseEvents(line: string): CliEvent[] {
     let event: CodexEvent
     try {
