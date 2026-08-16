@@ -15,6 +15,11 @@ pnpm dev（tsx watch）/ pnpm start / pnpm build
 - `/claude <任务>` 与 `/codex <任务>` 可以为新话题显式选择引擎
 - Claude Code 与 Codex 的模型服务使用各自的用户级配置，不把模型密钥写进项目 `.env`
 
+## 代码风格
+
+- 格式以 `.prettierrc` 为准；提交前 `pnpm format:check`，不过就 `pnpm format`
+- 箭头函数（不用 `function` 声明）、声明间空一行由 ESLint 强制（规则见 `eslint.config.js`）；提交前 `pnpm lint`，可自动修复的用 `pnpm lint:fix`
+
 ## 错题本
 
 > 踩坑后追加一行：现象 → 原因 → 正确做法。给未来的 AI 和人看。
