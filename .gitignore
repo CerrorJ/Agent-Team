@@ -4,3 +4,4 @@ dist/
 data/
 *.log
 config/bots.json
+example-project/

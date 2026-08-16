@@ -25,6 +25,7 @@ pnpm dev（tsx watch）/ pnpm start / pnpm build
 > 踩坑后追加一行：现象 → 原因 → 正确做法。给未来的 AI 和人看。
 
 - pnpm v11 默认拒绝依赖的构建脚本（esbuild 装完不可用）→ 在 `pnpm-workspace.yaml` 写 `allowBuilds: { esbuild: true }` 放行
+- 在 `example-project/` 里 `pnpm install` 显示 "Already up to date" 但 node_modules 始终缺失 → 根目录 `pnpm-workspace.yaml` 未列 packages，pnpm 把子目录安装吸附到根项目 → 独立子项目安装要加 `--ignore-workspace`
 
 <!-- OPENWIKI:START -->
 
