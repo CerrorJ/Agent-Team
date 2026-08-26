@@ -61,7 +61,15 @@ stateDiagram-v2
 
 ## 斜杠命令
 
-`src/core/command-parser.ts` 的 `parseCommand()` 只匹配「可选 @ 提及 + 一条命令」，支持 `/close`、`/status`、`/help`、`/cd`；`parseCliRequest()` 另行识别 `/claude` / `/codex` 引擎选择。命令在任务执行路径之前处理，不会触发 CLI。
+`src/core/command-parser.ts` 的 `parseCommand()` 只匹配「可选 @ 提及 + 一条命令」，支持 `/close`、`/status`、`/help`、`/new`、`/resume`、`/compact`、`/cd`；`parseCliRequest()` 另行识别 `/claude` / `/codex` 引擎选择。命令在任务执行路径之前处理，不会触发 CLI。
+
+其中三个命令直接操作话题绑定的 CLI 会话：
+
+| 命令 | 行为 |
+|------|------|
+| `/new` | 清空 `cliSessionId`（`clearCliSessionId`），下一条任务开全新 CLI 会话；旧会话保留在磁盘上，`/resume` 可找回。`active` / `closed` 状态下拒绝 |
+| `/resume` | 经 `src/cli/native-sessions.ts` 的 `listNativeCliSessions()` 列出当前工作目录下最近 8 条 CLI 会话，回复选择卡片；实际切换由卡片「恢复」按钮回调（`resume_cli_session`）完成，回调会校验会话归属、状态与目标会话仍然存在 |
+| `/compact [要求]` | 在已绑定的 CLI 会话内做原生上下文压缩（`src/cli/native-compact.ts`），必须有 `cliSessionId`（即至少完成过一次任务）；复用普通任务的登记、卡片与取消管线，但不产生新会话 id 与 token 统计 |
 
 ## 运行中任务与停止（task-abort）
 

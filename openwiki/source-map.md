@@ -20,6 +20,7 @@ Agent-Team/
 │   │   └── card.ts           # 飞书卡片构建 + 节流更新机制
 │   ├── core/
 │   │   ├── bot-registry.ts   # bots.json 解析校验 + 凭证环境变量解析 + systemPrompt 拼接
+│   │   ├── collaboration.ts  # bot 间协作交接单 + 共享收件箱 CollaborationInbox
 │   │   ├── session-manager.ts # 会话状态机（botId:chatId:threadId → 会话）
 │   │   ├── session-store.ts   # 会话 JSON 持久化（zod 校验 + 原子写 + 旧记录迁移）
 │   │   ├── task-progress.ts   # CLI 事件 → 进度快照
@@ -27,11 +28,13 @@ Agent-Team/
 │   │   ├── command-parser.ts  # 斜杠命令与 /claude /codex 引擎选择解析
 │   │   └── workspace.ts       # 工作目录解析与存在性校验
 │   └── cli/
-│       ├── types.ts           # CliAdapter / CliEvent 统一事件协议
+│       ├── types.ts           # CliAdapter / CliEvent 统一事件协议 + 压缩计划与会话摘要
 │       ├── registry.ts        # 按 CliId 取适配器（claude / codex）
 │       ├── claude-adapter.ts  # Claude Code 输出 → 统一事件
 │       ├── codex-adapter.ts   # Codex 输出 → 统一事件
 │       ├── runner.ts          # CLI 子进程生命周期（spawn/超时/取消）
+│       ├── native-compact.ts  # /compact 原生上下文压缩（Claude stream-json / Codex app-server）
+│       ├── native-sessions.ts # /resume 会话清单（Claude 本地 JSONL / Codex app-server thread/list）
 │       └── spawn-cli.ts       # 跨平台 spawn：Windows shell 启动 + 进程树清理
 ├── config/
 │   └── bots.example.json      # bot 注册文件模板（id、凭证变量名、defaultCli、systemPrompt）
@@ -114,6 +117,9 @@ Agent-Team/
 | `TaskStatus` | type | 任务状态：`running` / `success` / `failed` / `cancelled` |
 | `TaskCardOptions` | interface | 构建卡片的输入参数 |
 | `buildTaskCard` | function | 根据 options 构建飞书卡片 JSON |
+| `buildResumeCard` | function | `/resume` 的会话选择卡片（每条会话一行，非当前会话带「恢复」按钮） |
+| `buildSessionNoticeCard` | function | `/new` 与 `/compact` 的轻量通知卡片 |
+| `buildCollaborationCard` | function | bot 间协作交接卡片（[多 bot 协作](domain/collaboration.md)） |
 | `answerNeedsContinuation` / `answerContinuation` / `splitLongText` | function | 超长回答的卡片截断与续发拆分 |
 | `ThrottledCardUpdater` | class | 1 秒窗口节流 + 串行更新的卡片更新器 |
 
@@ -137,11 +143,13 @@ Agent-Team/
 
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
-| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / result / error；Windows 下 prompt 走 stdin |
+| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `CliCompactPlan` / `CliSessionSummary` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / result / error；Windows 下 prompt 走 stdin；压缩计划与会话摘要类型 |
 | `registry.ts` | `getCliAdapter` / `listCliAdapters` / `parseCliId` | 按 `CliId` 取适配器（claude / codex）并列出引擎清单 |
 | `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译 |
 | `codex-adapter.ts` | `CodexAdapter` | `codex exec --json --skip-git-repo-check --yolo` 的参数组装与事件翻译（Windows 用 stdin prompt 与 `--dangerously-bypass-approvals-and-sandbox`） |
 | `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、10 分钟默认超时、AbortSignal 取消 |
+| `native-compact.ts` | `compactCliSession` / `CompactCliSessionResult` | `/compact` 的原生上下文压缩：Claude 走 `-p - --resume` + stream-json，Codex 走 app-server JSON-RPC |
+| `native-sessions.ts` | `listNativeCliSessions` / `CliSessionSummary` | `/resume` 的会话清单：Claude 扫 `~/.claude/projects` JSONL，Codex 走 app-server `thread/list` |
 | `spawn-cli.ts` | `spawnCli` / `killCli` | Windows 下 shell 启动 `.cmd` 包装的 CLI；`killCli` 用 `taskkill /t /f` 连进程树清理避免孤儿进程 |
 
 **参见：** [AI CLI 输出解析](domain/ai-cli-probe.md)、[消息处理流程](workflows/message-flow.md)
