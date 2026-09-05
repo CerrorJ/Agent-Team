@@ -1,14 +1,15 @@
 import type { CliId } from '../cli/types.js'
 
 export type SlashCommand =
-  | { name: 'close' | 'status' | 'help' | 'new' | 'resume' }
+  | { name: 'close' | 'status' | 'help' | 'new' | 'resume' | 'team' }
   | { name: 'compact'; instructions?: string }
   | { name: 'cd'; path?: string }
 
 // 匹配 at 机器人+指令 的情况，如 “@AT-Test /close”，也支持没有 @ 的纯指令
-const COMMAND_RE = /^(?:@.+\s+)?\/(close|status|help|new|resume)\s*$/
-const CD_RE = /^(?:@\S+\s+)?\/cd(?:\s+([\s\S]+?))?\s*$/
-const COMPACT_RE = /^(?:@\S+\s+)?\/compact(?:\s+([\s\S]+?))?\s*$/
+const COMMAND_RE = /^(?:@.+?\s+)?\/(close|status|help|new|resume|team)\s*$/
+const CD_RE = /^(?:@.+?\s+)?\/cd(?:\s+([\s\S]+?))?\s*$/
+const COMPACT_RE = /^(?:@.+?\s+)?\/compact(?:\s+([\s\S]+?))?\s*$/
+const CLI_REQUEST_RE = /^(?:@.+?\s+)?\/(claude|codex)(?:\s+([\s\S]*))?$/
 
 // 「帮我运行 /status 看看」不会被当成命令,文本必须符合「可选的 @提及 + 一条受支持命令」，解析才会成功
 export const parseCommand = (text: string): SlashCommand | undefined => {
@@ -25,11 +26,9 @@ export const parseCommand = (text: string): SlashCommand | undefined => {
   const match = COMMAND_RE.exec(value)
   if (!match) return undefined
   return {
-    name: match[1] as 'close' | 'status' | 'help' | 'new' | 'resume',
+    name: match[1] as 'close' | 'status' | 'help' | 'new' | 'resume' | 'team',
   }
 }
-
-const CLI_REQUEST_RE = /^(?:@\S+\s+)?\/(claude|codex)(?:\s+([\s\S]*))?$/
 
 export interface CliRequest {
   cliId: CliId

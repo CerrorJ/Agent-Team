@@ -6,6 +6,20 @@ import type {
   TaskActivity,
   TaskProgressSnapshot,
 } from '../core/task-progress.js'
+export interface TeamCardMember {
+  id: string
+  displayName: string
+  role: string
+  cliName: string
+  skills: string[]
+  isLeader: boolean
+  ready: boolean
+}
+
+export interface TeamCardOptions {
+  members: TeamCardMember[]
+}
+
 export interface ResumeCardOptions {
   agentSessionId: string
   cliName: string
@@ -611,6 +625,63 @@ export const buildCollaborationCard = (
         },
         { tag: 'hr' },
         { tag: 'markdown', content: `_${footer}_` },
+      ],
+    },
+  }
+}
+// 团队卡片
+export const buildTeamCard = (options: TeamCardOptions): CardJson => {
+  const leader = options.members.find((member) => member.isLeader)
+
+  const memberElements = options.members.map((member) => {
+    const badges = [
+      member.isLeader ? 'Team Leader' : '',
+      member.ready ? '已连接' : '未连接',
+    ]
+      .filter(Boolean)
+      .join(' · ')
+
+    const skills =
+      member.skills.length > 0
+        ? member.skills.map((skill) => `$${skill}`).join('、')
+        : '无'
+
+    return {
+      tag: 'markdown',
+      content: [
+        `**${escapeFeishuMarkdown(member.displayName)}**  _${badges}_`,
+        escapeFeishuMarkdown(member.role),
+        `引擎：${escapeFeishuMarkdown(member.cliName)}　Skill：${escapeFeishuMarkdown(skills)}`,
+      ].join('\n'),
+    }
+  })
+
+  return {
+    schema: '2.0',
+    config: {
+      summary: { content: `Agent 团队：${options.members.length} 位成员` },
+    },
+    header: {
+      template: 'blue',
+      title: { tag: 'plain_text', content: 'Agent 团队' },
+      subtitle: {
+        tag: 'plain_text',
+        content: leader
+          ? `${options.members.length} 位成员 · ${leader.displayName} 负责统筹`
+          : `${options.members.length} 位成员`,
+      },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [
+        {
+          tag: 'markdown',
+          content:
+            '每位成员使用自己的飞书身份、执行引擎和项目 Skill，工作目录与会话彼此独立。',
+        },
+        { tag: 'hr' },
+        ...memberElements,
       ],
     },
   }

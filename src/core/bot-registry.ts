@@ -8,12 +8,17 @@ export interface BotConfig {
   appId: string
   appSecret: string
   defaultCliId: CliId
+  role: string
+  skills: string[]
   systemPrompt: string
   workspaceDir: string
   reviewBy?: string
   collaborationMaxRounds: number
 }
-
+export interface AgentOsConfig {
+  teamLeaderId: string
+  bots: BotConfig[]
+}
 type Environment = Record<string, string | undefined>
 
 // Zod 会检查配置文件里的字段和类型，接着检查 id 是否重复，并根据 appIdEnv 和 appSecretEnv 读取真实凭证
@@ -28,27 +33,37 @@ const BotSchema = z.object({
   appIdEnv: z.string().regex(/^[A-Z_][A-Z0-9_]*$/),
   appSecretEnv: z.string().regex(/^[A-Z_][A-Z0-9_]*$/),
   defaultCli: z.enum(['claude', 'codex']),
+  role: z.string().trim().min(1),
+  skills: z
+    .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+    .optional()
+    .default([]),
   workspace: z.string().trim().min(1).optional(),
   systemPrompt: z.string().trim().optional().default(''),
   reviewBy: z
     .string()
     .regex(/^[a-z0-9][a-z0-9_-]{0,31}$/)
     .optional(),
-  // 协作允许的交接总次数：2（默认）= 发起审查 + 回传反馈各一次；
-  // 上限 4 意味着反馈之后还能再来一轮「返工 + 复审」
-  collaborationMaxRounds: z.number().int().min(1).max(4).optional().default(2),
+  collaborationMaxRounds: z
+    .number()
+    .int()
+    .min(1)
+    .max(32)
+    .optional()
+    .default(16),
   enabled: z.boolean().optional().default(true),
 })
 
 const BotConfigFileSchema = z.object({
+  teamLeader: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,31}$/),
   bots: z.array(BotSchema).min(1),
 })
 
-export const parseBotConfigs = (
+export const parseAgentOsConfig = (
   input: unknown,
   env: Environment,
   baseDirectory = process.cwd(),
-): BotConfig[] => {
+): AgentOsConfig => {
   const parsed = BotConfigFileSchema.parse(input)
   const ids = new Set<string>()
   for (const bot of parsed.bots) {
@@ -72,6 +87,8 @@ export const parseBotConfigs = (
         appId,
         appSecret,
         defaultCliId: bot.defaultCli,
+        role: bot.role,
+        skills: [...new Set(bot.skills)],
         systemPrompt: bot.systemPrompt,
         reviewBy: bot.reviewBy,
         collaborationMaxRounds: bot.collaborationMaxRounds,
@@ -84,6 +101,9 @@ export const parseBotConfigs = (
 
   if (configs.length === 0) throw new Error('至少需要启用一个 bot')
   const enabledIds = new Set(configs.map((config) => config.id))
+  if (!enabledIds.has(parsed.teamLeader)) {
+    throw new Error(`teamLeader 指向未启用的 bot: ${parsed.teamLeader}`)
+  }
   for (const config of configs) {
     if (config.reviewBy && !enabledIds.has(config.reviewBy)) {
       throw new Error(
@@ -94,14 +114,21 @@ export const parseBotConfigs = (
       throw new Error(`bot ${config.id} 不能把自己配置为 reviewBy`)
     }
   }
-  return configs
+  return { teamLeaderId: parsed.teamLeader, bots: configs }
+}
+export const parseBotConfigs = (
+  input: unknown,
+  env: Environment,
+  baseDirectory = process.cwd(),
+): BotConfig[] => {
+  return parseAgentOsConfig(input, env, baseDirectory).bots
 }
 
-export const loadBotConfigs = async (
+export const loadAgentOsConfig = async (
   filePath: string,
   env: Environment = process.env,
   baseDirectory = process.cwd(),
-): Promise<BotConfig[]> => {
+): Promise<AgentOsConfig> => {
   let content: string
   try {
     content = await readFile(filePath, 'utf8')
@@ -115,17 +142,35 @@ export const loadBotConfigs = async (
   }
 
   try {
-    return parseBotConfigs(JSON.parse(content), env, baseDirectory)
+    return parseAgentOsConfig(JSON.parse(content), env, baseDirectory)
   } catch (error) {
     throw new Error(`bot 配置文件格式错误: ${(error as Error).message}`)
   }
 }
+
+export const loadBotConfigs = async (
+  filePath: string,
+  env: Environment = process.env,
+  baseDirectory = process.cwd(),
+): Promise<BotConfig[]> => {
+  return (await loadAgentOsConfig(filePath, env, baseDirectory)).bots
+}
+
 // 把角色说明放到真实任务前面。
 export const buildBotPrompt = (
-  systemPrompt: string,
+  config: Pick<BotConfig, 'role' | 'skills' | 'systemPrompt'>,
   prompt: string,
+  teamContext = '',
 ): string => {
-  const role = systemPrompt.trim()
-  if (!role) return prompt
-  return `角色：${role}\n\n任务：${prompt}`
+  return [
+    `你的角色：${config.role}`,
+    config.systemPrompt.trim(),
+    teamContext.trim(),
+    config.skills.length > 0
+      ? `本次任务必须按项目 Skill 执行：${config.skills.map((skill) => `$${skill}`).join('、')}`
+      : '',
+    `当前任务：${prompt}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 }
