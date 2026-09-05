@@ -1,8 +1,10 @@
 import { createInterface } from 'node:readline'
 import type { CliAdapter, CliCompactPlan } from './types.js'
 import { killCli, spawnCli } from './spawn-cli.js'
+import { armTimeout } from './timeout.js'
 
-const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
+// 0 表示不限时；需要上限时调用方传正数 timeoutMs（超过 2^31-1 会被钳制）。
+const DEFAULT_TIMEOUT_MS = 0
 
 export interface CompactCliSessionOptions {
   adapter: CliAdapter
@@ -93,7 +95,7 @@ const runClaudeCompact = (
     const abort = () =>
       fail(new Error(`${options.adapter.displayName} 上下文整理已取消`))
 
-    const timer = setTimeout(
+    const timer = armTimeout(
       () => fail(new Error(`${options.adapter.displayName} 上下文整理超时`)),
       options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     )
@@ -198,7 +200,7 @@ const runCodexCompact = (
     const abort = () =>
       fail(new Error(`${options.adapter.displayName} 上下文整理已取消`))
 
-    const timer = setTimeout(
+    const timer = armTimeout(
       () => fail(new Error(`${options.adapter.displayName} 上下文整理超时`)),
       options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     )

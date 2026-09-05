@@ -2,8 +2,10 @@ import { killCli, spawnCli } from './spawn-cli.js'
 import { promptInputForPlatform } from './types.js'
 import { createInterface } from 'node:readline'
 import type { CliAdapter, CliEvent, CliRunResult } from './types.js'
+import { armTimeout } from './timeout.js'
 
-const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
+// 0 表示不限时；需要上限时调用方传正数 timeoutMs（超过 2^31-1 会被钳制）。
+const DEFAULT_TIMEOUT_MS = 0
 
 export interface RunCliOptions {
   adapter: CliAdapter
@@ -63,7 +65,7 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     let settled = false
     let timedOut = false
 
-    const timer = setTimeout(() => {
+    const timer = armTimeout(() => {
       timedOut = true
       killCli(child)
     }, timeoutMs)
