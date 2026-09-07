@@ -17,12 +17,12 @@ const ProductSpecBaseSchema = z.object({
   summary: z.string().trim().min(1).max(500),
 })
 
-// 只认飞书云文档链接：路径必须是 /docx/ 或 /wiki/ 形态，其他链接直接拒绝
+// 只认飞书 Docx 链接（评论区流程暂不支持 wiki 形态），其他链接直接拒绝
 const LarkDocumentUrlSchema = z
   .url()
   .refine(
-    (value) => /\/(?:docx|wiki)\//.test(new URL(value).pathname),
-    'documentUrl 必须是飞书云文档或知识库文档链接',
+    (value) => /\/docx\//.test(new URL(value).pathname),
+    'documentUrl 必须是飞书 Docx 文档链接',
   )
 
 export const LocalProductSpecRequestSchema = ProductSpecBaseSchema.extend({
@@ -51,6 +51,7 @@ export interface ProductSpecFlow {
   token: string
   taskId: string
   botId: string
+  sessionId: string
   ownerOpenId: string
   ownerUnionId?: string
   request: ProductSpecRequest
@@ -61,6 +62,7 @@ export interface ProductSpecFlow {
 export interface CreateProductSpecFlowOptions {
   taskId: string
   botId: string
+  sessionId: string
   ownerOpenId: string
   ownerUnionId?: string
   request: ProductSpecRequest
@@ -90,8 +92,48 @@ export const isProductSpecOwner = (
   return flow.ownerOpenId === operator.operatorOpenId
 }
 
+// 从飞书 Docx URL 提取文件 token，与文档评论事件里的 file_token 对齐
+const documentToken = (documentUrl: string): string | undefined => {
+  const match = /^\/docx\/([A-Za-z0-9_-]+)\/?$/.exec(
+    new URL(documentUrl).pathname,
+  )
+
+  return match?.[1]
+}
+
 export class ProductSpecFlowStore {
   private readonly flows = new Map<string, ProductSpecFlow>()
+
+  constructor(initialFlows: ProductSpecFlow[] = []) {
+    for (const flow of initialFlows) this.flows.set(flow.token, flow)
+  }
+
+  // 给持久化子类用：导出当前内存状态 / 失败时整体回滚
+  snapshot(): ProductSpecFlow[] {
+    return [...this.flows.values()]
+  }
+
+  restore(flows: ProductSpecFlow[]): void {
+    this.flows.clear()
+    for (const flow of flows) this.flows.set(flow.token, flow)
+  }
+
+  // 评论事件只带 file_token：从待确认流程里反查 documentUrl token 匹配的那条
+  findPendingByDocument(
+    botId: string,
+    fileToken: string,
+  ): ProductSpecFlow | undefined {
+    for (const flow of this.flows.values()) {
+      if (
+        flow.botId === botId &&
+        flow.status === 'pending' &&
+        flow.request.deliveryMode === 'lark-doc' &&
+        documentToken(flow.request.documentUrl) === fileToken
+      )
+        return flow
+    }
+    return undefined
+  }
 
   // 同一任务 + bot 只保留一个待确认的流程；重新提交会让旧卡片上的 token 失效
   create(options: CreateProductSpecFlowOptions): ProductSpecFlow {

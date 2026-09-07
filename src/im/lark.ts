@@ -22,9 +22,15 @@ export interface IncomingMessage {
   rawContent: string
 }
 
-export interface BotIdentity {
-  openId: string
-  name: string
+export interface IncomingDocumentComment {
+  eventId: string
+  fileToken: string
+  fileType: string
+  commentId: string
+  replyId: string
+  senderOpenId: string
+  senderUnionId: string
+  mentionedBot: boolean
 }
 
 export interface BotOptions {
@@ -32,6 +38,27 @@ export interface BotOptions {
   appSecret: string
   onMessage: (msg: IncomingMessage, bot: Bot) => Promise<void>
   onCardAction?: (action: CardAction) => Promise<CardActionResponse | undefined>
+  onDocumentComment?: (
+    comment: IncomingDocumentComment,
+    bot: Bot,
+  ) => Promise<void>
+}
+
+export interface BotIdentity {
+  openId: string
+  name: string
+}
+
+export const FEISHU_TEXT_LIMIT = 3_000
+export const FEISHU_MENTION_LIMIT = 1_200
+export const FEISHU_COMMENT_LIMIT = 1_000
+
+export const fitFeishuText = (text: string, maxLength: number): string => {
+  const characters = Array.from(text)
+  if (characters.length <= maxLength) return text
+  const suffix = '\n\n（内容过长，已截断。详细内容请写入文档或工作区文件。）'
+  const suffixLength = Array.from(suffix).length
+  return `${characters.slice(0, Math.max(0, maxLength - suffixLength)).join('')}${suffix}`
 }
 
 export interface CardAction {
@@ -46,6 +73,7 @@ export interface CardActionResponse {
   toast?: { type: 'success' | 'info' | 'warning' | 'error'; content: string }
   card?: { type: 'raw'; data: CardJson }
 }
+
 // 从卡片回调数据里取出操作者、消息 id 和按钮携带的 value
 export const parseCardAction = (data: any): CardAction => {
   const value = data?.action?.value
@@ -80,6 +108,15 @@ export interface Bot {
     replyInThread?: boolean,
   ) => Promise<string | undefined>
   updateCard: (messageId: string, card: CardJson) => Promise<void>
+  subscribeToDocumentComments: () => Promise<void>
+  replyToDocumentComment: (
+    comment: IncomingDocumentComment,
+    text: string,
+  ) => Promise<void>
+  setDocumentCommentWorking: (
+    comment: IncomingDocumentComment,
+    active: boolean,
+  ) => Promise<void>
   downloadResource: (
     messageId: string,
     fileKey: string,
@@ -88,11 +125,13 @@ export interface Bot {
     fileName?: string,
   ) => Promise<string>
 }
-// 富文本构造和
+
+// 富文本构造：把 @ 提及和文本拼成飞书 post 消息体
 export const buildMentionPostContent = (
   target: BotIdentity,
   text: string,
 ): Record<string, unknown> => {
+  const boundedText = fitFeishuText(text, FEISHU_MENTION_LIMIT)
   return {
     zh_cn: {
       title: '',
@@ -103,7 +142,7 @@ export const buildMentionPostContent = (
             user_id: target.openId,
             ...(target.name ? { user_name: target.name } : {}),
           },
-          { tag: 'text', text: ` ${text}` },
+          { tag: 'text', text: ` ${boundedText}` },
         ],
       ],
     },
@@ -144,7 +183,7 @@ const getHeader = (headers: any, name: string): string => {
   return Array.isArray(value) ? (value[0] ?? '') : (value ?? '')
 }
 
-// 根据飞书消息类型和下载 res 获取扩展名
+// 根据下载文件名和 content_type 推断扩展名，实在推不出就按类型兜底
 const resourceExtension = (
   type: 'image' | 'file',
   fileName: string | undefined,
@@ -163,7 +202,7 @@ interface PostElement {
   user_id?: string
 }
 
-//日志或代码粘成飞书代码块,在 post 富文本中，标签是 code_block
+// post 富文本元素转纯文本：code_block / code / md / a 都取 text 字段
 const renderPostElement = (element: PostElement): string => {
   if (element.tag === 'at') return element.user_id ?? ''
   if (element.tag === 'br') return '\n'
@@ -173,7 +212,7 @@ const renderPostElement = (element: PostElement): string => {
   return ''
 }
 
-// extractText 把飞书的富文本（post）或纯文本（text）消息正文剥成纯文本。
+// 把飞书的富文本（post）或纯文本（text）消息正文剥成纯文本
 export const extractMessageText = (
   messageType: string,
   content: string,
@@ -193,23 +232,27 @@ export const extractMessageText = (
   return ''
 }
 
-// Lark.Client 管出。所有主动调 API 的动作——发消息、回消息、以后的传图片、改卡片都走它。
+// Lark.Client 管出。所有主动调 API 的动作——发消息、回消息、传图片、改卡片都走它。
 export const startBot = (opts: BotOptions): Bot => {
-  const { appId, appSecret, onMessage, onCardAction } = opts
+  const { appId, appSecret, onMessage, onCardAction, onDocumentComment } = opts
 
   const client = new Lark.Client({ appId, appSecret })
 
   const bot: Bot = {
     client,
+
     getIdentity() {
       return fetchBotIdentity(client)
     },
+
     async reply(messageId, text, replyInThread = false) {
       const res = await client.im.v1.message.reply({
         path: { message_id: messageId },
         data: {
           msg_type: 'text',
-          content: JSON.stringify({ text }),
+          content: JSON.stringify({
+            text: fitFeishuText(text, FEISHU_TEXT_LIMIT),
+          }),
           ...(replyInThread ? { reply_in_thread: true } : {}),
         },
       })
@@ -229,6 +272,7 @@ export const startBot = (opts: BotOptions): Bot => {
 
       return res.data?.message_id
     },
+
     // 继续回复在原话题里。目标 bot 会收到真实通知，用户也能看见任务从谁交给了谁。
     async replyMention(messageId, target, text, replyInThread = false) {
       const res = await client.im.v1.message.reply({
@@ -242,11 +286,72 @@ export const startBot = (opts: BotOptions): Bot => {
 
       return res.data?.message_id
     },
+
     async updateCard(messageId, card) {
       await client.im.v1.message.patch({
         path: { message_id: messageId },
         data: { content: JSON.stringify(card) },
       })
+    },
+
+    async subscribeToDocumentComments() {
+      const response = await client.drive.v1.user.subscription({
+        data: { event_type: 'drive.notice.comment_add_v1' },
+      })
+
+      if (response.code && response.code !== 0) {
+        throw new Error(response.msg || '订阅飞书文档评论事件失败')
+      }
+    },
+
+    async replyToDocumentComment(comment, text) {
+      const response = await client.drive.v1.fileCommentReply.create({
+        path: {
+          file_token: comment.fileToken,
+          comment_id: comment.commentId,
+        },
+        params: {
+          file_type: comment.fileType as
+            'doc' | 'docx' | 'sheet' | 'file' | 'slides' | 'bitable',
+          user_id_type: 'open_id',
+        },
+        data: {
+          content: {
+            elements: [
+              {
+                type: 'text_run',
+                text_run: {
+                  text: fitFeishuText(text, FEISHU_COMMENT_LIMIT),
+                },
+              },
+            ],
+          },
+        },
+      })
+
+      if (response.code && response.code !== 0) {
+        throw new Error(response.msg || '回复飞书文档评论失败')
+      }
+    },
+
+    // 飞书评论没有「处理中」状态：借 Typing 表情回应给用户可见的执行反馈
+    async setDocumentCommentWorking(comment, active) {
+      const replyId =
+        comment.replyId || (await findRootCommentReplyId(client, comment))
+
+      const response = await client.drive.v2.commentReaction.updateReaction({
+        path: { file_token: comment.fileToken },
+        params: { file_type: comment.fileType },
+        data: {
+          action: active ? 'add' : 'delete',
+          reply_id: replyId,
+          reaction_type: 'Typing',
+        },
+      })
+
+      if (response.code && response.code !== 0) {
+        throw new Error(response.msg || '更新飞书文档评论状态失败')
+      }
     },
 
     async downloadResource(messageId, fileKey, type, saveDir, fileName) {
@@ -290,6 +395,24 @@ export const startBot = (opts: BotOptions): Bot => {
 
       await onMessage(msg, bot)
     },
+    'drive.notice.comment_add_v1': async (data) => {
+      if (!onDocumentComment) return
+      const meta = data.notice_meta
+      if (!meta?.file_token || !meta.file_type || !data.comment_id) return
+      await onDocumentComment(
+        {
+          eventId: data.event_id ?? '',
+          fileToken: meta.file_token,
+          fileType: meta.file_type,
+          commentId: data.comment_id,
+          replyId: data.reply_id ?? '',
+          senderOpenId: meta.from_user_id?.open_id ?? '',
+          senderUnionId: meta.from_user_id?.union_id ?? '',
+          mentionedBot: data.is_mentioned ?? false,
+        },
+        bot,
+      )
+    },
   })
 
   // Lark.WSClient 管进。它负责建立并维持那条 WebSocket 长连接，断了自动重连。
@@ -299,5 +422,32 @@ export const startBot = (opts: BotOptions): Bot => {
   return bot
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
+// 表情反应只能挂在 reply 上：评论事件没带 reply_id 时，取该评论第一条回复兜底
+const findRootCommentReplyId = async (
+  client: Lark.Client,
+  comment: IncomingDocumentComment,
+): Promise<string> => {
+  const response = await client.drive.v1.fileCommentReply.list({
+    path: {
+      file_token: comment.fileToken,
+      comment_id: comment.commentId,
+    },
+    params: {
+      file_type: comment.fileType as
+        'doc' | 'docx' | 'sheet' | 'file' | 'slides' | 'bitable',
+      page_size: 1,
+      user_id_type: 'open_id',
+    },
+  })
+
+  if (response.code && response.code !== 0) {
+    throw new Error(response.msg || '读取飞书文档评论回复失败')
+  }
+  const replyId = response.data?.items?.[0]?.reply_id
+  if (!replyId) throw new Error('飞书文档评论缺少可添加表情的回复 ID')
+  return replyId
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null
+}
