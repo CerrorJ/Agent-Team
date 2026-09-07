@@ -17,9 +17,11 @@ export interface IncomingMessage {
   threadId: string
   senderType: string
   senderOpenId: string
+  senderUnionId: string
   mentions: Mention[]
   rawContent: string
 }
+
 export interface BotIdentity {
   openId: string
   name: string
@@ -34,22 +36,27 @@ export interface BotOptions {
 
 export interface CardAction {
   operatorOpenId: string
+  operatorUnionId: string
   messageId: string
   value: Record<string, unknown>
+  formValue: Record<string, unknown>
 }
 
 export interface CardActionResponse {
   toast?: { type: 'success' | 'info' | 'warning' | 'error'; content: string }
   card?: { type: 'raw'; data: CardJson }
 }
-
 // 从卡片回调数据里取出操作者、消息 id 和按钮携带的 value
 export const parseCardAction = (data: any): CardAction => {
   const value = data?.action?.value
+  const formValue = data?.action?.form_value
   return {
     operatorOpenId: data?.operator?.open_id ?? data?.operator_id?.open_id ?? '',
+    operatorUnionId:
+      data?.operator?.union_id ?? data?.operator_id?.union_id ?? '',
     messageId: data?.context?.open_message_id ?? data?.open_message_id ?? '',
     value: isRecord(value) ? value : {},
+    formValue: isRecord(formValue) ? formValue : {},
   }
 }
 
@@ -276,6 +283,7 @@ export const startBot = (opts: BotOptions): Bot => {
         threadId: m.thread_id ?? '',
         senderType: data.sender.sender_type ?? '',
         senderOpenId: data.sender.sender_id?.open_id ?? '',
+        senderUnionId: data.sender.sender_id?.union_id ?? '',
         mentions: parseMentions(m.mentions),
         rawContent: m.content,
       }

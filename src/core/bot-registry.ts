@@ -162,15 +162,32 @@ export const buildBotPrompt = (
   prompt: string,
   teamContext = '',
 ): string => {
-  return [
+  // 飞书是聊天界面：长产物进文件、决策走澄清工具，避免大段内容刷屏
+  const feishuOutputPolicy = [
+    '飞书输出规则（必须遵守）：',
+    '- 最终回复控制在 1200 个中文字符以内，先给结论，再给必要依据和下一步。',
+    '- 不在回复中粘贴完整代码、长日志或整份产品文档，也不要输出 Markdown 表格。',
+    '- 详细产物写入当前工作区文件。回复只提供简短摘要和文件路径。',
+    '- 需要用户决策时，必须调用 request_clarification 工具；不要用大段文字列出问题。工具调用后停止继续推断，等待用户回答。',
+  ].join('\n')
+
+  const sections = [
     `你的角色：${config.role}`,
     config.systemPrompt.trim(),
     teamContext.trim(),
+    // Skill 解析顺序写死在提示词里：工作区版本优先，防止 CLI 直接用全局同名 Skill
     config.skills.length > 0
-      ? `本次任务必须按项目 Skill 执行：${config.skills.map((skill) => `$${skill}`).join('、')}`
+      ? [
+          '项目 Skill 加载规则（优先级不可颠倒）：',
+          '- 对配置中声明的每个 Skill，先读取当前工作区 `.agents/skills/<skill>/SKILL.md`。',
+          '- 上述路径不存在时，再读取当前工作区 `.claude/skills/<skill>/SKILL.md`。',
+          '- 只有两个工作区路径都不存在时，才允许回退到用户级或全局同名 Skill；不得因全局 Skill 同名而跳过工作区版本。',
+          `本次任务必须执行的项目 Skill：${config.skills.map((skill) => `$${skill}`).join('、')}`,
+        ].join('\n')
       : '',
+    feishuOutputPolicy,
     `当前任务：${prompt}`,
   ]
-    .filter(Boolean)
-    .join('\n\n')
+
+  return sections.filter(Boolean).join('\n\n')
 }

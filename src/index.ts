@@ -9,6 +9,8 @@ import { startBot, type Bot } from './im/lark.js'
 import {
   answerContinuation,
   answerNeedsContinuation,
+  buildClarificationCard,
+  buildClarificationSupersededCard,
   buildCollaborationCard,
   buildSessionNoticeCard,
   buildTaskCard,
@@ -21,6 +23,12 @@ import { SessionManager } from './core/session-manager.js'
 import { JsonSessionStore } from './core/session-store.js'
 import { TaskProgressTracker } from './core/task-progress.js'
 import type { ActiveRun } from './core/task-abort.js'
+import {
+  ClarificationFlowStore,
+  findClarificationRequest,
+  formatClarificationMessage,
+} from './core/clarification.js'
+import { topicTaskId } from './core/topic-task.js'
 import {
   CollaborationInbox,
   collaborationTurnKey,
@@ -57,7 +65,7 @@ await Promise.all(
 )
 for (const missing of await teamRegistry.findMissingSkills()) {
   console.warn(
-    `[Skill] bot=${missing.botId} 找不到 $${missing.skill}，请安装到当前工作目录的 .agents/skills 或 .claude/skills`,
+    `[Skill] bot=${missing.botId} 找不到 ${missing.skill}，请安装到当前工作目录的 .agents/skills 或 .claude/skills`,
   )
 }
 
@@ -78,6 +86,7 @@ const contextWindows = new Map<string, number>()
 const botRuntimes = new Map<string, BotRuntime>()
 const processedCollaborationTurns = new Set<string>()
 const collaborationInbox = new CollaborationInbox()
+const clarificationFlows = new ClarificationFlowStore()
 
 const runtime: AppRuntime = {
   sessions,
@@ -87,6 +96,7 @@ const runtime: AppRuntime = {
   botRuntimes,
   processedCollaborationTurns,
   collaborationInbox,
+  clarificationFlows,
 }
 
 console.log('Agent Team 启动，正在建立飞书长连接…')
@@ -172,6 +182,7 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
     onCardAction: createCardActionHandler({ runtime, config }),
     onMessage: async (msg, bot) => {
       const resolved = resolveMentions(msg.text, msg.mentions)
+      const taskId = topicTaskId(msg)
       let senderRuntime: BotRuntime | undefined
       let collaboration: CollaborationMessage | undefined
       if (msg.senderType === 'app' || msg.senderType === 'bot') {
@@ -221,6 +232,12 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
         return
       }
 
+      // 话题里还有未完成的澄清流程时，普通消息按「补充说明」并入该流程，不开新任务
+      const pendingClarification =
+        msg.senderType !== 'app' && msg.senderType !== 'bot' && !command
+          ? clarificationFlows.findForTask(taskId, config.id)
+          : undefined
+
       const resolvedSession = await sessions.resolve(
         msg,
         cliRequest?.cliId ?? config.defaultCliId,
@@ -235,7 +252,13 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
       }
       const cliAdapter = getCliAdapter(session.cliId)
       const isCompacting = command?.name === 'compact'
-      const taskText = collaboration?.prompt ?? cliRequest?.prompt ?? resolved
+
+      const taskText = pendingClarification
+        ? formatClarificationMessage(
+            pendingClarification,
+            cliRequest?.prompt ?? resolved,
+          )
+        : (collaboration?.prompt ?? cliRequest?.prompt ?? resolved)
 
       const prompt = buildBotPrompt(
         config,
@@ -294,6 +317,24 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
           hasThread,
         )
         return
+      }
+
+      // 用户没点卡片而是发了新消息：作废旧澄清卡片，新消息会带着已确认答案重新整理
+      if (pendingClarification) {
+        clarificationFlows.delete(pendingClarification.token)
+        if (pendingClarification.cardMessageId) {
+          try {
+            await bot.updateCard(
+              pendingClarification.cardMessageId,
+              buildClarificationSupersededCard(pendingClarification),
+            )
+          } catch (error) {
+            console.warn(
+              '[澄清] 旧卡片更新失败，继续处理用户的新消息:',
+              (error as Error).message,
+            )
+          }
+        }
       }
 
       if (
@@ -408,6 +449,7 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
             answer: result.message ?? '',
             sessionId: result.sessionId,
             stats: undefined,
+            toolCalls: undefined,
           }))
         : executeCli(
             cliAdapter,
@@ -435,6 +477,43 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
           }
           if (!isCompacting && result.stats?.contextWindowTokens) {
             contextWindows.set(session.id, result.stats.contextWindowTokens)
+          }
+
+          // grill-me：从工具调用里截获 request_clarification，转成卡片逐题收集答案
+          const clarificationRequest =
+            !isCompacting && config.skills.includes('grill-me')
+              ? findClarificationRequest(result.toolCalls)
+              : undefined
+
+          if (clarificationRequest) {
+            const flow = clarificationFlows.create({
+              taskId,
+              botId: config.id,
+              sessionId: session.id,
+              ownerOpenId: msg.senderOpenId,
+              ownerUnionId: msg.senderUnionId,
+              originalMessageId: msg.messageId,
+              cardMessageId: cardId,
+              replyInThread: hasThread,
+              request: clarificationRequest,
+            })
+
+            if (activeRuns.get(session.id)?.controller === run) {
+              activeRuns.delete(session.id)
+            }
+            await markSessionIdle(sessions, session.id)
+            await cardUpdater.finish(buildClarificationCard({ flow }))
+            await sendResultNotification({
+              bot,
+              replyToMessageId: msg.messageId,
+              target: { openId: flow.ownerOpenId, name: '' },
+              text: `需要你确认 ${clarificationRequest.questions.length} 个问题，请在上方卡片中选择。`,
+              replyInThread: hasThread,
+            })
+            console.log(
+              `[澄清] 已发送交互卡片 questions=${clarificationRequest.questions.length}`,
+            )
+            return
           }
           const snapshot = progress.snapshot()
           await cardUpdater.finish(
@@ -479,7 +558,8 @@ const startConfiguredBot = async (config: BotConfig): Promise<void> => {
               replyInThread: hasThread,
             })
           }
-          if (!isCompacting) {
+          // 产品澄清在本节停在产品结论，不自动进入后续团队编排。
+          if (!isCompacting && !config.skills.includes('grill-me')) {
             try {
               if (
                 collaboration &&
