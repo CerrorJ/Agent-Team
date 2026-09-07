@@ -191,7 +191,7 @@ Agent-Team/
 | `registry.ts` | `getCliAdapter` / `listCliAdapters` / `parseCliId` | 按 `CliId` 取适配器（claude / codex）并列出引擎清单 |
 | `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译；`mcp__agent_os__request_clarification` 归一为统一工具名后吐 `tool_call` |
 | `codex-adapter.ts` | `CodexAdapter` | `codex exec --json --skip-git-repo-check --yolo` 的参数组装与事件翻译（Windows 用 stdin prompt 与 `--dangerously-bypass-approvals-and-sandbox`）；`agent_os` 的 `mcp_tool_call` 吐 `tool_call` |
-| `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、10 分钟默认超时、AbortSignal 取消；`tool_call` 按 toolUseId 去重收集，失败调用剔除 |
+| `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、默认不限时（可选 `timeoutMs`）、AbortSignal 取消；`tool_call` 按 toolUseId 去重收集，失败调用剔除 |
 | `native-compact.ts` | `compactCliSession` / `CompactCliSessionResult` | `/compact` 的原生上下文压缩：Claude 走 `-p - --resume` + stream-json，Codex 走 app-server JSON-RPC |
 | `native-sessions.ts` | `listNativeCliSessions` / `CliSessionSummary` | `/resume` 的会话清单：Claude 扫 `~/.claude/projects` JSONL，Codex 走 app-server `thread/list` |
 | `spawn-cli.ts` | `spawnCli` / `killCli` | Windows 下 shell 启动 `.cmd` 包装的 CLI；`killCli` 用 `taskkill /t /f` 连进程树清理避免孤儿进程 |
@@ -220,7 +220,7 @@ Agent-Team/
 - **项目名：** Agent-Team v1.0.0
 - **类型：** ESM (`"type": "module"`)
 - **Node 要求：** >= 22
-- **包管理：** pnpm >= 11
+- **包管理：** pnpm（`devEngines` 钉在 `^12.3.4`，`onFail: download` 自动补装）
 
 ### tsconfig.json
 

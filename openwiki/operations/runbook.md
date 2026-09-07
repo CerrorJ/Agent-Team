@@ -55,7 +55,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 | `工作目录不存在` | bot `workspace` / `CLI_WORKDIR` 指向的路径无效 | 修正路径或创建目录 |
 | 连接超时 | 网络问题或凭证错误 | 确认 App ID / Secret 正确，网络可达飞书 OpenAPI |
 | 任务一直不执行 | 本机没有对应 CLI 或未登录 | `claude --version` / `codex --version` 验证安装，先在本机跑通一次 |
-| `Claude Code 执行超时` | 单任务超过 10 分钟（`runner.ts` 的 `DEFAULT_TIMEOUT_MS`） | 拆小任务或调大超时 |
+| `Claude Code 执行超时` | 调用方传了 `timeoutMs` 或任务被外部中止（`runner.ts` 默认 `DEFAULT_TIMEOUT_MS = 0` 不限时） | 确认超时来源；需上限时在调用 `runCli` 处传 `timeoutMs`，或用卡片「停止任务」手动中止 |
 
 ## 飞书应用配置
 
