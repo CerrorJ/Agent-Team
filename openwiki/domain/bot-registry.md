@@ -9,21 +9,24 @@ tags: [domain, bots, config, multi-tenant]
 
 ## 概述
 
-Agent-Team 通过 `config/bots.json`（路径由环境变量 `BOTS_CONFIG` 指定，默认 `config/bots.json`）注册多个飞书 bot，每个 bot 有自己的凭证、默认执行引擎（`defaultCli`）、角色提示词（`systemPrompt`）和工作目录。注册逻辑在 `src/core/bot-registry.ts`，是 [架构总览](../architecture/overview.md) 中所有长连接与 [会话与任务管理](session.md) 中会话归属的起点。
+Agent-Team 通过 `config/bots.json`（路径由环境变量 `BOTS_CONFIG` 指定，默认 `config/bots.json`）注册多个飞书 bot：顶层声明 `teamLeader`，每个 bot 有自己的凭证、默认执行引擎（`defaultCli`）、角色（`role`）、角色提示词（`systemPrompt`）、项目 Skill 清单（`skills`）和工作目录。注册逻辑在 `src/core/bot-registry.ts`（校验）与 `src/core/team-registry.ts`（团队注册表），是 [架构总览](../architecture/overview.md) 中所有长连接与 [会话与任务管理](session.md) 中会话归属的起点。
 
 ## 配置结构
 
-模板见 `config/bots.example.json`：
+模板见 `config/bots.example.json`（顶层必须声明 `teamLeader`，指向某个启用的 bot）：
 
 ```json
 {
+  "teamLeader": "developer",
   "bots": [
     {
       "id": "developer",
       "appIdEnv": "FEISHU_DEVELOPER_APP_ID",
       "appSecretEnv": "FEISHU_DEVELOPER_APP_SECRET",
       "defaultCli": "claude",
-      "systemPrompt": "你是主力开发助手，负责理解需求并完成实现。"
+      "role": "开发",
+      "systemPrompt": "你是主力开发助手，负责理解需求并完成实现。",
+      "reviewBy": "reviewer"
     }
   ]
 }
@@ -36,22 +39,34 @@ Agent-Team 通过 `config/bots.json`（路径由环境变量 `BOTS_CONFIG` 指�
 | `id` | `/^[a-z0-9][a-z0-9_-]{0,31}$/`，不可重复 | bot 标识，进入会话键 `botId:chatId:threadId` |
 | `appIdEnv` / `appSecretEnv` | `/^[A-Z_][A-Z0-9_]*$/` | 凭证**环境变量名**（不是凭证本身），启动时从 `process.env` 读取 |
 | `defaultCli` | `claude` 或 `codex` | 该 bot 新话题的默认执行引擎 |
+| `role` | 必填非空字符串 | 一句话角色（如「开发」「审查」），进入团队名单与任务提示词 |
+| `skills` | 可选字符串数组（`/^[a-z0-9][a-z0-9-]{0,63}$/`），默认 `[]` | 项目 Skill 清单，见下文 |
 | `workspace` | 可选非空字符串 | 该 bot 的工作目录，相对路径按进程 cwd 解析 |
 | `systemPrompt` | 可选，默认空串 | 角色说明，拼接在任务前 |
 | `reviewBy` | 可选，bot id 格式 | 指定审查 bot：该 bot 的普通任务完成后自动发起第 1 轮独立审查，交接机制见 [多 bot 协作](collaboration.md) |
-| `collaborationMaxRounds` | 整数 1–4，默认 2 | 协作允许的交接总次数：2 = 发起审查 + 回传反馈各一次，4 = 之后还能再来一轮「返工 + 复审」 |
+| `collaborationMaxRounds` | 整数 1–32，默认 16 | 协作允许的交接总次数（见 [多 bot 协作](collaboration.md)） |
 | `enabled` | 可选，默认 `true` | 为 `false` 的 bot 在解析阶段即被过滤，不索取凭证、不建连接 |
 
-`reviewBy` 有两条启动期校验：指向未启用的 bot、或指向 bot 自己，都会直接报错退出。
+启动期校验（失败即退出）：`teamLeader` 指向未启用的 bot、`reviewBy` 指向未启用或指向自己、bot id 重复、启用的 bot 缺凭证、全部停用。
+
+## 团队注册表（TeamRegistry）
+
+`src/core/team-registry.ts` 的 `TeamRegistry` 由 `AgentOsConfig`（`loadAgentOsConfig` 返回 `teamLeaderId + bots`）构造，提供三件事：
+
+- **`contextFor(botId)`**：生成团队名单文本（成员 id、是否 Team Leader、role、Skills），由 `buildBotPrompt` 拼进每条任务提示词，并声明「团队成员都是真实飞书 bot，CLI 内部子 Agent 不能冒充」
+- **`findMissingSkills()`**：启动时逐 bot 检查 skills 是否存在于 `<workspace>/.agents/skills/<skill>/SKILL.md` 或 `.claude/skills/` 路径，缺失只打 `[Skill]` 告警不阻断启动
+- **`/team` 命令数据源**：成员卡片（名称、role、默认引擎、Skills、是否 Leader、是否就绪）由 `TeamRegistry.members` 驱动，见 [消息处理流程](../workflows/message-flow.md)
 
 ## 启动流程
 
 ```mermaid
 flowchart TD
-    ENV["读取 BOTS_CONFIG 路径"] --> LOAD["loadBotConfigs 读取 bots.json"]
-    LOAD --> SCHEMA{"zod 校验 + id 查重"}
-    SCHEMA -->|失败| FAIL["报错退出（缺凭证 / 重复 id / 零启用）"]
-    SCHEMA -->|成功| WS["逐 bot ensureWorkspaceDirectory 校验目录存在"]
+    ENV["读取 BOTS_CONFIG 路径"] --> LOAD["loadAgentOsConfig 读取 bots.json"]
+    LOAD --> SCHEMA{"zod 校验 + id 查重 + teamLeader 指向"}
+    SCHEMA -->|失败| FAIL["报错退出（缺凭证 / 重复 id / 零启用 / 指向无效）"]
+    SCHEMA -->|成功| TEAM["new TeamRegistry 构建团队注册表"]
+    TEAM --> SKILL["findMissingSkills 缺失只告警"]
+    SKILL --> WS["逐 bot ensureWorkspaceDirectory 校验目录存在"]
     WS --> SESS["SessionManager.open 恢复会话（带 legacy 迁移）"]
     SESS --> START["Promise.all 并发 startConfiguredBot"]
     START --> CONN["每个 bot 一条独立 WS 长连接与回调"]
@@ -59,14 +74,14 @@ flowchart TD
 
 从 bots.json 到多条长连接的启动链路。
 
-- **`loadBotConfigs`**：文件不存在时报「请复制 config/bots.example.json 后填写配置」；JSON/校验错误统一包装为「bot 配置文件格式错误」
-- **凭证解析**：`parseBotConfigs` 按 `appIdEnv` / `appSecretEnv` 读环境变量，缺失即抛「bot xxx 缺少环境变量 FOO」
+- **`loadAgentOsConfig`**：文件不存在时报「请复制 config/bots.example.json 后填写配置」；JSON/校验错误统一包装为「bot 配置文件格式错误」
+- **凭证解析**：`parseAgentOsConfig` 按 `appIdEnv` / `appSecretEnv` 读环境变量，缺失即抛「bot xxx 缺少环境变量 FOO」
 - **至少一个 bot**：全部停用时抛「至少需要启用一个 bot」
 - **每个 bot 独立连接**：`src/index.ts` 的 `startConfiguredBot()` 为每个配置创建 `startBot()`（各自 `Lark.Client` + `WSClient`），`Promise.all` 并发拉起，控制台打印 `[Bot XXX] default_cli=... workspace=...` 与 `[Bot XXX] 已连接`
 
 ## 工作目录优先级
 
-`workspaceDir` 的取值链（`parseBotConfigs` 内）：
+`workspaceDir` 的取值链（`parseAgentOsConfig` 内）：
 
 ```
 bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键兜底）→ '.'（进程 cwd）
@@ -76,15 +91,21 @@ bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键
 
 ## systemPrompt 与任务拼接
 
-`buildBotPrompt(systemPrompt, prompt)` 把角色说明放到真实任务前面：
+`buildBotPrompt(config, prompt, teamContext)` 组装最终任务提示词，各段落用空行连接：
 
 ```
-角色：<systemPrompt>
+你的角色：<role>
+<systemPrompt>
+<teamContext（TeamRegistry.contextFor 的团队名单）>
+项目 Skill 加载规则（配了 skills 时）：工作区 .agents/skills 优先于 .claude/skills，最后才允许全局同名 Skill
+飞书输出规则（必须遵守）：最终回复 ≤1200 中文字符、不贴完整代码/长日志/Markdown 表格、详细产物写文件、需要用户决策时调用 request_clarification
 
-任务：<用户消息>
+当前任务：<用户消息或协作 prompt>
 ```
 
-`systemPrompt` 为空时原样返回用户消息。这让同一套执行链路可以承载「开发」「审查」等不同分工的 bot。
+飞书输出规则与 Skill 加载顺序**写死在提示词里**：前者是因为飞书是聊天界面，大段内容会刷屏；后者防止 CLI 跳过工作区版本直接用全局同名 Skill。`skills` 含 `grill-me` 的 bot 才会启用 [需求澄清](clarification.md) 闭环。
+
+这让同一套执行链路可以承载「开发」「审查」等不同分工的 bot，同时把长产物引导进工作区文件而不是聊天窗口。
 
 ## 与执行引擎的关系
 
@@ -95,4 +116,5 @@ bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键
 - **新增配置字段**：同时改 `BotSchema` 与 `BotConfig` 接口；字段是可选的注意给默认值，否则旧 bots.json 启动即失败
 - **会话迁移**：`JsonSessionStore` 用 `legacyBotId`（取 `botConfigs[0].id`）和 `defaultWorkspaces` 给缺 `botId` / `workspaceDir` 的旧记录补值，改动字段时要同步 `migrateLegacySession`，详见 [会话与任务管理](session.md)
 - **凭证安全**：bots.json 只写环境变量**名**，真实凭证放 `.env`（见 [运维手册](../operations/runbook.md)），不要把密钥写进配置文件
-- **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseBotConfigs` 里的指向校验与 [多 bot 协作](collaboration.md) 的路由分支
+- **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseAgentOsConfig` 里的指向校验与 [多 bot 协作](collaboration.md) 的路由分支
+- **新增 Skill**：除 bots.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空

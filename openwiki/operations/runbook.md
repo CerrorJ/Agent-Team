@@ -37,12 +37,13 @@ tags: [operations, runbook, configuration, troubleshooting]
 | `pnpm start:once` | `tsx src/index.ts` | 单次运行（无 watch） |
 | `pnpm build` | `tsc` | 类型检查 + 编译到 `dist/` |
 | `pnpm probe:cli` | `tsx src/probe-cli.ts` | 运行 AI CLI 输出解析工具 |
+| `pnpm probe:tool` | `tsx src/probe-app-tool.ts` | 验证两家 CLI 能注册 `agent_os` MCP 服务且 `request_clarification` 入参通过校验（详见 [需求澄清](../domain/clarification.md)） |
 | `pnpm lint` / `pnpm lint:fix` | `eslint . [--fix]` | 检查/修复箭头函数与声明间空行规则（`eslint.config.js`） |
 | `pnpm format` / `pnpm format:check` | `prettier --write/--check .` | 格式化/检查格式（`.prettierrc`） |
 
 ### 启动检查
 
-启动成功标志：控制台输出 `Agent Team 启动，正在建立飞书长连接…`、`[配置] 已注册 N 个 bot，已恢复 M 个会话`、各 `[CLI] id=... command=...` 引擎行与 `[Bot XXX] 已连接`。
+启动成功标志：控制台输出 `Agent Team 启动，正在建立飞书长连接…`、`[配置] 已注册 N 个 bot，Team Leader=...，已恢复 M 个会话`、各 `[CLI] id=... command=...` 引擎行与 `[Bot XXX] 已连接`。
 
 启动失败常见原因：
 
@@ -50,7 +51,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 |------|------|------|
 | `找不到 bot 配置文件` | 未创建 `config/bots.json` | `cp config/bots.example.json config/bots.json` 后填写 |
 | `bot xxx 缺少环境变量 XXX` | `.env` 缺少该 bot 的凭证变量 | 按 `bots.json` 里的 `appIdEnv` / `appSecretEnv` 名字补齐 |
-| `bot id 不能重复` / 校验失败 | `bots.json` 结构不合法 | 对照 zod 校验规则，见 [多 bot 注册](../domain/bot-registry.md) |
+| `bot id 不能重复` / 校验失败 | `bots.json` 结构不合法（如缺 `teamLeader`、bot 缺 `role`） | 对照 zod 校验规则，见 [多 bot 注册](../domain/bot-registry.md) |
 | `工作目录不存在` | bot `workspace` / `CLI_WORKDIR` 指向的路径无效 | 修正路径或创建目录 |
 | 连接超时 | 网络问题或凭证错误 | 确认 App ID / Secret 正确，网络可达飞书 OpenAPI |
 | 任务一直不执行 | 本机没有对应 CLI 或未登录 | `claude --version` / `codex --version` 验证安装，先在本机跑通一次 |
@@ -106,7 +107,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 
 ```
 Agent Team 启动，正在建立飞书长连接…
-[配置] 已注册 2 个 bot，已恢复 3 个会话
+[配置] 已注册 2 个 bot，Team Leader=developer，已恢复 3 个会话
 [CLI] id=claude command=claude
 [CLI] id=codex command=codex
 [Bot DEVELOPER] default_cli=claude workspace=/path/to/workdir
@@ -125,7 +126,7 @@ Agent Team 启动，正在建立飞书长连接…
 
 | 日志 | 含义 |
 |------|------|
-| `[配置] 已注册 N 个 bot` | 从 `bots.json` 启用的 bot 数量与恢复的会话数量 |
+| `[配置] 已注册 N 个 bot` | 从 `bots.json` 启用的 bot 数量、Team Leader 与恢复的会话数量 |
 | `[CLI] id=... command=...` | 启动时打印已注册的执行引擎清单 |
 | `[Bot XXX] 已连接` | 该 bot 的 WS 长连接建立成功 |
 | `[收到]` | 收到飞书消息，含会话/话题/发送者信息 |
@@ -134,6 +135,8 @@ Agent Team 启动，正在建立飞书长连接…
 | `[卡片] 已发送` | 初始卡片回复成功，获得 message_id |
 | `[协作] task=... A -> B round=1/2` | 协作交接消息已投递：task 归属、来源与目标 bot、轮次（见 [多 bot 协作](../domain/collaboration.md)） |
 | `[协作] 忽略非目标 bot 消息` / `[协作] 忽略重复消息` | 收件箱领取失败或轮次去重命中，协作消息被安全跳过 |
+| `[澄清] 已发送交互卡片 questions=N` | CLI 发起 `request_clarification`，已转成飞书澄清卡片（见 [需求澄清](../domain/clarification.md)） |
+| `[Skill] bot=... 找不到 <skill>` | 启动时该 bot 声明的 Skill 在工作区 `.agents/skills` / `.claude/skills` 都不存在，只告警不阻断 |
 | `[CLI] 完成` | Claude Code 执行成功，含其会话 id |
 | `[CLI] 任务已取消` | 停止任务或 `/close` 触发 abort |
 | `[CLI] 执行失败` | CLI 报错或非 0 退出，附错误信息 |

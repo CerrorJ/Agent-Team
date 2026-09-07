@@ -80,12 +80,13 @@ sequenceDiagram
 
 ### 斜杠命令
 
-`src/core/command-parser.ts` 的 `parseCommand()` 用正则匹配「可选 @ 提及 + 一条命令」，识别 `/close`、`/status`、`/help`、`/new`、`/resume`、`/compact`、`/cd`；「帮我运行 /status 看看」这类句子不会命中。另有 `parseCliRequest()` 单独识别 `/claude <任务>` 与 `/codex <任务>` 的引擎选择请求。
+`src/core/command-parser.ts` 的 `parseCommand()` 用正则匹配「可选 @ 提及 + 一条命令」，识别 `/close`、`/status`、`/help`、`/new`、`/resume`、`/team`、`/compact`、`/cd`；「帮我运行 /status 看看」这类句子不会命中。另有 `parseCliRequest()` 单独识别 `/claude <任务>` 与 `/codex <任务>` 的引擎选择请求。
 
 | 命令 | 行为 |
 |------|------|
 | `/help` | 回复命令列表 |
 | `/status` | 回复机器人、会话 id、状态、执行引擎、工作目录、CLI 会话 id、话题、更新时间 |
+| `/team` | 回复团队成员卡片：名称、角色、默认引擎、Skills、Team Leader 标记与连接状态（数据来自 `TeamRegistry`，见 [多 bot 注册](../domain/bot-registry.md)） |
 | `/new` | 清空话题绑定的 CLI 会话，下一条任务开新会话；旧会话保留，可用 `/resume` 找回 |
 | `/resume` | 列出当前工作目录的 CLI 会话（`listNativeCliSessions`，上限 8 条），卡片「恢复」按钮完成实际切换 |
 | `/compact [要求]` | 在当前 CLI 会话内执行原生上下文压缩（`compactCliSession`），无需整理时回「暂时无需整理」卡片 |
@@ -121,6 +122,10 @@ sequenceDiagram
 
 这样保证一个话题同一时间只有一个 CLI 任务在跑，追问会排队提示而不是并发执行。
 
+### 未完成澄清流程的并入
+
+人类消息且非命令时，若该话题存在未完成的需求澄清流程（`ClarificationFlowStore.findForTask`），不会另起任务：旧澄清卡片被刷成「已被新消息取代」样式并删除流程，新消息经 `formatClarificationMessage()` 与此前已确认的答案拼成补充说明，走正常执行管线交回 CLI。完整机制见 [需求澄清](../domain/clarification.md)。
+
 ## 卡片回复与线程判断
 
 ```typescript
@@ -136,7 +141,7 @@ const hasThread = !!msg.threadId || !!msg.rootId;
 
 后台执行链路由 [架构总览](../architecture/overview.md) 中的执行层组成：
 
-1. `runCli()`（`src/cli/runner.ts`）`spawn` CLI 子进程，命令与参数由所选适配器的 `buildArgs` / `buildResumeArgs` 生成：Claude Code 为 `-p <prompt> --output-format stream-json --verbose`（续跑加 `--resume <sessionId>`），Codex 为 `exec --json --skip-git-repo-check --yolo <prompt>`（续跑为 `exec resume --json ... <sessionId>`；Windows 下以 stdin 传 prompt 并用 `--dangerously-bypass-approvals-and-sandbox` 替代 `--yolo`）
+1. `runCli()`（`src/cli/runner.ts`）`spawn` CLI 子进程，命令与参数由所选适配器的 `buildArgs` / `buildResumeArgs` 生成：Claude Code 为 `-p <prompt> --output-format stream-json --verbose --dangerously-skip-permissions`（续跑加 `--resume <sessionId>`），Codex 为 `exec --json --skip-git-repo-check --yolo <prompt>`（续跑为 `exec resume --json ... <sessionId>`；Windows 下以 stdin 传 prompt 并用 `--dangerously-bypass-approvals-and-sandbox` 替代 `--yolo`）。两家都无条件注入 `agent_os` stdio MCP 服务（Claude `--mcp-config` / Codex `-c` 覆盖，见 [需求澄清](../domain/clarification.md)）
 2. stdout 逐行进入适配器的 `parseEvents()`，翻译成统一 `CliEvent`（两套引擎的翻译对照见 [AI CLI 输出解析](../domain/ai-cli-probe.md)）
 3. `onEvent` 回调只处理 `tool_start` / `tool_end` / `context` 三类事件，喂给 `TaskProgressTracker`
 4. `TaskProgressTracker` 用 `toolUseId` 配对起止事件，维护当前工具、最近完成轨迹（上限 12 条）和上下文 token 基线，`snapshot()` 输出卡片所需快照
@@ -188,14 +193,14 @@ flowchart TD
 
 成功、失败、取消三条收尾路径的处理逻辑。
 
-- **成功**：把 CLI 会话 id 补录进 Session（`setCliSessionId`），记录上下文窗口大小供下一轮进度计算，发 success 卡片；回答超过单卡上限时折叠展示并按 4000 字符拆条续发。非协作任务完成后若 bot 配置了 `reviewBy`，还会自动发起独立审查（见 [多 bot 协作](../domain/collaboration.md)）；协作任务完成后的回传/收尾路由也在该分支内
+- **成功**：把 CLI 会话 id 补录进 Session（`setCliSessionId`），记录上下文窗口大小供下一轮进度计算，发 success 卡片；回答超过单卡上限时折叠展示并按 4000 字符拆条续发。bot 配置了 `grill-me` skill 时，先检查本轮是否有 `request_clarification` 工具调用——有则转入 [需求澄清](../domain/clarification.md) 卡片流程并提前返回。非协作任务完成后若 bot 配置了 `reviewBy`，还会自动发起独立审查（见 [多 bot 协作](../domain/collaboration.md)）；协作任务完成后的回传/收尾路由也在该分支内
 - **取消**：卡片停止按钮或 `/close` 触发 `AbortController.abort()`，发 cancelled 卡片，文案按 `cancelMode`（`stop` / `close`）区分
 - **失败**：发 failed 卡片，`technicalDetail` 放进「查看错误详情」折叠面板
 - **收尾**：`finally` 中注销 `activeRuns` 登记并把会话从 `active` 回落 `idle`（仅 active 状态回落，避免覆盖 `closed` 终态）
 
 ## 停止任务
 
-卡片上的「停止任务」按钮走 `card.action.trigger` 事件（`onCardAction` 回调），`requestTaskAbort()` 校验：
+卡片上的「停止任务」按钮走 `card.action.trigger` 事件（`onCardAction` 回调，由 `src/app/card-action-handler.ts` 统一处理「停止任务」「恢复会话」「澄清作答」三类动作），`requestTaskAbort()` 校验：
 
 - 任务不存在 → toast「任务已经结束」
 - 操作者不是发起人 → toast「只有任务发起人可以停止它」
@@ -206,11 +211,19 @@ flowchart TD
 
 | 文件 | 职责 |
 |------|------|
-| `src/index.ts` | 入口，onMessage/onCardAction 业务逻辑，任务编排与收尾 |
+| `src/index.ts` | 入口，组装 `AppRuntime`、多 bot 启动、`onMessage` 任务编排与收尾路由 |
+| `src/app/runtime.ts` | `AppRuntime` 共享状态容器（会话、任务、协作队列、澄清流程），入口组装一次传给 `app/` 各处理模块 |
+| `src/app/command-handler.ts` | 斜杠命令处理（`/help` `/team` `/new` `/resume` `/compact` `/cd` `/close` `/status` 与引擎切换守卫） |
+| `src/app/card-action-handler.ts` | 卡片回调：`answer_clarification` / `resume_cli_session` / `abort_task` 三类动作 |
+| `src/app/clarification-runner.ts` | 澄清答案收齐后的 CLI 续跑（详见 [需求澄清](../domain/clarification.md)） |
+| `src/app/cli-execution.ts` | `executeCli`：对 `runCli` 的薄封装 |
+| `src/app/notification-service.ts` | `sendResultNotification` @ 发起人的结果通知（失败只记日志） |
+| `src/app/session-view.ts` | `/status` 文本渲染与 `markSessionIdle` 收尾回落 |
 | `src/im/lark.ts` | WS 连接、事件分发、Bot 接口实现、消息文本提取 |
 | `src/im/message-parser.ts` | @ 提及解析、资源 key 提取（纯函数） |
 | `src/im/card.ts` | 卡片构建与节流更新（详见 [任务卡片系统](../domain/task-card.md)） |
 | `src/core/command-parser.ts` | 斜杠命令与 `/claude` `/codex` 引擎选择解析 |
+| `src/core/clarification.ts` | 澄清数据模型、校验与流程存储（详见 [需求澄清](../domain/clarification.md)） |
 | `src/core/task-progress.ts` | CLI 事件 → 进度快照 |
 | `src/cli/registry.ts` | 按 `CliId` 取适配器 |
 | `src/cli/runner.ts` | CLI 子进程生命周期 |

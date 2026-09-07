@@ -79,6 +79,18 @@ CardJson
 - `escapeFeishuMarkdown()` 在 HTML 标签前插入零宽连接符，防止回答里的 HTML 被飞书按 LaTeX/HTML 解析
 - `markdownSplitIndex()` 截断点优先落在段落/换行边界且不早于 55% 处；`closeOpenFence()` 给被截断的代码块补 ` ``` ` 收尾
 
+## 澄清卡片三件套
+
+[需求澄清](clarification.md) 流程专用的一组卡片，同样由 `src/im/card.ts` 构建：
+
+| 构建函数 | 触发时机 | 内容 |
+|----------|----------|------|
+| `buildClarificationCard` | CLI 调用 `request_clarification` 后 | 当前题（含题号进度）+ 选项按钮 + 「这一题交给 Agent 决定」+ 自定义答案表单 +「按推荐方案继续」+ 已确认答案摘要；每答一题，卡片经回调应答刷新为下一题 |
+| `buildClarificationContinuingCard` | 答案收齐、CLI 开始整理 | 过渡卡片：「答案已收到，正在整理」，阻止在旧卡片上重复作答 |
+| `buildClarificationSupersededCard` | 用户在话题里发新消息 | 旧卡片刷成「已收到新的补充」灰色态，说明新消息沿用同一任务上下文 |
+
+澄清按钮的 callback value 携带 `flowToken` + `questionId`（选项另带 `optionId`，自定义表单带 `custom_answer` 表单值），由 [消息处理流程](../workflows/message-flow.md) 的 `onCardAction` 校验后推进流程。
+
 ## 节流更新机制（ThrottledCardUpdater）
 
 ### 问题
@@ -143,6 +155,8 @@ await updater.finish(buildTaskCard({ status: "success", answer, stats, ... }));
 1. 收到消息 → `buildTaskCard`（running + `abortSessionId`）→ `Bot.replyCard` 发送
 2. 后台执行 CLI → 每秒心跳 `renderProgress()` → `updater.push(...)` 节流更新
 3. 收尾 → `updater.finish(buildTaskCard({ status: success/failed/cancelled, ... }))` 最终刷新
+
+除任务卡外，`card.ts` 还构建 `/resume` 会话选择卡（`buildResumeCard`）、`/new` 与 `/compact` 通知卡（`buildSessionNoticeCard`）、`/team` 团队卡（`buildTeamCard`）、协作交接卡（`buildCollaborationCard`）与上文的澄清卡片三件套。
 
 ## 变更指引
 
