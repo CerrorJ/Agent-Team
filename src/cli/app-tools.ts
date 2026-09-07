@@ -1,8 +1,10 @@
 import { fileURLToPath } from 'node:url'
 
 export const CLARIFICATION_TOOL_NAME = 'request_clarification'
+export const PRODUCT_SPEC_TOOL_NAME = 'request_spec_approval'
 // Claude Code 会给 MCP 工具名加 mcp__<server>__ 前缀，事件里要用这个名字匹配
 export const CLAUDE_CLARIFICATION_TOOL_NAME = `mcp__agent_os__${CLARIFICATION_TOOL_NAME}`
+export const CLAUDE_PRODUCT_SPEC_TOOL_NAME = `mcp__agent_os__${PRODUCT_SPEC_TOOL_NAME}`
 
 // 启动应用层 MCP 服务的命令行：开发态直接跑 .ts（借根目录的 tsx），编译产物用 node 跑 .js
 const serverInvocation = (): { command: string; args: string[] } => {
@@ -11,8 +13,8 @@ const serverInvocation = (): { command: string; args: string[] } => {
   const server = fileURLToPath(
     new URL(
       runningFromTypeScript
-        ? '../mcp/clarification-server.ts'
-        : '../mcp/clarification-server.js',
+        ? '../mcp/app-tools-server.ts'
+        : '../mcp/app-tools-server.js',
       import.meta.url,
     ),
   )
