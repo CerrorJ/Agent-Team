@@ -130,7 +130,7 @@ flowchart TD
 - `registry.ts` — 按 `CliId` 取适配器（`claude` / `codex`），并列出启动日志中打印的引擎清单
 - `claude-adapter.ts` — 把 Claude Code `--output-format stream-json` 的一行输出翻译为 `CliEvent`
 - `codex-adapter.ts` — 把 Codex `exec --json` 的事件流翻译为同一套 `CliEvent`
-- `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、10 分钟超时、支持 `AbortSignal` 取消；`tool_call` 按 `toolUseId` 去重收集，失败的调用在 `tool_end` 剔除，只把成功的随结果返回
+- `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、默认不限时（`DEFAULT_TIMEOUT_MS = 0`，调用方可传 `timeoutMs` 设上限并经 `armTimeout` 钳制）、支持 `AbortSignal` 取消；`tool_call` 按 `toolUseId` 去重收集，失败的调用在 `tool_end` 剔除，只把成功的随结果返回
 - `native-compact.ts` — `/compact` 的原生上下文压缩：Claude 走 stream-json，Codex 走 app-server JSON-RPC
 - `native-sessions.ts` — `/resume` 的会话清单：Claude 扫本地 JSONL，Codex 走 app-server `thread/list`
 - `spawn-cli.ts` — Windows 下以 shell 启动 `.cmd` 包装的 CLI，并用 `taskkill /t /f` 连进程树清理

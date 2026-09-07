@@ -23,7 +23,7 @@ Agent-Team 把**飞书**变成 AI 编程 CLI（Claude Code / Codex）的**指挥
 |------|----------|------|
 | TypeScript | ES2022, strict | 主语言 |
 | Node.js | >= 22 | 运行时 |
-| pnpm | >= 11 | 包管理 |
+| pnpm | ^12.3.4（`devEngines`，缺失时自动下载） | 包管理 |
 | @larksuiteoapi/node-sdk | ^1.71 | 飞书 SDK |
 | @modelcontextprotocol/sdk | ^1.29 | 应用层 stdio MCP 服务（`request_clarification` 工具注册，见 [需求澄清](domain/clarification.md)） |
 | tsx | ^4.23 | TS 直接执行（ESM） |
