@@ -1,0 +1,57 @@
+import { fileURLToPath } from 'node:url'
+
+export const CLARIFICATION_TOOL_NAME = 'request_clarification'
+// Claude Code 会给 MCP 工具名加 mcp__<server>__ 前缀，事件里要用这个名字匹配
+export const CLAUDE_CLARIFICATION_TOOL_NAME = `mcp__agent_os__${CLARIFICATION_TOOL_NAME}`
+
+// 启动应用层 MCP 服务的命令行：开发态直接跑 .ts（借根目录的 tsx），编译产物用 node 跑 .js
+const serverInvocation = (): { command: string; args: string[] } => {
+  const runningFromTypeScript = import.meta.url.endsWith('.ts')
+
+  const server = fileURLToPath(
+    new URL(
+      runningFromTypeScript
+        ? '../mcp/clarification-server.ts'
+        : '../mcp/clarification-server.js',
+      import.meta.url,
+    ),
+  )
+
+  if (!runningFromTypeScript) {
+    return { command: process.execPath, args: [server] }
+  }
+
+  const tsxCli = fileURLToPath(
+    new URL('../../node_modules/tsx/dist/cli.mjs', import.meta.url),
+  )
+
+  return { command: process.execPath, args: [tsxCli, server] }
+}
+
+// 两个 CLI 注册 stdio MCP 服务的方式不同：Claude Code 吃 --mcp-config JSON，
+// Codex 只能用 -c 配置覆盖逐项展开
+export const claudeAppToolArgs = (): string[] => {
+  const invocation = serverInvocation()
+  return [
+    '--mcp-config',
+    JSON.stringify({
+      mcpServers: {
+        agent_os: {
+          type: 'stdio',
+          command: invocation.command,
+          args: invocation.args,
+        },
+      },
+    }),
+  ]
+}
+
+export const codexAppToolArgs = (): string[] => {
+  const invocation = serverInvocation()
+  return [
+    '-c',
+    `mcp_servers.agent_os.command=${JSON.stringify(invocation.command)}`,
+    '-c',
+    `mcp_servers.agent_os.args=${JSON.stringify(invocation.args)}`,
+  ]
+}

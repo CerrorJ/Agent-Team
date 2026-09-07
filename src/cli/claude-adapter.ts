@@ -5,6 +5,10 @@ import type {
   CliEvent,
   CliRunStats,
 } from './types.js'
+import {
+  CLAUDE_CLARIFICATION_TOOL_NAME,
+  claudeAppToolArgs,
+} from './app-tools.js'
 // 原始数据结构
 interface ClaudeEvent {
   type?: unknown
@@ -138,6 +142,7 @@ const outputArgs = (prompt: string, promptInput: CliPromptInput): string[] => [
   '--output-format',
   'stream-json',
   '--verbose',
+  ...claudeAppToolArgs(),
 ]
 
 export class ClaudeAdapter implements CliAdapter {
@@ -213,7 +218,8 @@ export class ClaudeAdapter implements CliAdapter {
           )
             return []
           const detail = toolDetail(block.name, block.input)
-          return [
+
+          const events: CliEvent[] = [
             {
               type: 'tool_start',
               toolUseId: block.id,
@@ -222,6 +228,17 @@ export class ClaudeAdapter implements CliAdapter {
               ...(detail ? { detail } : {}),
             },
           ]
+
+          // 应用层 MCP 工具：Claude 事件里带 mcp__agent_os__ 前缀，归一成统一名后吐 tool_call
+          if (block.name === CLAUDE_CLARIFICATION_TOOL_NAME) {
+            events.push({
+              type: 'tool_call',
+              toolUseId: block.id,
+              toolName: 'request_clarification',
+              input: block.input,
+            })
+          }
+          return events
         },
       )
 

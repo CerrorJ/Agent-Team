@@ -9,6 +9,7 @@
     "start:once": "tsx src/index.ts",
     "build": "tsc",
     "probe:cli": "tsx src/probe-cli.ts",
+    "probe:tool": "tsx src/probe-app-tool.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -20,13 +21,14 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "^11.17.0",
+      "version": "^12.3.4",
       "onFail": "download"
     }
   },
   "type": "module",
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.71.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
     "zod": "^4.4.3"
   },
