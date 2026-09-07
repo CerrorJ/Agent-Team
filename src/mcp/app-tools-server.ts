@@ -13,7 +13,7 @@ import {
 } from '../cli/app-tools.js'
 
 const server = new McpServer({
-  name: 'agent-os',
+  name: 'agent-team',
   version: '1.0.0',
 })
 

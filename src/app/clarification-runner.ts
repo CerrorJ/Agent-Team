@@ -3,7 +3,7 @@ import {
   answerContinuation,
   answerNeedsContinuation,
   buildClarificationCard,
-  buildProductSpecReadyCard,
+  buildProductSpecApprovalCard,
   buildTaskCard,
   splitLongText,
   ThrottledCardUpdater,
@@ -141,7 +141,16 @@ export const continueClarificationFlow = async (options: {
 
     if (productSpecRequest) {
       await assertProductSpecDocuments(session.workspaceDir, productSpecRequest)
-      await cardUpdater.finish(buildProductSpecReadyCard(productSpecRequest))
+
+      const productSpecFlow = runtime.productSpecFlows.create({
+        taskId: flow.taskId,
+        botId: config.id,
+        ownerOpenId: flow.ownerOpenId,
+        ownerUnionId: flow.ownerUnionId,
+        request: productSpecRequest,
+      })
+
+      await cardUpdater.finish(buildProductSpecApprovalCard(productSpecFlow))
       await sendResultNotification({
         bot,
         replyToMessageId: flow.originalMessageId,

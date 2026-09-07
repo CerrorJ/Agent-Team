@@ -3,6 +3,7 @@ import type { ActiveRun } from '../core/task-abort.js'
 import type { BotConfig } from '../core/bot-registry.js'
 import type { CollaborationInbox } from '../core/collaboration.js'
 import type { ClarificationFlowStore } from '../core/clarification.js'
+import type { ProductSpecFlowStore } from '../core/product-spec.js'
 import type { SessionManager } from '../core/session-manager.js'
 import type { TeamRegistry } from '../core/team-registry.js'
 
@@ -23,4 +24,5 @@ export interface AppRuntime {
   processedCollaborationTurns: Set<string>
   collaborationInbox: CollaborationInbox
   clarificationFlows: ClarificationFlowStore
+  productSpecFlows: ProductSpecFlowStore
 }
