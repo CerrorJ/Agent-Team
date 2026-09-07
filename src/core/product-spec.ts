@@ -12,15 +12,41 @@ const WorkspaceDocumentPathSchema = z
     '文档路径必须位于当前工作目录内',
   )
 
-export const ProductSpecRequestSchema = z.object({
+const ProductSpecBaseSchema = z.object({
   title: z.string().trim().min(1).max(80),
   summary: z.string().trim().min(1).max(500),
+})
+
+// 只认飞书云文档链接：路径必须是 /docx/ 或 /wiki/ 形态，其他链接直接拒绝
+const LarkDocumentUrlSchema = z
+  .url()
+  .refine(
+    (value) => /\/(?:docx|wiki)\//.test(new URL(value).pathname),
+    'documentUrl 必须是飞书云文档或知识库文档链接',
+  )
+
+export const LocalProductSpecRequestSchema = ProductSpecBaseSchema.extend({
+  deliveryMode: z.literal('local'),
   specPath: WorkspaceDocumentPathSchema,
   ticketsPath: WorkspaceDocumentPathSchema,
-})
+}).strict()
+
+export const LarkProductSpecRequestSchema = ProductSpecBaseSchema.extend({
+  deliveryMode: z.literal('lark-doc'),
+  documentUrl: LarkDocumentUrlSchema,
+}).strict()
+
+// 交付方式二选一：local=落盘工作区的 Spec/Tickets 文件；lark-doc=飞书云文档链接
+export const ProductSpecRequestSchema = z.discriminatedUnion('deliveryMode', [
+  LocalProductSpecRequestSchema,
+  LarkProductSpecRequestSchema,
+])
 
 export type ProductSpecRequest = z.infer<typeof ProductSpecRequestSchema>
 
+export type LocalProductSpecRequest = z.infer<
+  typeof LocalProductSpecRequestSchema
+>
 export interface ProductSpecFlow {
   token: string
   taskId: string

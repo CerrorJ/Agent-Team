@@ -134,13 +134,20 @@ export const continueClarificationFlow = async (options: {
       return
     }
 
-    // to-spec：截获 request_spec_approval，校验产物落盘后展示待确认卡片（同 index.ts 主流程）
-    const productSpecRequest = config.skills.includes('to-spec')
-      ? findProductSpecRequest(result.toolCalls)
-      : undefined
+    // to-spec / lark-doc：截获 request_spec_approval，校验产物后展示待确认卡片（同 index.ts 主流程）
+    const productSpecRequest =
+      config.skills.includes('to-spec') || config.skills.includes('lark-doc')
+        ? findProductSpecRequest(result.toolCalls)
+        : undefined
 
     if (productSpecRequest) {
-      await assertProductSpecDocuments(session.workspaceDir, productSpecRequest)
+      // 只有 local 交付需要落盘校验；lark-doc 的产物在飞书侧，本地无文件可查
+      if (productSpecRequest.deliveryMode === 'local') {
+        await assertProductSpecDocuments(
+          session.workspaceDir,
+          productSpecRequest,
+        )
+      }
 
       const productSpecFlow = runtime.productSpecFlows.create({
         taskId: flow.taskId,
@@ -155,7 +162,7 @@ export const continueClarificationFlow = async (options: {
         bot,
         replyToMessageId: flow.originalMessageId,
         target: { openId: flow.ownerOpenId, name: '' },
-        text: 'Spec 和 Tickets 已经落盘，请查看上方产物卡片。',
+        text: '产品方案已生成，请查看上方确认卡。',
         replyInThread: flow.replyInThread,
       })
       return

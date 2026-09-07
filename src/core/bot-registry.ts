@@ -2,7 +2,9 @@ import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
 import type { CliId } from '../cli/types.js'
 import { resolveWorkspacePath } from './workspace.js'
+const ProductDeliveryModeSchema = z.enum(['local', 'lark-doc'])
 
+export type ProductDeliveryMode = z.infer<typeof ProductDeliveryModeSchema>
 export interface BotConfig {
   id: string
   appId: string
@@ -17,6 +19,7 @@ export interface BotConfig {
 }
 export interface AgentOsConfig {
   teamLeaderId: string
+  defaultProductDeliveryMode: ProductDeliveryMode
   bots: BotConfig[]
 }
 type Environment = Record<string, string | undefined>
@@ -56,6 +59,8 @@ const BotSchema = z.object({
 
 const BotConfigFileSchema = z.object({
   teamLeader: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,31}$/),
+  defaultProductDeliveryMode:
+    ProductDeliveryModeSchema.optional().default('lark-doc'),
   bots: z.array(BotSchema).min(1),
 })
 
@@ -114,7 +119,11 @@ export const parseAgentOsConfig = (
       throw new Error(`bot ${config.id} 不能把自己配置为 reviewBy`)
     }
   }
-  return { teamLeaderId: parsed.teamLeader, bots: configs }
+  return {
+    teamLeaderId: parsed.teamLeader,
+    defaultProductDeliveryMode: parsed.defaultProductDeliveryMode,
+    bots: configs,
+  }
 }
 export const parseBotConfigs = (
   input: unknown,
@@ -161,7 +170,22 @@ export const buildBotPrompt = (
   config: Pick<BotConfig, 'role' | 'skills' | 'systemPrompt'>,
   prompt: string,
   teamContext = '',
+  defaultProductDeliveryMode: ProductDeliveryMode = 'lark-doc',
 ): string => {
+  // 只给负责产品文档的 bot 注入交付方式规则，其他角色不感知
+  const managesProductDocuments = config.skills.some((skill) =>
+    ['to-spec', 'to-tickets', 'lark-doc'].includes(skill),
+  )
+
+  const productDeliveryPolicy = managesProductDocuments
+    ? [
+        '产品方案交付规则（必须遵守）：',
+        `- 当前默认交付方式：${defaultProductDeliveryMode}。`,
+        '- 用户明确指定本地 Markdown 或飞书云文档时，以用户本次选择覆盖默认值。',
+        '- 不要为了选择交付格式单独发起澄清。提交方案时必须写入最终采用的 deliveryMode。',
+      ].join('\n')
+    : ''
+
   // 飞书是聊天界面：长产物进文件、决策走澄清工具，避免大段内容刷屏
   const feishuOutputPolicy = [
     '飞书输出规则（必须遵守）：',
@@ -175,6 +199,7 @@ export const buildBotPrompt = (
     `你的角色：${config.role}`,
     config.systemPrompt.trim(),
     teamContext.trim(),
+    productDeliveryPolicy,
     // Skill 解析顺序写死在提示词里：工作区版本优先，防止 CLI 直接用全局同名 Skill
     config.skills.length > 0
       ? [
