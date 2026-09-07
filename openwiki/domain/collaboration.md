@@ -12,7 +12,7 @@ tags: [domain, collaboration, multi-bot, review]
 开发 bot 完成任务后，可以自动把结果交给另一个 bot 独立审查，审查意见再回传给开发 bot 处理，形成「实现 → 审查 → 返工」的闭环。协作由 `config/bots.json` 的 `reviewBy` 字段开启（见 [多 bot 注册](bot-registry.md)），核心实现分布在：
 
 - `src/core/collaboration.ts` — `CollaborationMessage` 交接单模型与 `CollaborationInbox` 收件箱
-- `src/index.ts` — `sendCollaborationMessage()` 派发与 `onMessage` 中的领取、路由分支
+- `src/index.ts` — `sendCollaborationMessage()` 派发与 `onMessage` 中的领取、路由分支（消息处理细节见 [消息处理流程](../workflows/message-flow.md)）
 - `src/im/card.ts` — `buildCollaborationCard()` 协作通知卡片（见 [任务卡片系统](task-card.md)）
 
 设计文档见 `docs/完整的内部交接单.md`。
@@ -81,7 +81,7 @@ reviewBy 触发首轮审查、结果按轮次往返直至上限的完整链路�
 | 字段 | 校验（zod `BotSchema`） | 说明 |
 |------|------------------------|------|
 | `reviewBy` | 可选，bot id 格式 | 指向未启用的 bot 或指向自己都会在启动时报错退出 |
-| `collaborationMaxRounds` | 整数 1–4，默认 2 | 2 = 发起审查 + 回传反馈各一次；4 = 之后还能再来一轮「返工 + 复审」 |
+| `collaborationMaxRounds` | 整数 1–32，默认 16 | 协作允许的交接总次数：2 = 发起审查 + 回传反馈各一次，再大则可继续「返工 + 复审」往返 |
 
 ## 变更指引
 

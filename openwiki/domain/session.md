@@ -61,7 +61,7 @@ stateDiagram-v2
 
 ## 斜杠命令
 
-`src/core/command-parser.ts` 的 `parseCommand()` 只匹配「可选 @ 提及 + 一条命令」，支持 `/close`、`/status`、`/help`、`/new`、`/resume`、`/compact`、`/cd`；`parseCliRequest()` 另行识别 `/claude` / `/codex` 引擎选择。命令在任务执行路径之前处理，不会触发 CLI。
+`src/core/command-parser.ts` 的 `parseCommand()` 只匹配「可选 @ 提及 + 一条命令」，支持 `/close`、`/status`、`/help`、`/new`、`/resume`、`/team`、`/compact`、`/cd`；`parseCliRequest()` 另行识别 `/claude` / `/codex` 引擎选择。命令处理在 `src/app/command-handler.ts`，于任务执行路径之前处理，不会触发 CLI。
 
 其中三个命令直接操作话题绑定的 CLI 会话：
 
@@ -73,7 +73,7 @@ stateDiagram-v2
 
 ## 运行中任务与停止（task-abort）
 
-`src/index.ts` 用 `activeRuns: Map<sessionId, ActiveRun>` 登记运行中任务，`ActiveRun` 持有 `AbortController` 和发起人 `ownerOpenId`。`src/core/task-abort.ts` 的 `requestTaskAbort()` 是停止任务的唯一入口：
+`src/index.ts` 用 `activeRuns: Map<sessionId, ActiveRun>` 登记运行中任务（挂在 `AppRuntime` 上，澄清续跑管线共用），`ActiveRun` 持有 `AbortController` 和发起人 `ownerOpenId`。`src/core/task-abort.ts` 的 `requestTaskAbort()` 是停止任务的唯一入口：
 
 | 校验顺序 | 结果 | toast |
 |----------|------|-------|
@@ -87,7 +87,7 @@ stateDiagram-v2
 ## 变更指引
 
 - **新增状态或流转**：同时改 `SessionStatus`、`ALLOWED_TRANSITIONS` 和 `session-store.ts` 的 zod `SessionSchema`，三处不一致会在加载时把会话当坏数据丢掉
-- **新增命令**：在 `command-parser.ts` 的正则和 `SlashCommand` / `CliRequest` 里加，再到 `src/index.ts` 补处理分支
+- **新增命令**：在 `command-parser.ts` 的正则和 `SlashCommand` / `CliRequest` 里加，再到 `src/app/command-handler.ts` 补处理分支
 - **执行引擎扩展**：`cliId` 与 `src/cli/types.ts` 的 `CliId` 联动，`claude` / `codex` 均已实现，适配器在 `src/cli/registry.ts` 注册；对照表见 [AI CLI 输出解析](ai-cli-probe.md)
 - **切换工作目录**：`setWorkspaceDir` 变更目录时会清空 `cliSessionId`，因为旧 CLI 会话绑定旧目录
 - **并发任务**：会话守卫（`active` 状态拒绝追问）保证一个话题同时只有一个任务，改动守卫时要考虑 `activeRuns` 的一致性
