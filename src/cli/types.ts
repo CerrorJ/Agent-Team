@@ -46,6 +46,8 @@ export interface CliSessionSummary {
 
 // tool_start 与 tool_end 通过 toolUseId 关联一次工具调用，
 // result.stats 则保存最终耗时、轮次与模型窗口。
+// stats 事件由适配器在执行中途汇报（如 codex 每个 turn.completed），
+// runner 记下最后一份，result 事件本身没带统计时用它兜底。
 // tool_call 只为应用层工具（如 request_clarification）发出：
 // tool_start 面向进度展示（带 label），tool_call 携带原始入参供应用层重建状态。
 export type CliEvent =
@@ -59,6 +61,7 @@ export type CliEvent =
     }
   | { type: 'tool_end'; toolUseId: string; failed: boolean }
   | { type: 'context'; usedTokens: number }
+  | { type: 'stats'; stats: CliRunStats }
   | {
       type: 'tool_call'
       toolUseId: string

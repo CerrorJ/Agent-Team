@@ -8,21 +8,38 @@ import type {
   TaskActivity,
   TaskProgressSnapshot,
 } from '../core/task-progress.js'
-export interface ClarificationCardOptions {
-  flow: ClarificationFlow
-}
-export interface TeamCardMember {
-  id: string
-  displayName: string
-  role: string
-  cliName: string
-  skills: string[]
-  isLeader: boolean
-  ready: boolean
+import type { ScheduledTask } from '../core/schedule.js'
+import { scheduleDescription, scheduleKindLabel } from '../core/schedule.js'
+import type { ScheduledRun } from '../core/schedule-run-store.js'
+import type { ApprovalFlow } from '../core/approval.js'
+
+export type CardJson = Record<string, unknown>
+export type TaskStatus = 'running' | 'success' | 'failed' | 'cancelled'
+
+const formatScheduleTime = (value: string): string => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
 }
 
-export interface TeamCardOptions {
-  members: TeamCardMember[]
+export interface TaskCardOptions {
+  title: string
+  status: TaskStatus
+  detail: string
+  progress?: TaskProgressSnapshot
+  answer?: string
+  stats?: CliRunStats
+  technicalDetail?: string
+  abortSessionId?: string
 }
 
 export interface ResumeCardOptions {
@@ -37,27 +54,35 @@ export interface SessionNoticeCardOptions {
   detail: string
   template?: 'blue' | 'green' | 'grey'
 }
+
+export interface TeamCardMember {
+  id: string
+  displayName: string
+  role: string
+  cliName: string
+  skills: string[]
+  isLeader: boolean
+  ready: boolean
+}
+
+export interface TeamCardOptions {
+  members: TeamCardMember[]
+}
+
 export interface CollaborationCardOptions {
   senderName: string
   targetName: string
+  reportToName: string
   workspaceName: string
-  prompt: string
+  objective: string
+  instruction: string
+  expectedOutput?: string
   round: number
   maxRounds: number
 }
-export type CardJson = Record<string, unknown>
-export type TaskStatus = 'running' | 'success' | 'failed' | 'cancelled'
 
-export interface TaskCardOptions {
-  title: string
-  status: TaskStatus
-  detail: string
-  progress?: TaskProgressSnapshot
-  answer?: string
-  stats?: CliRunStats
-  technicalDetail?: string
-
-  abortSessionId?: string
+export interface ClarificationCardOptions {
+  flow: ClarificationFlow
 }
 
 const STATUS_STYLE = {
@@ -87,147 +112,6 @@ const TOOL_ICONS: Record<string, string> = {
   Write: '📝',
 }
 
-const productDocumentList = (flow: ProductSpecFlow): string => {
-  if (flow.request.deliveryMode === 'lark-doc') {
-    return `☁️ **飞书云文档** · [打开文档](${flow.request.documentUrl})`
-  }
-  return [
-    `📘 **Spec** · \`${escapeFeishuMarkdown(flow.request.specPath)}\``,
-    `🎫 **Tickets** · \`${escapeFeishuMarkdown(flow.request.ticketsPath)}\``,
-  ].join('\n')
-}
-
-export const buildProductSpecApprovalCard = (
-  flow: ProductSpecFlow,
-): CardJson => {
-  const elements: Record<string, unknown>[] = [
-    {
-      tag: 'markdown',
-      content: [
-        `**${escapeFeishuMarkdown(flow.request.title)}**`,
-        escapeFeishuMarkdown(flow.request.summary),
-      ].join('\n\n'),
-    },
-    { tag: 'hr' },
-    {
-      tag: 'markdown',
-      content: `**共享产物**\n${productDocumentList(flow)}`,
-    },
-  ]
-
-  elements.push({
-    tag: 'button',
-    text: { tag: 'plain_text', content: '确认产品方案' },
-    type: 'primary_filled',
-    width: 'fill',
-    size: 'medium',
-    behaviors: [
-      {
-        type: 'callback',
-        value: {
-          action: 'approve_product_spec',
-          flowToken: flow.token,
-        },
-      },
-    ],
-  })
-
-  elements.push({
-    tag: 'markdown',
-    content: '_确认后只记录“产品方案已就绪”，本节不会自动交给开发。_',
-  })
-
-  return {
-    schema: '2.0',
-    config: {
-      update_multi: true,
-      summary: { content: `${flow.request.title}：待确认` },
-    },
-    header: {
-      template: 'blue',
-      title: { tag: 'plain_text', content: '产品文档已生成' },
-      subtitle: {
-        tag: 'plain_text',
-        content:
-          flow.request.deliveryMode === 'lark-doc'
-            ? '飞书云文档待确认'
-            : '本地 Spec · Tickets 待确认',
-      },
-    },
-    body: {
-      direction: 'vertical',
-      vertical_spacing: '12px',
-      elements,
-    },
-  }
-}
-
-export const buildProductSpecApprovedCard = (
-  flow: ProductSpecFlow,
-): CardJson => {
-  return {
-    schema: '2.0',
-    config: {
-      update_multi: true,
-      summary: { content: `${flow.request.title}：已确认` },
-    },
-    header: {
-      template: 'green',
-      title: { tag: 'plain_text', content: '产品方案已确认' },
-      subtitle: { tag: 'plain_text', content: '产品阶段已就绪' },
-    },
-    body: {
-      direction: 'vertical',
-      vertical_spacing: '12px',
-      elements: [
-        {
-          tag: 'markdown',
-          content: [
-            `**${escapeFeishuMarkdown(flow.request.title)}**`,
-            escapeFeishuMarkdown(flow.request.summary),
-            `**已确认文档**\n${productDocumentList(flow)}`,
-            flow.approvedAt
-              ? `确认时间：${escapeFeishuMarkdown(flow.approvedAt)}`
-              : '',
-            '_本节到这里结束，不会自动派发开发任务。_',
-          ]
-            .filter(Boolean)
-            .join('\n\n'),
-        },
-      ],
-    },
-  }
-}
-
-export const buildProductSpecExpiredCard = (
-  flow: ProductSpecFlow,
-): CardJson => {
-  return {
-    schema: '2.0',
-    config: {
-      update_multi: true,
-      summary: { content: `${flow.request.title}：已失效` },
-    },
-    header: {
-      template: 'grey',
-      title: { tag: 'plain_text', content: '产品方案确认已失效' },
-    },
-    body: {
-      direction: 'vertical',
-      vertical_spacing: '12px',
-      elements: [
-        {
-          tag: 'markdown',
-          content: [
-            `**${escapeFeishuMarkdown(flow.request.title)}**`,
-            '同一任务已经提交了更新的产品方案，请查看话题中最新的确认卡。',
-          ].join('\n\n'),
-        },
-      ],
-    },
-  }
-}
-
 const formatDuration = (durationMs: number): string => {
   const totalSeconds = Math.max(1, Math.round(durationMs / 1_000))
   if (totalSeconds < 60) return `${totalSeconds} 秒`
@@ -237,13 +121,17 @@ const formatDuration = (durationMs: number): string => {
   return `${minutes} 分 ${seconds} 秒`
 }
 
-const formatCount = (value: number): string =>
-  value >= 1_000 ? `${Math.round(value / 100) / 10}k` : String(value)
+const formatCount = (value: number): string => {
+  return value >= 1_000 ? `${Math.round(value / 100) / 10}k` : String(value)
+}
 
-const escapeInlineCode = (value: string): string => value.replaceAll('`', 'ˋ')
+const escapeInlineCode = (value: string): string => {
+  return value.replaceAll('`', 'ˋ')
+}
 
-const escapeFeishuMarkdown = (value: string): string =>
-  value.replace(/<(?=\/?[A-Za-z][^>]*>)/g, '<&zwj;')
+const escapeFeishuMarkdown = (value: string): string => {
+  return value.replace(/<(?=\/?[A-Za-z][^>]*>)/g, '<&zwj;')
+}
 
 const activityLine = (activity: TaskActivity): string => {
   const icon = activity.failed ? '⚠️' : (TOOL_ICONS[activity.toolName] ?? '⚙️')
@@ -275,8 +163,11 @@ const closeOpenFence = (markdown: string): string => {
   return fences % 2 === 1 ? `${markdown}\n\n\`\`\`` : markdown
 }
 
-const markdownPreview = (text: string, maxLength: number): string =>
-  closeOpenFence(text.slice(0, markdownSplitIndex(text, maxLength)).trim())
+const markdownPreview = (text: string, maxLength: number): string => {
+  return closeOpenFence(
+    text.slice(0, markdownSplitIndex(text, maxLength)).trim(),
+  )
+}
 
 // 收起态预览：优先取第一个代码块之前的正文；太短就提示展开看全文
 const compactAnswerPreview = (answer: string): string => {
@@ -923,32 +814,24 @@ export const buildSessionNoticeCard = (
     },
   }
 }
+
 // 协作卡片
 export const buildCollaborationCard = (
   options: CollaborationCardOptions,
 ): CardJson => {
-  // round=1 是首轮审查请求，之后每轮都是审查反馈回传；
   // 到达 maxRounds 提示这是最后一轮，处理完流程即结束
-  const isReviewRequest = options.round === 1
   const isLastRound = options.round >= options.maxRounds
-  const title = isReviewRequest ? '代码审查已发起' : '审查意见已返回'
-  const action = isReviewRequest ? '请接手检查' : '请确认并处理反馈'
-
-  const description = isReviewRequest
-    ? '开发任务已经完成，现在进入独立审查。'
-    : '审查已经完成，反馈已交回开发侧。'
+  const title = '协作任务已派发'
 
   const footer = isLastRound
-    ? '这是本次协作的最后一轮，处理完成后流程结束。'
-    : `完成后，结果会自动交回 ${options.senderName}。`
+    ? `这是当前任务允许的最后一次交接；结果会通知 ${options.reportToName}，由他决定下一步。`
+    : `完成后，结果会自动交回 ${options.reportToName} 继续组织后续工作。`
 
   return {
     schema: '2.0',
     config: {
       update_multi: true,
-      summary: {
-        content: `${title}：${options.senderName} → ${options.targetName}`,
-      },
+      summary: { content: `${title}：${options.objective}` },
     },
     header: {
       template: 'blue',
@@ -964,7 +847,7 @@ export const buildCollaborationCard = (
       elements: [
         {
           tag: 'markdown',
-          content: `**${options.targetName}，${action}**\n\n${description}`,
+          content: `**${options.targetName}，请接手：${escapeFeishuMarkdown(options.objective)}**`,
         },
         {
           tag: 'column_set',
@@ -989,7 +872,7 @@ export const buildCollaborationCard = (
               elements: [
                 {
                   tag: 'markdown',
-                  content: `**当前环节**\n${isReviewRequest ? '独立审查' : '处理反馈'}`,
+                  content: `**结果交给**\n${escapeFeishuMarkdown(options.reportToName)}`,
                 },
               ],
             },
@@ -998,26 +881,146 @@ export const buildCollaborationCard = (
         {
           tag: 'collapsible_panel',
           expanded: false,
-          header: collapsibleHeader(
-            isReviewRequest ? '查看审查说明' : '查看审查反馈',
-          ),
+          header: collapsibleHeader('查看任务说明'),
           vertical_spacing: '8px',
           padding: '8px 8px 8px 8px',
           elements: [
             {
               tag: 'markdown',
               content: escapeFeishuMarkdown(
-                markdownPreview(options.prompt, MAX_CARD_ANSWER_LENGTH),
+                markdownPreview(options.instruction, MAX_CARD_ANSWER_LENGTH),
               ),
             },
           ],
         },
+        ...(options.expectedOutput
+          ? [
+              { tag: 'hr' },
+              {
+                tag: 'markdown',
+                content: `**期望产出**\n${escapeFeishuMarkdown(options.expectedOutput)}`,
+              },
+            ]
+          : []),
         { tag: 'hr' },
         { tag: 'markdown', content: `_${footer}_` },
       ],
     },
   }
 }
+
+export const buildScheduleCreatedCard = (task: ScheduledTask): CardJson => {
+  return {
+    schema: '2.0',
+    config: {
+      update_multi: true,
+      summary: { content: `定时任务已创建：${task.id}` },
+    },
+    header: {
+      template: 'green',
+      title: { tag: 'plain_text', content: '定时任务已创建' },
+      subtitle: {
+        tag: 'plain_text',
+        content: `目标成员：${task.targetBotId}`,
+      },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [
+        {
+          tag: 'markdown',
+          content: [
+            `**任务编号** \`${task.id}\``,
+            `**执行内容**\n${escapeFeishuMarkdown(task.prompt)}`,
+            `**调度规则** ${scheduleKindLabel(task.rule)} · ${escapeFeishuMarkdown(scheduleDescription(task.rule))}`,
+            task.nextRunAt
+              ? `**下一次执行** ${escapeFeishuMarkdown(formatScheduleTime(task.nextRunAt))} (Asia/Shanghai)`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+        },
+      ],
+    },
+  }
+}
+
+export const buildScheduleListCard = (tasks: ScheduledTask[]): CardJson => {
+  const content = tasks.length
+    ? tasks
+        .map((task) =>
+          [
+            `**${task.id}** · ${task.status}`,
+            `${escapeFeishuMarkdown(task.prompt.slice(0, 80))}`,
+            `${scheduleKindLabel(task.rule)} · ${escapeFeishuMarkdown(scheduleDescription(task.rule))} · 交给 ${task.targetBotId}`,
+            task.nextRunAt
+              ? `下一次执行 ${escapeFeishuMarkdown(formatScheduleTime(task.nextRunAt))} (Asia/Shanghai)`
+              : '下一次执行 未计算',
+          ].join('\n'),
+        )
+        .join('\n\n')
+    : '当前还没有定时任务。'
+
+  return {
+    schema: '2.0',
+    config: { summary: { content: `定时任务列表：${tasks.length} 条` } },
+    header: {
+      template: 'blue',
+      title: { tag: 'plain_text', content: '定时任务列表' },
+      subtitle: {
+        tag: 'plain_text',
+        content: `${tasks.length} 条计划`,
+      },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [{ tag: 'markdown', content }],
+    },
+  }
+}
+
+export const buildScheduleRunCard = (run: ScheduledRun): CardJson => {
+  return {
+    schema: '2.0',
+    config: { summary: { content: `定时任务运行：${run.status}` } },
+    header: {
+      template:
+        run.status === 'succeeded'
+          ? 'green'
+          : run.status === 'failed'
+            ? 'red'
+            : 'grey',
+      title: { tag: 'plain_text', content: `定时任务运行 · ${run.status}` },
+      subtitle: {
+        tag: 'plain_text',
+        content: `计划 ${run.scheduleId}`,
+      },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [
+        {
+          tag: 'markdown',
+          content: [
+            `**计划触发时间** ${escapeFeishuMarkdown(run.scheduledFor)}`,
+            `**开始时间** ${escapeFeishuMarkdown(run.startedAt)}`,
+            run.completedAt
+              ? `**结束时间** ${escapeFeishuMarkdown(run.completedAt)}`
+              : '',
+            run.taskId ? `**协作任务** \`${run.taskId}\`` : '',
+            run.error ? `**错误**\n${escapeFeishuMarkdown(run.error)}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+        },
+      ],
+    },
+  }
+}
+
 // 团队卡片
 export const buildTeamCard = (options: TeamCardOptions): CardJson => {
   const leader = options.members.find((member) => member.isLeader)
@@ -1039,7 +1042,7 @@ export const buildTeamCard = (options: TeamCardOptions): CardJson => {
       tag: 'markdown',
       content: [
         `**${escapeFeishuMarkdown(member.displayName)}**  _${badges}_`,
-        escapeFeishuMarkdown(member.role),
+        `${escapeFeishuMarkdown(member.role)}`,
         `引擎：${escapeFeishuMarkdown(member.cliName)}　Skill：${escapeFeishuMarkdown(skills)}`,
       ].join('\n'),
     }
@@ -1076,12 +1079,334 @@ export const buildTeamCard = (options: TeamCardOptions): CardJson => {
   }
 }
 
-// 超过单卡片上限的回答拆成多条消息续发
-export const answerNeedsContinuation = (answer: string): boolean =>
-  answer.length > MAX_CARD_ANSWER_LENGTH
+const productDocumentList = (flow: ProductSpecFlow): string => {
+  if (flow.request.deliveryMode === 'lark-doc') {
+    return `☁️ **飞书云文档** · [打开文档](${flow.request.documentUrl})`
+  }
+  return [
+    `📘 **Spec** · \`${escapeFeishuMarkdown(flow.request.specPath)}\``,
+    `🎫 **Tickets** · \`${escapeFeishuMarkdown(flow.request.ticketsPath)}\``,
+  ].join('\n')
+}
 
-export const answerContinuation = (answer: string): string =>
-  answer.slice(markdownSplitIndex(answer, MAX_CARD_ANSWER_LENGTH))
+export const buildProductSpecApprovalCard = (
+  flow: ProductSpecFlow,
+): CardJson => {
+  const elements: Record<string, unknown>[] = [
+    {
+      tag: 'markdown',
+      content: [
+        `**${escapeFeishuMarkdown(flow.request.title)}**`,
+        escapeFeishuMarkdown(flow.request.summary),
+      ].join('\n\n'),
+    },
+    { tag: 'hr' },
+    {
+      tag: 'markdown',
+      content: `**共享产物**\n${productDocumentList(flow)}`,
+    },
+  ]
+
+  elements.push({
+    tag: 'button',
+    text: { tag: 'plain_text', content: '确认产品方案' },
+    type: 'primary_filled',
+    width: 'fill',
+    size: 'medium',
+    behaviors: [
+      {
+        type: 'callback',
+        value: {
+          action: 'approve_product_spec',
+          flowToken: flow.token,
+        },
+      },
+    ],
+  })
+
+  elements.push({
+    tag: 'markdown',
+    content: '_确认后，已确认方案会交回 CEO 助理继续安排后续成员。_',
+  })
+
+  return {
+    schema: '2.0',
+    config: {
+      update_multi: true,
+      summary: { content: `${flow.request.title}：待确认` },
+    },
+    header: {
+      template: 'blue',
+      title: { tag: 'plain_text', content: '产品文档已生成' },
+      subtitle: {
+        tag: 'plain_text',
+        content:
+          flow.request.deliveryMode === 'lark-doc'
+            ? '飞书云文档待确认'
+            : '本地 Spec · Tickets 待确认',
+      },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements,
+    },
+  }
+}
+
+export const buildProductSpecApprovedCard = (
+  flow: ProductSpecFlow,
+): CardJson => {
+  return {
+    schema: '2.0',
+    config: {
+      update_multi: true,
+      summary: { content: `${flow.request.title}：已确认` },
+    },
+    header: {
+      template: 'green',
+      title: { tag: 'plain_text', content: '产品方案已确认' },
+      subtitle: { tag: 'plain_text', content: '产品阶段已就绪' },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [
+        {
+          tag: 'markdown',
+          content: [
+            `**${escapeFeishuMarkdown(flow.request.title)}**`,
+            escapeFeishuMarkdown(flow.request.summary),
+            `**已确认文档**\n${productDocumentList(flow)}`,
+            flow.approvedAt
+              ? `确认时间：${escapeFeishuMarkdown(flow.approvedAt)}`
+              : '',
+            '_确认结果已交回团队负责人，等待下一步安排。_',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+        },
+      ],
+    },
+  }
+}
+
+export const buildProductSpecExpiredCard = (
+  flow: ProductSpecFlow,
+): CardJson => {
+  return {
+    schema: '2.0',
+    config: {
+      update_multi: true,
+      summary: { content: `${flow.request.title}：已失效` },
+    },
+    header: {
+      template: 'grey',
+      title: { tag: 'plain_text', content: '产品方案确认已失效' },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [
+        {
+          tag: 'markdown',
+          content: [
+            `**${escapeFeishuMarkdown(flow.request.title)}**`,
+            '同一任务已经提交了更新的产品方案，请查看话题中最新的确认卡。',
+          ].join('\n\n'),
+        },
+      ],
+    },
+  }
+}
+
+const approvalButton = (
+  flow: ApprovalFlow,
+  decision: 'approve' | 'reject',
+  label: string,
+  type: 'primary_filled' | 'danger',
+  description: string,
+): Record<string, unknown> => {
+  return {
+    tag: 'button',
+    text: {
+      tag: 'plain_text',
+      content: `${label} · ${description}`,
+    },
+    type,
+    width: 'default',
+    size: 'medium',
+    behaviors: [
+      {
+        type: 'callback',
+        value: {
+          action: 'decide_approval',
+          flowToken: flow.token,
+          decision,
+        },
+      },
+    ],
+  }
+}
+
+export const buildApprovalCard = (flow: ApprovalFlow): CardJson => {
+  return {
+    schema: '2.0',
+    config: {
+      update_multi: true,
+      summary: { content: `高危操作审批：${flow.request.operation}` },
+    },
+    header: {
+      template: 'orange',
+      title: { tag: 'plain_text', content: '高危操作审批' },
+      subtitle: {
+        tag: 'plain_text',
+        content: '需要你拍板才能继续',
+      },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [
+        {
+          tag: 'markdown',
+          content: [
+            `**${escapeFeishuMarkdown(flow.request.operation)}**`,
+            escapeFeishuMarkdown(flow.request.detail),
+          ].join('\n\n'),
+        },
+        { tag: 'hr' },
+        {
+          tag: 'markdown',
+          content: [
+            `**影响范围**\n${escapeFeishuMarkdown(flow.request.impact)}`,
+            `**回滚方式**\n${escapeFeishuMarkdown(flow.request.rollback)}`,
+            `**处理截止** ${escapeFeishuMarkdown(formatScheduleTime(flow.expiresAt))}，超时自动拒绝`,
+          ].join('\n\n'),
+        },
+        { tag: 'hr' },
+        {
+          tag: 'column_set',
+          flex_mode: 'none',
+          background_style: 'default',
+          horizontal_spacing: '8px',
+          columns: [
+            {
+              tag: 'column',
+              width: 'weighted',
+              weight: 1,
+              vertical_align: 'top',
+              elements: [
+                approvalButton(
+                  flow,
+                  'approve',
+                  '放行',
+                  'primary_filled',
+                  '继续执行',
+                ),
+              ],
+            },
+            {
+              tag: 'column',
+              width: 'weighted',
+              weight: 1,
+              vertical_align: 'top',
+              elements: [
+                approvalButton(flow, 'reject', '拒绝', 'danger', '停止操作'),
+              ],
+            },
+          ],
+        },
+        {
+          tag: 'markdown',
+          content:
+            '_放行后开发者会继续执行已批准的操作；拒绝或超时都会让开发者停手并汇报。_',
+        },
+      ],
+    },
+  }
+}
+
+export const buildApprovalDecidedCard = (flow: ApprovalFlow): CardJson => {
+  const approved = flow.status === 'approved'
+  const expired = flow.status === 'expired'
+  return {
+    schema: '2.0',
+    config: {
+      update_multi: true,
+      summary: { content: `高危操作审批：${flow.status}` },
+    },
+    header: {
+      template: approved ? 'green' : 'red',
+      title: {
+        tag: 'plain_text',
+        content: approved
+          ? '操作已放行'
+          : expired
+            ? '审批已超时'
+            : '操作已拒绝',
+      },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [
+        {
+          tag: 'markdown',
+          content: [
+            `**操作**\n${escapeFeishuMarkdown(flow.request.operation)}`,
+            flow.decidedAt
+              ? `处理时间：${escapeFeishuMarkdown(flow.decidedAt)}`
+              : '',
+            approved
+              ? '_已通知开发者继续执行。_'
+              : '_已通知开发者停止该操作。_',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+        },
+      ],
+    },
+  }
+}
+
+export const buildApprovalContinuingCard = (flow: ApprovalFlow): CardJson => {
+  return {
+    schema: '2.0',
+    config: {
+      update_multi: true,
+      summary: { content: '审批结果已收到' },
+    },
+    header: {
+      template: 'blue',
+      title: { tag: 'plain_text', content: '审批结果已收到' },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [
+        {
+          tag: 'markdown',
+          content: [
+            '**正在恢复开发者会话**',
+            flow.status === 'approved'
+              ? '审批通过，开发者会继续执行已批准的操作。'
+              : '审批未通过，开发者会停止该操作并汇报结果。',
+          ].join('\n\n'),
+        },
+      ],
+    },
+  }
+}
+
+// 超过单卡片上限的回答拆成多条消息续发
+export const answerNeedsContinuation = (answer: string): boolean => {
+  return answer.length > MAX_CARD_ANSWER_LENGTH
+}
+
+export const answerContinuation = (answer: string): string => {
+  return answer.slice(markdownSplitIndex(answer, MAX_CARD_ANSWER_LENGTH))
+}
 
 export const splitLongText = (text: string, maxLength = 4_000): string[] => {
   const chunks: string[] = []

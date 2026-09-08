@@ -1,3 +1,7 @@
+/**
+ * 评论区 @bot 触发的产品文档修改：CLI 读取评论与文档、改完原文档后，
+ * 把最终回答回写到原评论。不产生新的确认卡，原待确认状态继续有效。
+ */
 import { getCliAdapter } from '../cli/registry.js'
 import type { ProductSpecFlow } from '../core/product-spec.js'
 import type { Bot, IncomingDocumentComment } from '../im/lark.js'
@@ -5,10 +9,6 @@ import { executeCli } from './cli-execution.js'
 import { markSessionIdle } from './session-view.js'
 import type { AppRuntime } from './runtime.js'
 
-/**
- * 评论区 @bot 触发的产品文档修改：CLI 读取评论与文档、改完原文档后，
- * 把最终回答回写到原评论。不产生新的确认卡，原待确认状态继续有效。
- */
 export const runProductDocumentComment = async (options: {
   runtime: AppRuntime
   bot: Bot
@@ -43,6 +43,7 @@ export const runProductDocumentComment = async (options: {
       session.workspaceDir,
       session.cliSessionId,
       run.signal,
+      [],
       () => undefined,
     )
 

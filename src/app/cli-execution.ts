@@ -7,7 +7,9 @@ export const executeCli = (
   workspaceDir: string,
   sessionId: string | undefined,
   signal: AbortSignal,
+  stopToolNames: string[],
   onEvent: Parameters<typeof runCli>[0]['onEvent'],
+  env?: Record<string, string>,
 ) => {
   return runCli({
     adapter,
@@ -15,6 +17,8 @@ export const executeCli = (
     cwd: workspaceDir,
     sessionId,
     signal,
+    stopToolNames,
+    env,
     onEvent,
   })
 }

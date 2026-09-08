@@ -2,10 +2,20 @@ import { killCli, spawnCli } from './spawn-cli.js'
 import { promptInputForPlatform } from './types.js'
 import { createInterface } from 'node:readline'
 import type { CliAdapter, CliEvent, CliRunResult } from './types.js'
-import { armTimeout } from './timeout.js'
 
-// 0 表示不限时；需要上限时调用方传正数 timeoutMs（超过 2^31-1 会被钳制）。
-const DEFAULT_TIMEOUT_MS = 0
+const DEFAULT_TIMEOUT_MS = 2 * 60 * 60 * 1000
+
+// 超时上限 2^31-1ms（约 24.8 天）：超过的延迟会被 Node 改成 1ms 立即触发（错题本有案底），
+// 环境变量设 0 或非法值时回退默认 2 小时，不再支持「不限时」。
+const envTimeoutMs = (adapter: CliAdapter): number | undefined => {
+  const raw =
+    process.env[`${adapter.id.toUpperCase()}_TIMEOUT_MS`] ??
+    process.env.CLI_TIMEOUT_MS
+
+  if (!raw) return undefined
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
 
 export interface RunCliOptions {
   adapter: CliAdapter
@@ -14,6 +24,8 @@ export interface RunCliOptions {
   sessionId?: string
   signal?: AbortSignal
   timeoutMs?: number
+  stopToolNames?: string[]
+  env?: Record<string, string>
   // 调用方按需订阅
   onEvent?: (event: CliEvent) => void
 }
@@ -26,7 +38,9 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     cwd,
     sessionId,
     signal,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
+    timeoutMs = envTimeoutMs(adapter) ?? DEFAULT_TIMEOUT_MS,
+    stopToolNames = [],
+    env,
     onEvent,
   } = options
 
@@ -43,6 +57,7 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     const child = spawnCli(adapter.command, args, {
       cwd,
       signal,
+      env: env ? { ...process.env, ...env } : undefined,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 
@@ -66,12 +81,14 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     >()
 
     let finalResult: CliRunResult | undefined
+    let stoppedByToolCall:
+      NonNullable<CliRunResult['toolCalls']>[number] | undefined
     let resultError: Error | undefined
     let stderr = ''
     let settled = false
     let timedOut = false
 
-    const timer = armTimeout(() => {
+    const timer = setTimeout(() => {
       timedOut = true
       killCli(child)
     }, timeoutMs)
@@ -100,10 +117,25 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
         // 最终只把成功的调用随结果返回（见下方 finalResult.toolCalls）
         if (event.type === 'tool_call') {
           observedToolCalls.set(event.toolUseId, event)
+          if (!stoppedByToolCall && stopToolNames.includes(event.toolName)) {
+            stoppedByToolCall = {
+              toolUseId: event.toolUseId,
+              toolName: event.toolName,
+              input: event.input,
+            }
+            killCli(child)
+          }
           continue
         }
         if (event.type === 'tool_end' && event.failed) {
           observedToolCalls.delete(event.toolUseId)
+          continue
+        }
+        if (event.type === 'stats') {
+          observedStats = event.stats
+          if (finalResult && !finalResult.stats) {
+            finalResult.stats = event.stats
+          }
           continue
         }
         if (event.type === 'result') {
@@ -135,6 +167,16 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     })
     child.once('close', (code) => {
       if (settled) return
+      if (stoppedByToolCall) {
+        settled = true
+        finish()
+        resolve({
+          answer: observedAnswer ?? '',
+          sessionId: observedSessionId,
+          toolCalls: [stoppedByToolCall],
+        })
+        return
+      }
       if (timedOut) {
         return fail(new Error(`${adapter.displayName} 执行超时`))
       }
@@ -151,6 +193,9 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
       }
       if (!finalResult) {
         return fail(new Error(`${adapter.displayName} 没有返回最终结果`))
+      }
+      if (observedStats && !finalResult.stats) {
+        finalResult.stats = observedStats
       }
       if (observedToolCalls.size > 0) {
         finalResult.toolCalls = [...observedToolCalls.values()].map((call) => ({

@@ -8,9 +8,16 @@ import type {
 import {
   CLAUDE_CLARIFICATION_TOOL_NAME,
   CLAUDE_PRODUCT_SPEC_TOOL_NAME,
+  CLAUDE_DISPATCH_TASK_TOOL_NAME,
+  CLAUDE_REQUEST_APPROVAL_TOOL_NAME,
+  CLAUDE_SCHEDULE_MANAGE_TOOL_NAME,
   PRODUCT_SPEC_TOOL_NAME,
+  DISPATCH_TASK_TOOL_NAME,
+  REQUEST_APPROVAL_TOOL_NAME,
+  SCHEDULE_MANAGE_TOOL_NAME,
   claudeAppToolArgs,
 } from './app-tools.js'
+
 // 原始数据结构
 interface ClaudeEvent {
   type?: unknown
@@ -24,6 +31,7 @@ interface ClaudeEvent {
   modelUsage?: unknown
   message?: unknown
 }
+
 // 原始数据结构-content中的数据
 interface ClaudeContentBlock {
   type?: unknown
@@ -49,11 +57,13 @@ const TOOL_LABELS: Record<string, string> = {
   Write: '写入文件',
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null
+}
 
-const asNumber = (value: unknown): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) ? value : undefined
+const asNumber = (value: unknown): number | undefined => {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
 
 const shortPath = (value: unknown): string | undefined => {
   if (typeof value !== 'string' || !value) return undefined
@@ -137,15 +147,17 @@ const parseStats = (event: ClaudeEvent): CliRunStats | undefined => {
     : undefined
 }
 
-const outputArgs = (prompt: string, promptInput: CliPromptInput): string[] => [
-  '--dangerously-skip-permissions',
-  '-p',
-  ...(promptInput === 'argument' ? [prompt] : []),
-  '--output-format',
-  'stream-json',
-  '--verbose',
-  ...claudeAppToolArgs(),
-]
+const outputArgs = (prompt: string, promptInput: CliPromptInput): string[] => {
+  return [
+    '--dangerously-skip-permissions',
+    '-p',
+    ...(promptInput === 'argument' ? [prompt] : []),
+    '--output-format',
+    'stream-json',
+    '--verbose',
+    ...claudeAppToolArgs(),
+  ]
+}
 
 export class ClaudeAdapter implements CliAdapter {
   readonly id = 'claude' as const
@@ -172,7 +184,7 @@ export class ClaudeAdapter implements CliAdapter {
     return {
       protocol: 'claude-stream-json' as const,
       command: this.command,
-      // prompt 走 stdin（`-p -`），runClaudeCompact 需要这份文本写入子进程。
+      // 现在 prompt 走 stdin（`-p -`），runClaudeCompact 需要这份文本写入子进程。
       prompt: command,
       args: this.buildResumeArgs(
         command,
@@ -245,6 +257,30 @@ export class ClaudeAdapter implements CliAdapter {
               type: 'tool_call',
               toolUseId: block.id,
               toolName: PRODUCT_SPEC_TOOL_NAME,
+              input: block.input,
+            })
+          }
+          if (block.name === CLAUDE_DISPATCH_TASK_TOOL_NAME) {
+            events.push({
+              type: 'tool_call',
+              toolUseId: block.id,
+              toolName: DISPATCH_TASK_TOOL_NAME,
+              input: block.input,
+            })
+          }
+          if (block.name === CLAUDE_REQUEST_APPROVAL_TOOL_NAME) {
+            events.push({
+              type: 'tool_call',
+              toolUseId: block.id,
+              toolName: REQUEST_APPROVAL_TOOL_NAME,
+              input: block.input,
+            })
+          }
+          if (block.name === CLAUDE_SCHEDULE_MANAGE_TOOL_NAME) {
+            events.push({
+              type: 'tool_call',
+              toolUseId: block.id,
+              toolName: SCHEDULE_MANAGE_TOOL_NAME,
               input: block.input,
             })
           }

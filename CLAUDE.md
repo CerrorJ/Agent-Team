@@ -29,6 +29,7 @@ pnpm dev（tsx watch）/ pnpm start / pnpm build
 - `example-project/` 用 TypeScript 7 原生编译器时报 TS2591 找不到 `node:test`（`@types/node` 明明已装）→ TS7 不自动引入 `node_modules/@types` → tsconfig 显式写 `"types": ["node"]`
 - `node --test dist/`（目录作位置参数）报 "Cannot find module .../dist" → Node 22+ 把 `--test` 位置参数当 glob，目录本身被当模块加载 → 改用 `"dist/*.test.js"` 这类文件 glob
 - 给 `setTimeout` 传超大毫秒数（如 `100000 * 60 * 1000`）想"禁用超时"，只收到 TimeoutOverflowWarning → Node 把超过 2^31-1（约 24.8 天）的延迟改成 1ms 立即触发，任务秒挂 → 不限时传 0 并跳过布防；有限时长用 `armTimeout`（`src/cli/timeout.ts`）钳制
+- 跨副本分批粘贴一批 .ts 文件后 `tsc --noEmit` 报一堆 TS2554/TS2305 → 各批粘贴的版本不对齐（新签名函数配了旧调用方），还有文件粘成了另一文件的副本（codex-adapter 与 mcp/app-tools-server 内容一模一样）→ 每批粘完立即 `pnpm exec tsc --noEmit`；报 TS2305/TS2554 先怀疑文件张冠李戴，`git diff` 核对文件内容，误粘文件从源副本整份重粘，别手工拼
 
 <!-- OPENWIKI:START -->
 

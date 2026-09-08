@@ -1,7 +1,7 @@
 {
   "name": "Agent-Team",
   "version": "1.0.0",
-  "description": "",
+  "description": "Agent Team — 你的个人生产系统",
   "main": "index.js",
   "scripts": {
     "dev": "pnpm start",
@@ -29,6 +29,7 @@
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.71.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "croner": "^10.0.1",
     "dotenv": "^17.4.2",
     "zod": "^4.4.3"
   },

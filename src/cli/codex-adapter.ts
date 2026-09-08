@@ -7,6 +7,9 @@ import type {
 import {
   CLARIFICATION_TOOL_NAME,
   PRODUCT_SPEC_TOOL_NAME,
+  DISPATCH_TASK_TOOL_NAME,
+  REQUEST_APPROVAL_TOOL_NAME,
+  SCHEDULE_MANAGE_TOOL_NAME,
   codexAppToolArgs,
 } from './app-tools.js'
 
@@ -19,11 +22,13 @@ interface CodexEvent {
   message?: unknown
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null
+}
 
-const asNumber = (value: unknown): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) ? value : undefined
+const asNumber = (value: unknown): number | undefined => {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
 
 const shortText = (value: unknown, maxLength = 72): string | undefined => {
   if (typeof value !== 'string') return undefined
@@ -122,6 +127,7 @@ export class CodexAdapter implements CliAdapter {
   readonly id = 'codex' as const
   readonly command = 'codex'
   readonly displayName = 'Codex'
+
   // 单次任务
   buildArgs(prompt: string, promptInput: CliPromptInput): string[] {
     const args = [
@@ -157,7 +163,7 @@ export class CodexAdapter implements CliAdapter {
       sessionId,
     ]
 
-    // Windows 上沙箱功能不支持，必须完全禁用。
+    // Windows 上沙箱功能不支持，必须完全禁用；approvals 也一并绕过。
     if (process.platform === 'win32') {
       args.push('--dangerously-bypass-approvals-and-sandbox')
     } else {
@@ -197,8 +203,7 @@ export class CodexAdapter implements CliAdapter {
     }
     if (event.type === 'turn.completed') {
       const stats = parseStats(event.usage)
-      if (!stats) return []
-      return [{ type: 'result', answer: '', stats }]
+      return stats ? [{ type: 'stats', stats }] : []
     }
     if (!isRecord(event.item)) return []
     const item = event.item
@@ -226,7 +231,10 @@ export class CodexAdapter implements CliAdapter {
         item.type === 'mcp_tool_call' &&
         item.server === 'agent_os' &&
         (item.tool === CLARIFICATION_TOOL_NAME ||
-          item.tool === PRODUCT_SPEC_TOOL_NAME)
+          item.tool === PRODUCT_SPEC_TOOL_NAME ||
+          item.tool === DISPATCH_TASK_TOOL_NAME ||
+          item.tool === REQUEST_APPROVAL_TOOL_NAME ||
+          item.tool === SCHEDULE_MANAGE_TOOL_NAME)
       ) {
         events.push({
           type: 'tool_call',

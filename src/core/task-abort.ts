@@ -16,8 +16,7 @@ export const requestTaskAbort = (
   const active = activeRuns.get(sessionId)
   // 任务不存在
   if (!active) return 'not_found'
-  // 操作者不匹配
-  if (operatorOpenId !== active.ownerOpenId) return 'forbidden'
+  if (!operatorOpenId) return 'forbidden'
   // 已经取消
   if (active.controller.signal.aborted) return 'already_stopping'
   // cancelMode 分两种结束方式：卡片停止和命令/close

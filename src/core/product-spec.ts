@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
+import type { CollaborationOrigin } from './collaboration.js'
 
 // 路径只允许是工作区内的相对路径：拒绝绝对路径与 .. 穿越，防止 CLI 提交工作区外的文件
 const WorkspaceDocumentPathSchema = z
@@ -43,10 +44,10 @@ export const ProductSpecRequestSchema = z.discriminatedUnion('deliveryMode', [
 ])
 
 export type ProductSpecRequest = z.infer<typeof ProductSpecRequestSchema>
-
 export type LocalProductSpecRequest = z.infer<
   typeof LocalProductSpecRequestSchema
 >
+
 export interface ProductSpecFlow {
   token: string
   taskId: string
@@ -54,6 +55,7 @@ export interface ProductSpecFlow {
   sessionId: string
   ownerOpenId: string
   ownerUnionId?: string
+  collaboration?: CollaborationOrigin
   request: ProductSpecRequest
   status: 'pending' | 'approved' | 'expired'
   approvedAt?: string
@@ -65,6 +67,7 @@ export interface CreateProductSpecFlowOptions {
   sessionId: string
   ownerOpenId: string
   ownerUnionId?: string
+  collaboration?: CollaborationOrigin
   request: ProductSpecRequest
 }
 
@@ -92,47 +95,13 @@ export const isProductSpecOwner = (
   return flow.ownerOpenId === operator.operatorOpenId
 }
 
-// 从飞书 Docx URL 提取文件 token，与文档评论事件里的 file_token 对齐
-const documentToken = (documentUrl: string): string | undefined => {
-  const match = /^\/docx\/([A-Za-z0-9_-]+)\/?$/.exec(
-    new URL(documentUrl).pathname,
-  )
-
-  return match?.[1]
-}
-
 export class ProductSpecFlowStore {
   private readonly flows = new Map<string, ProductSpecFlow>()
 
   constructor(initialFlows: ProductSpecFlow[] = []) {
-    for (const flow of initialFlows) this.flows.set(flow.token, flow)
-  }
-
-  // 给持久化子类用：导出当前内存状态 / 失败时整体回滚
-  snapshot(): ProductSpecFlow[] {
-    return [...this.flows.values()]
-  }
-
-  restore(flows: ProductSpecFlow[]): void {
-    this.flows.clear()
-    for (const flow of flows) this.flows.set(flow.token, flow)
-  }
-
-  // 评论事件只带 file_token：从待确认流程里反查 documentUrl token 匹配的那条
-  findPendingByDocument(
-    botId: string,
-    fileToken: string,
-  ): ProductSpecFlow | undefined {
-    for (const flow of this.flows.values()) {
-      if (
-        flow.botId === botId &&
-        flow.status === 'pending' &&
-        flow.request.deliveryMode === 'lark-doc' &&
-        documentToken(flow.request.documentUrl) === fileToken
-      )
-        return flow
+    for (const flow of initialFlows) {
+      this.flows.set(flow.token, flow)
     }
-    return undefined
   }
 
   // 同一任务 + bot 只保留一个待确认的流程；重新提交会让旧卡片上的 token 失效
@@ -161,6 +130,23 @@ export class ProductSpecFlowStore {
     return this.flows.get(token)
   }
 
+  // 评论事件只带 file_token：从待确认流程里反查 documentUrl token 匹配的那条
+  findPendingByDocument(
+    botId: string,
+    fileToken: string,
+  ): ProductSpecFlow | undefined {
+    for (const flow of this.flows.values()) {
+      if (
+        flow.botId === botId &&
+        flow.status === 'pending' &&
+        flow.request.deliveryMode === 'lark-doc' &&
+        documentToken(flow.request.documentUrl) === fileToken
+      )
+        return flow
+    }
+    return undefined
+  }
+
   approve(token: string): ProductSpecFlow | undefined {
     const flow = this.flows.get(token)
     if (!flow || flow.status !== 'pending') return undefined
@@ -168,4 +154,25 @@ export class ProductSpecFlowStore {
     flow.approvedAt = new Date().toISOString()
     return flow
   }
+
+  // 给持久化子类用：导出当前内存状态 / 失败时整体回滚
+  protected snapshot(): ProductSpecFlow[] {
+    return structuredClone([...this.flows.values()])
+  }
+
+  protected restore(flows: ProductSpecFlow[]): void {
+    this.flows.clear()
+    for (const flow of flows) {
+      this.flows.set(flow.token, flow)
+    }
+  }
+}
+
+// 从飞书 Docx URL 提取文件 token，与文档评论事件里的 file_token 对齐
+const documentToken = (documentUrl: string): string | undefined => {
+  const match = /^\/docx\/([A-Za-z0-9_-]+)\/?$/.exec(
+    new URL(documentUrl).pathname,
+  )
+
+  return match?.[1]
 }
