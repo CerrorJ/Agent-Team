@@ -11,7 +11,7 @@ tags: [domain, clarification, mcp, card, grill-me]
 
 需求澄清解决「CLI 拿着模糊需求直接开干」的问题：当方案存在会实质影响结果的歧义时，CLI 调用应用层工具 `request_clarification` 提交结构化问题，Agent-Team 截获这次调用，在飞书话题里渲染逐题作答的卡片；发起人答完后，答案被拼进 prompt，回到**同一话题、同一 CLI 会话**续跑整理。整个链路由 bot 的 `grill-me` skill 开关（见 [多 bot 注册](bot-registry.md)），涉及四块代码：
 
-- `src/mcp/clarification-server.ts` — stdio MCP 服务，把 `request_clarification` 注册给两家 CLI
+- `src/mcp/app-tools-server.ts` — stdio MCP 服务，把 `request_clarification`（连同其余四个应用层工具，见 [AI CLI 输出解析](ai-cli-probe.md)）注册给两家 CLI
 - `src/cli/app-tools.ts` — 工具名归一与两家 CLI 的 MCP 注册参数
 - `src/core/clarification.ts` — zod 数据模型、`ClarificationFlowStore` 流程存储、prompt 拼接
 - `src/app/clarification-runner.ts` / `src/app/card-action-handler.ts` — 答案收齐后的续跑与卡片回调
@@ -49,7 +49,7 @@ CLI 调工具、应用层收答案、答案回流续跑的完整闭环。
 
 ## 工具如何到达 CLI
 
-`src/cli/app-tools.ts` 在两家适配器组装命令行时**无条件**注入 `agent_os` stdio MCP 服务（`buildArgs` 与 `buildResumeArgs` 都带）：Claude Code 吃 `--mcp-config` JSON；Codex 只能用多段 `-c mcp_servers.agent_os.*=` 覆盖。服务端 `src/mcp/clarification-server.ts` 注册的工具描述明确要求「一次最多 5 个问题、每题 2–4 个选项、提交后不要自行补全答案」。
+`src/cli/app-tools.ts` 在两家适配器组装命令行时**无条件**注入 `agent_os` stdio MCP 服务（`buildArgs` 与 `buildResumeArgs` 都带）：Claude Code 吃 `--mcp-config` JSON；Codex 只能用多段 `-c mcp_servers.agent_os.*=` 覆盖。服务端 `src/mcp/app-tools-server.ts` 注册的工具描述明确要求「一次最多 5 个问题、每题 2–4 个选项、提交后不要自行补全答案」。
 
 MCP 返回给 CLI 的只是一句确认文案——**真正的卡片渲染与答案回传发生在应用层**，依赖事件截获：
 
@@ -103,6 +103,6 @@ zod `ClarificationRequestSchema` 约束：`title`（≤80 字符，默认「需�
 ## 变更指引
 
 - **改问题结构**：同步 `ClarificationRequestSchema` 与 MCP 服务里 `server.registerTool` 的 `inputSchema`（同一 zod schema 引用），以及卡片渲染对 `options` 数量的假设
-- **新增应用层工具**：在 `src/mcp/clarification-server.ts` 注册、`src/cli/app-tools.ts` 命名，再在两家适配器各加 `tool_call` 截获分支——工具名必须归一到统一名，`src/probe-app-tool.ts`（`pnpm probe:tool <claude|codex>`）会验证两家返回一致且过校验
+- **新增应用层工具**：在 `src/mcp/app-tools-server.ts` 注册、`src/cli/app-tools.ts` 命名，再在两家适配器各加 `tool_call` 截获分支——工具名必须归一到统一名，`src/probe-app-tool.ts`（`pnpm probe:tool <claude|codex>`）会验证两家返回一致且过校验
 - **续跑入口**：`continueClarificationFlow` 自行管理会话状态与 `activeRuns`，改动收尾逻辑时注意它与 `src/index.ts` 主路径是两条并行的执行管线
 - **答案丢失排查**：先看 flow 是否被「话题新消息」分支删除，再看 `questionId` 是否因新一轮提问而失配

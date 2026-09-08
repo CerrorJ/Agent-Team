@@ -23,7 +23,10 @@ Agent-Team/
 │   │   ├── bot-registry.ts   # bots.json 解析校验 + 凭证环境变量解析 + buildBotPrompt 提示词组装
 │   │   ├── team-registry.ts  # TeamRegistry 团队注册表：名单上下文 + Skill 缺失检查
 │   │   ├── clarification.ts  # 需求澄清：数据模型 + ClarificationFlowStore
-│   │   ├── collaboration.ts  # bot 间协作交接单 + 共享收件箱 CollaborationInbox
+│   │   ├── collaboration.ts  # bot 间协作交接单 + 共享收件箱 CollaborationInbox + dispatch_task 协议
+│   │   ├── approval.ts       # 高危操作审批：数据模型 + ApprovalFlowStore
+│   │   ├── product-spec.ts   # 产品方案交付：local/lark-doc 双模式数据模型 + ProductSpecFlowStore
+│   │   ├── schedule.ts       # 定时任务领域模型：once/interval/cron 规则 + schedule_manage 协议
 │   │   ├── session-manager.ts # 会话状态机（botId:chatId:threadId → 会话）
 │   │   ├── session-store.ts   # 会话 JSON 持久化（zod 校验 + 原子写 + 旧记录迁移）
 │   │   ├── topic-task.ts     # chatId+话题 → 稳定短任务 id（澄清流程归属）
@@ -33,14 +36,24 @@ Agent-Team/
 │   │   └── workspace.ts       # 工作目录解析与存在性校验
 │   ├── app/
 │   │   ├── runtime.ts            # AppRuntime 共享状态容器
-│   │   ├── command-handler.ts    # 斜杠命令处理
-│   │   ├── card-action-handler.ts # 卡片回调：澄清作答/恢复会话/停止任务
+│   │   ├── command-handler.ts    # 斜杠命令处理（含 /schedule /schedules）
+│   │   ├── card-action-handler.ts # 卡片回调：澄清作答/方案确认/审批决定/恢复会话/停止任务
 │   │   ├── clarification-runner.ts # 澄清答案收齐后的 CLI 续跑
+│   │   ├── approval-runner.ts    # 审批决定回传后的 CLI 续跑
+│   │   ├── collaboration-service.ts # 协作派发服务（登记 inbox + 协作卡 + @ 目标 bot）
+│   │   ├── scheduler.ts          # 定时调度中枢（setTimeout + croner）
+│   │   ├── schedule-watcher.ts   # schedules.json 热更新对账
+│   │   ├── schedule-api.ts       # 定时任务本地 HTTP 管理接口
+│   │   ├── schedule-manage-service.ts # schedule_manage 工具的业务实现
+│   │   ├── scheduled-task-dispatcher.ts / scheduled-task-runner.ts # 定时任务到期执行
+│   │   ├── product-spec-submission.ts # 方案提交兜底重跑
+│   │   ├── product-spec-documents.ts  # local 交付的落盘校验
+│   │   ├── product-comment-runner.ts  # 飞书文档评论驱动的方案修改
 │   │   ├── cli-execution.ts      # runCli 薄封装
 │   │   ├── notification-service.ts # @ 发起人的结果通知
 │   │   └── session-view.ts       # /status 渲染 + 会话 idle 回落
 │   ├── mcp/
-│   │   └── clarification-server.ts # stdio MCP 服务：注册 request_clarification
+│   │   └── app-tools-server.ts # stdio MCP 服务：注册五个应用层工具
 │   └── cli/
 │       ├── types.ts           # CliAdapter / CliEvent 统一事件协议 + 压缩计划与会话摘要
 │       ├── app-tools.ts       # 应用层 MCP 工具的注册参数（Claude --mcp-config / Codex -c）
@@ -53,14 +66,16 @@ Agent-Team/
 │       ├── spawn-cli.ts       # 跨平台 spawn：Windows shell 启动 + 进程树清理
 │       └── timeout.ts         # armTimeout 钳制 setTimeout 上限
 ├── config/
-│   └── bots.example.json      # bot 注册文件模板（teamLeader + bots 数组）
+│   └── bots.example.json      # bot 注册文件模板（teamLeader + defaultProductDeliveryMode + bots 数组）
 ├── docs/
 │   ├── ClaudeCode和Codex在headless输出结构.md  # 两种 CLI 输出对照表
 │   └── 完整的内部交接单.md    # bot 间协作设计文档
+├── workspace-template/
+│   └── docs/agents/issue-tracker.md  # 新工作区的 issue 跟踪文档模板
 ├── .github/
 │   └── workflows/
 │       └── openwiki-update.yml    # OpenWiki 文档自动更新工作流
-├── .env.example              # 环境变量模板（BOTS_CONFIG、FEISHU_* 凭证、CLI_WORKDIR）
+├── .env.example              # 环境变量模板（BOTS_CONFIG、FEISHU_* 凭证、CLI_WORKDIR、*_TIMEOUT_MS）
 ├── .gitignore                # 忽略 node_modules/ dist/ .env data/ *.log
 ├── .prettierrc / .prettierignore  # Prettier 格式化配置
 ├── eslint.config.js          # ESLint：箭头函数 + 声明间空行规则
@@ -81,11 +96,12 @@ Agent-Team/
 **关键导出：** 无（入口文件，直接执行）
 
 **核心逻辑：**
-- `startConfiguredBot`：为每个 bot 调 `startBot` 建立独立长连接，注册同一套业务回调，并把 `BotRuntime`（config + bot + identity）登记进 `botRuntimes`
-- `sendCollaborationMessage`：协作派发——登记交接单、回复协作卡片、@ 目标 bot（带 12 位任务编号），失败回滚收件箱
-- `onCardAction`：由 `src/app/card-action-handler.ts` 提供，处理澄清作答 / 恢复会话 / 停止任务三类回调
-- `onMessage`：命令与引擎选择解析 → 澄清补充并入 → 会话守卫 → 下载资源 → 回复初始卡片 → 后台 `executeCli` → 进度心跳驱动卡片刷新 → 澄清/协作/成功三分支收尾
-- `activeRuns` / `contextWindows` / `botRuntimes` / `clarificationFlows` 等共享状态统一挂在 `AppRuntime` 上
+- `startConfiguredBot`：为每个 bot 调 `startBot` 建立独立长连接，注册同一套业务回调，并把 `BotRuntime`（config + bot + identity）登记进 `botRuntimes`、身份落盘 `data/bot-identities.json`；带 `lark-drive` skill 的 bot 额外订阅文档评论事件
+- `onCardAction`：由 `src/app/card-action-handler.ts` 提供，处理产品方案确认 / 澄清作答 / 审批决定 / 恢复会话 / 停止任务五类回调
+- `onMessage`：命令与引擎选择解析（`/schedule` 需求转 schedule_manage 提示）→ 澄清补充并入 → 会话守卫 → 下载资源 → 回复初始卡片 → 后台 `executeCli`（`request_approval` 为停止型工具）→ 进度心跳驱动卡片刷新 → 澄清/产品方案/审批/协作派发分支收尾
+- `scheduleDocumentComment`：文档评论入口——只处理 @本 bot 且命中待确认方案的评论，按会话排队串行执行、按 eventId 去重（上限 1000 条）
+- `activeRuns` / `contextWindows` / `botRuntimes` / `clarificationFlows` / `productSpecFlows` / `approvalFlows` 等共享状态统一挂在 `AppRuntime` 上
+- 启动收尾：`scheduler.start()` 恢复定时任务 → `startScheduleFileWatcher` 热更新对账 → `startScheduleApi` 本地 HTTP 管理接口（默认 3101 端口）
 
 **参见：** [消息处理流程](workflows/message-flow.md)
 
@@ -154,6 +170,9 @@ Agent-Team/
 | `bot-registry.ts` | `loadAgentOsConfig` / `parseAgentOsConfig` / `buildBotPrompt` / `BotConfig` / `AgentOsConfig` | bots.json 的 zod 校验（含 teamLeader）、凭证环境变量解析、工作目录优先级、提示词组装（详见 [多 bot 注册](domain/bot-registry.md)） |
 | `team-registry.ts` | `TeamRegistry` / `MissingSkill` | 团队名单上下文、Skill 缺失检查、`/team` 数据源 |
 | `clarification.ts` | `ClarificationRequestSchema` / `ClarificationFlowStore` / `findClarificationRequest` / `isClarificationOwner` | 需求澄清数据模型、按任务存储的流程状态机（详见 [需求澄清](domain/clarification.md)） |
+| `approval.ts` / `approval-store.ts` | `ApprovalRequestSchema` / `ApprovalFlowStore` / `JsonApprovalFlowStore` / `findApprovalRequest` / `formatApprovalDecision` | 高危操作审批数据模型、同任务旧流程过期、JSON 持久化（详见 [高危操作审批](domain/approval.md)） |
+| `product-spec.ts` / `product-spec-store.ts` | `ProductSpecRequestSchema` / `ProductSpecFlowStore` / `JsonProductSpecFlowStore` / `isProductSpecOwner` | local/lark-doc 双模式方案请求校验（工作区内相对路径、Docx 链接）、流程存储（详见 [产品方案交付](domain/product-spec.md)） |
+| `schedule.ts` / `schedule-store.ts` / `schedule-run-store.ts` | `ScheduleRuleSchema` / `ScheduleManageRequestSchema` / `ScheduledTask` / `JsonScheduleStore` / `ScheduleRunStore` | 定时任务模型（once/interval/cron）、管理协议、任务与运行记录的 JSON 原子持久化（详见 [定时任务调度](domain/scheduling.md)） |
 | `session-manager.ts` | `SessionManager` / `Session` / `SessionStatus` | 话题级会话状态机，`resolve` 按 `botId:chatId:threadId` 查找或创建，`transition` 校验合法流转，`setWorkspaceDir` 切目录时清空 `cliSessionId` |
 | `session-store.ts` | `JsonSessionStore` / `SessionStore` | zod 校验 + 临时文件重命名的原子写 + 串行写队列，重启时把 creating/active 恢复为 idle，`migrateLegacySession` 给旧记录补 `botId` / `workspaceDir` |
 | `topic-task.ts` | `topicTaskId` / `topicIdOf` | chatId + 话题哈希成稳定短任务 id，澄清流程按它归属话题 |
@@ -168,11 +187,21 @@ Agent-Team/
 
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
-| `runtime.ts` | `AppRuntime` / `BotRuntime` | 共享状态容器：入口组装一次，传给各处理模块 |
-| `command-handler.ts` | `handleSessionCommand` / `CommandOutcome` | 斜杠命令处理，返回 `handled`（已答复）或 `continue`（仅 `/compact` 继续走执行管线） |
-| `card-action-handler.ts` | `createCardActionHandler` | 卡片回调：`answer_clarification`（含表单/推荐作答）、`resume_cli_session`、`abort_task` |
+| `runtime.ts` | `AppRuntime` / `BotRuntime` | 共享状态容器：会话、任务、协作收件箱、澄清 / 产品方案 / 审批流程，入口组装一次，传给各处理模块 |
+| `command-handler.ts` | `handleSessionCommand` / `CommandOutcome` | 斜杠命令处理，返回 `handled`（已答复）或 `continue`（`/compact` 与带需求的 `/schedule` 继续走执行管线） |
+| `card-action-handler.ts` | `createCardActionHandler` / `scheduleApprovalContinuation` | 卡片回调：`approve_product_spec`、`answer_clarification`、`decide_approval`、`resume_cli_session`、`abort_task` |
 | `clarification-runner.ts` | `continueClarificationFlow` | 答案收齐后拼 prompt 回原话题续跑 CLI，支持多轮澄清 |
-| `cli-execution.ts` | `executeCli` | `runCli` 薄封装 |
+| `approval-runner.ts` | `continueApprovalFlow` | 审批决定（含超时自动拒绝）回传 CLI 续跑：批准继续执行、拒绝安全收束 |
+| `collaboration-service.ts` | `CollaborationService` / `CollaborationDispatch` | 协作派发三步全成：登记 inbox → 发协作卡片 → @ 目标 bot，失败回滚收件箱 |
+| `scheduler.ts` | `Scheduler` | 定时调度中枢：逐任务布防 setTimeout（cron 用 croner）、防重叠、重启补账（详见 [定时任务调度](domain/scheduling.md)） |
+| `schedule-watcher.ts` | `startScheduleFileWatcher` / `reconcileScheduleFile` | schedules.json 热更新对账（watchFile 轮询 + 防抖 + 防重入） |
+| `schedule-api.ts` | `startScheduleApi` | 本地 HTTP 管理接口：REST 增删改查 + `/api/schedules/manage` 供 MCP 工具回传 |
+| `schedule-manage-service.ts` | `executeScheduleManageRequest` | `schedule_manage` 十一种 action 的业务实现，产出 notice 回执 |
+| `scheduled-task-dispatcher.ts` / `scheduled-task-runner.ts` | `dispatchScheduledTask` / `runScheduledTaskDirectly` | 到期分发入口（预留队列/并发策略）与直接执行：稳定话题地址续接 CLI 会话 |
+| `product-spec-submission.ts` | `ensureProductSpecSubmission` | 方案写完却没调工具时，带纠正提示沿原会话重跑一次 |
+| `product-spec-documents.ts` | `assertProductSpecDocuments` | local 交付的落盘校验：Spec 是文件、Tickets 是含 .md 的目录 |
+| `product-comment-runner.ts` | `runProductDocumentComment` | 文档评论驱动的方案修改：改原文档并把最终回答回写原评论 |
+| `cli-execution.ts` | `executeCli` | `runCli` 薄封装（多出 `stopToolNames` 参数） |
 | `notification-service.ts` | `sendResultNotification` | @ 目标（发起人或协作 bot）的结果通知 |
 | `session-view.ts` | `formatSessionStatus` / `markSessionIdle` | `/status` 文本渲染、收尾 idle 回落（不覆盖 closed 终态） |
 
@@ -180,18 +209,18 @@ Agent-Team/
 
 | 文件 | 说明 |
 |------|------|
-| `clarification-server.ts` | stdio MCP 服务（`agent_os`）：向两家 CLI 注册 `request_clarification` 工具，返回值只是给 CLI 的确认文案，真正的卡片渲染在应用层 |
+| `app-tools-server.ts` | stdio MCP 服务（`agent_os`）：向两家 CLI 注册 `request_clarification` / `request_spec_approval` / `dispatch_task` / `schedule_manage` / `request_approval` 五个工具，返回值只是给 CLI 的确认文案，真正的卡片渲染与答案回传发生在应用层；`schedule_manage` 经本地 HTTP 接口回传主进程 |
 
 ### src/cli/ — CLI 执行层
 
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
-| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `CliCompactPlan` / `CliSessionSummary` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / result / error / tool_call（应用层工具原始入参）；Windows 下 prompt 走 stdin；压缩计划与会话摘要类型 |
-| `app-tools.ts` | `CLARIFICATION_TOOL_NAME` / `claudeAppToolArgs` / `codexAppToolArgs` | 应用层 MCP 工具注册：Claude 用 `--mcp-config` JSON，Codex 用 `-c` 配置覆盖；开发态借 tsx 跑 .ts 服务，编译产物用 node 跑 .js |
+| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `CliCompactPlan` / `CliSessionSummary` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / stats / tool_call / result / error；Windows 下 prompt 走 stdin；压缩计划与会话摘要类型 |
+| `app-tools.ts` | 五个工具名常量 / `claudeAppToolArgs` / `codexAppToolArgs` | 应用层 MCP 工具注册：Claude 用 `--mcp-config` JSON，Codex 用 `-c` 配置覆盖；开发态借 tsx 跑 .ts 服务，编译产物用 node 跑 .js |
 | `registry.ts` | `getCliAdapter` / `listCliAdapters` / `parseCliId` | 按 `CliId` 取适配器（claude / codex）并列出引擎清单 |
-| `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译；`mcp__agent_os__request_clarification` 归一为统一工具名后吐 `tool_call` |
-| `codex-adapter.ts` | `CodexAdapter` | `codex exec --json --skip-git-repo-check --yolo` 的参数组装与事件翻译（Windows 用 stdin prompt 与 `--dangerously-bypass-approvals-and-sandbox`）；`agent_os` 的 `mcp_tool_call` 吐 `tool_call` |
-| `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、默认不限时（可选 `timeoutMs`）、AbortSignal 取消；`tool_call` 按 toolUseId 去重收集，失败调用剔除 |
+| `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译；`mcp__agent_os__*` 五个工具名归一为统一名后吐 `tool_call` |
+| `codex-adapter.ts` | `CodexAdapter` | `codex exec --json --skip-git-repo-check --yolo` 的参数组装与事件翻译（Windows 用 stdin prompt 与 `--dangerously-bypass-approvals-and-sandbox`）；`agent_os` 的 `mcp_tool_call` 吐 `tool_call`，`turn.completed` 额外吐 `stats` |
+| `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、默认 2 小时超时（`CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖，0 或非法值回退默认）、AbortSignal 取消、`stopToolNames` 命中即杀进程；`tool_call` 按 toolUseId 去重收集，失败调用剔除 |
 | `native-compact.ts` | `compactCliSession` / `CompactCliSessionResult` | `/compact` 的原生上下文压缩：Claude 走 `-p - --resume` + stream-json，Codex 走 app-server JSON-RPC |
 | `native-sessions.ts` | `listNativeCliSessions` / `CliSessionSummary` | `/resume` 的会话清单：Claude 扫 `~/.claude/projects` JSONL，Codex 走 app-server `thread/list` |
 | `spawn-cli.ts` | `spawnCli` / `killCli` | Windows 下 shell 启动 `.cmd` 包装的 CLI；`killCli` 用 `taskkill /t /f` 连进程树清理避免孤儿进程 |

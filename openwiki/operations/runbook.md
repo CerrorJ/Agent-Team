@@ -16,7 +16,9 @@ tags: [operations, runbook, configuration, troubleshooting]
 | `BOTS_CONFIG` | bot 注册文件路径，默认 `config/bots.json` | 否 |
 | `FEISHU_*_APP_ID` / `FEISHU_*_APP_SECRET` | 各 bot 的飞书自建应用凭证；具体变量名由 `bots.json` 中每个 bot 的 `appIdEnv` / `appSecretEnv` 决定 | 是（按启用的 bot） |
 | `CLI_WORKDIR` | 全局默认工作目录（bot 未配 `workspace` 时使用；旧键 `CLAUDE_WORKDIR` 仍兼容作兜底） | 否 |
-| `TEST_CHAT_ID` / `OWNER_OPEN_ID` | 测试群与所有者 open_id（`.env.example` 预留） | 否 |
+| `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` | 按引擎覆盖 CLI 子进程超时（默认 2 小时）；也可用统一 `CLI_TIMEOUT_MS`，设 0 或非法值回退默认，**不支持不限时** | 否 |
+| `SCHEDULE_API_PORT` / `SCHEDULE_API_TOKEN` | 定时任务本地 HTTP 管理接口的端口（默认 3101）与 `x-api-token` 鉴权令牌；未配置 token 时接口完全不设防，只当本机接口用 | 否 |
+| `TEST_CHAT_ID` / `OWNER_OPEN_ID` | 测试群与所有者 open_id；bot 消息（外部派活）场景下 `OWNER_OPEN_ID` 兜底作为发起人 | 否 |
 
 首次配置需要两步：`cp .env.example .env` 填凭证，再 `cp config/bots.example.json config/bots.json` 注册 bot（字段含义见 [多 bot 注册](../domain/bot-registry.md)）。
 
@@ -55,7 +57,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 | `工作目录不存在` | bot `workspace` / `CLI_WORKDIR` 指向的路径无效 | 修正路径或创建目录 |
 | 连接超时 | 网络问题或凭证错误 | 确认 App ID / Secret 正确，网络可达飞书 OpenAPI |
 | 任务一直不执行 | 本机没有对应 CLI 或未登录 | `claude --version` / `codex --version` 验证安装，先在本机跑通一次 |
-| `Claude Code 执行超时` | 调用方传了 `timeoutMs` 或任务被外部中止（`runner.ts` 默认 `DEFAULT_TIMEOUT_MS = 0` 不限时） | 确认超时来源；需上限时在调用 `runCli` 处传 `timeoutMs`，或用卡片「停止任务」手动中止 |
+| `Claude Code 执行超时` | 任务超过默认 2 小时上限（`runner.ts` 的 `DEFAULT_TIMEOUT_MS`，可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）或任务被外部中止 | 调大对应引擎的超时环境变量，或用卡片「停止任务」手动中止；环境变量设 0 或非法值会回退默认，不支持不限时 |
 
 ## 飞书应用配置
 
@@ -99,7 +101,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 - 首次下载时自动创建（`mkdir(saveDir, { recursive: true })`）
 - 文件名格式：`{file_key}.{extension}`
 
-会话持久化在 `data/sessions.json`（原子写入，重启自动恢复，详见 [会话与任务管理](../domain/session.md)），同样在 `data/` 下被 gitignore。
+会话持久化在 `data/sessions.json`（原子写入，重启自动恢复，详见 [会话与任务管理](../domain/session.md)），同样在 `data/` 下被 gitignore。定时任务的存储也在 `data/`：`schedules.json`（任务清单，支持热更新对账）、`schedule-runs.json`（运行记录，每任务保留最近 100 条）；审批与产品方案流程分别持久化在 `data/approval-flows.json` 与 `data/product-spec-flows.json`；bot 身份缓存写入 `data/bot-identities.json`（详见 [定时任务调度](../domain/scheduling.md) 与 [产品方案交付](../domain/product-spec.md)）。
 
 ## 日志与调试
 
@@ -137,6 +139,12 @@ Agent Team 启动，正在建立飞书长连接…
 | `[协作] 忽略非目标 bot 消息` / `[协作] 忽略重复消息` | 收件箱领取失败或轮次去重命中，协作消息被安全跳过 |
 | `[澄清] 已发送交互卡片 questions=N` | CLI 发起 `request_clarification`，已转成飞书澄清卡片（见 [需求澄清](../domain/clarification.md)） |
 | `[Skill] bot=... 找不到 <skill>` | 启动时该 bot 声明的 Skill 在工作区 `.agents/skills` / `.claude/skills` 都不存在，只告警不阻断 |
+| `[定时] task=... succeeded / 执行失败` | 定时任务到期执行的结果（见 [定时任务调度](../domain/scheduling.md)） |
+| `[定时] schedules.json 已热更新` | 文件对账检测到任务增删改并已应用到内存调度器 |
+| `[API] 定时任务管理接口已启动` | 本地 HTTP 管理接口（默认 `http://localhost:3101/api/schedules`）已监听 |
+| `[审批] 已展示审批卡 flow=...` | 开发者请求高危操作，已转成审批卡等待用户拍板（见 [高危操作审批](../domain/approval.md)） |
+| `[产品文档] 已展示待确认产物` | 产品方案确认卡已发出（见 [产品方案交付](../domain/product-spec.md)） |
+| `[产品评论]` | 待确认方案的评论区评论处理（忽略 / 排队 / 失败回写） |
 | `[CLI] 完成` | Claude Code 执行成功，含其会话 id |
 | `[CLI] 任务已取消` | 停止任务或 `/close` 触发 abort |
 | `[CLI] 执行失败` | CLI 报错或非 0 退出，附错误信息 |

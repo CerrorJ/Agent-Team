@@ -80,13 +80,15 @@ sequenceDiagram
 
 ### 斜杠命令
 
-`src/core/command-parser.ts` 的 `parseCommand()` 用正则匹配「可选 @ 提及 + 一条命令」，识别 `/close`、`/status`、`/help`、`/new`、`/resume`、`/team`、`/compact`、`/cd`；「帮我运行 /status 看看」这类句子不会命中。另有 `parseCliRequest()` 单独识别 `/claude <任务>` 与 `/codex <任务>` 的引擎选择请求。
+`src/core/command-parser.ts` 的 `parseCommand()` 用正则匹配「可选 @ 提及 + 一条命令」，识别 `/close`、`/status`、`/help`、`/new`、`/resume`、`/team`、`/compact`、`/cd`、`/schedules`、`/schedule`；「帮我运行 /status 看看」这类句子不会命中。另有 `parseCliRequest()` 单独识别 `/claude <任务>` 与 `/codex <任务>` 的引擎选择请求。
 
 | 命令 | 行为 |
 |------|------|
 | `/help` | 回复命令列表 |
 | `/status` | 回复机器人、会话 id、状态、执行引擎、工作目录、CLI 会话 id、话题、更新时间 |
 | `/team` | 回复团队成员卡片：名称、角色、默认引擎、Skills、Team Leader 标记与连接状态（数据来自 `TeamRegistry`，见 [多 bot 注册](../domain/bot-registry.md)） |
+| `/schedule <需求>` | 把需求包装成「请使用 schedule_manage 工具创建任务」的提示，继续走 CLI 执行管线（bot 会代为创建定时任务）；不带需求时回复用法；`pause/resume/delete/run <id>` 子命令直接操作调度器不跑 CLI（见 [定时任务调度](../domain/scheduling.md)） |
+| `/schedules` | 回复定时任务列表卡片（`buildScheduleListCard`） |
 | `/new` | 清空话题绑定的 CLI 会话，下一条任务开新会话；旧会话保留，可用 `/resume` 找回 |
 | `/resume` | 列出当前工作目录的 CLI 会话（`listNativeCliSessions`，上限 8 条），卡片「恢复」按钮完成实际切换 |
 | `/compact [要求]` | 在当前 CLI 会话内执行原生上下文压缩（`compactCliSession`），无需整理时回「暂时无需整理」卡片 |
@@ -193,14 +195,14 @@ flowchart TD
 
 成功、失败、取消三条收尾路径的处理逻辑。
 
-- **成功**：把 CLI 会话 id 补录进 Session（`setCliSessionId`），记录上下文窗口大小供下一轮进度计算，发 success 卡片；回答超过单卡上限时折叠展示并按 4000 字符拆条续发。bot 配置了 `grill-me` skill 时，先检查本轮是否有 `request_clarification` 工具调用——有则转入 [需求澄清](../domain/clarification.md) 卡片流程并提前返回。非协作任务完成后若 bot 配置了 `reviewBy`，还会自动发起独立审查（见 [多 bot 协作](../domain/collaboration.md)）；协作任务完成后的回传/收尾路由也在该分支内
+- **成功**：把 CLI 会话 id 补录进 Session（`setCliSessionId`），记录上下文窗口大小供下一轮进度计算，发 success 卡片；回答超过单卡上限时折叠展示并按 4000 字符拆条续发。bot 配置了 `grill-me` skill 时，先检查本轮是否有 `request_clarification` 工具调用——有则转入 [需求澄清](../domain/clarification.md) 卡片流程并提前返回。产品类 bot（`to-spec` / `lark-doc` skill）接着走 [产品方案交付](../domain/product-spec.md) 的提交校验与确认卡。再检查 `request_approval`（[高危操作审批](../domain/approval.md)，主任务执行时声明为停止型工具，CLI 调用即被终止）。最后是协作路由：`dispatch_task` 派发请求由 [多 bot 协作](../domain/collaboration.md) 处理；协作任务的回传/收尾路由也在该分支内
 - **取消**：卡片停止按钮或 `/close` 触发 `AbortController.abort()`，发 cancelled 卡片，文案按 `cancelMode`（`stop` / `close`）区分
 - **失败**：发 failed 卡片，`technicalDetail` 放进「查看错误详情」折叠面板
 - **收尾**：`finally` 中注销 `activeRuns` 登记并把会话从 `active` 回落 `idle`（仅 active 状态回落，避免覆盖 `closed` 终态）
 
 ## 停止任务
 
-卡片上的「停止任务」按钮走 `card.action.trigger` 事件（`onCardAction` 回调，由 `src/app/card-action-handler.ts` 统一处理「停止任务」「恢复会话」「澄清作答」三类动作），`requestTaskAbort()` 校验：
+卡片上的「停止任务」按钮走 `card.action.trigger` 事件（`onCardAction` 回调，由 `src/app/card-action-handler.ts` 统一处理「停止任务」「恢复会话」「澄清作答」「方案确认」「审批决定」五类动作），`requestTaskAbort()` 校验：
 
 - 任务不存在 → toast「任务已经结束」
 - 操作者不是发起人 → toast「只有任务发起人可以停止它」
@@ -211,18 +213,22 @@ flowchart TD
 
 | 文件 | 职责 |
 |------|------|
-| `src/index.ts` | 入口，组装 `AppRuntime`、多 bot 启动、`onMessage` 任务编排与收尾路由 |
-| `src/app/runtime.ts` | `AppRuntime` 共享状态容器（会话、任务、协作队列、澄清流程），入口组装一次传给 `app/` 各处理模块 |
-| `src/app/command-handler.ts` | 斜杠命令处理（`/help` `/team` `/new` `/resume` `/compact` `/cd` `/close` `/status` 与引擎切换守卫） |
-| `src/app/card-action-handler.ts` | 卡片回调：`answer_clarification` / `resume_cli_session` / `abort_task` 三类动作 |
+| `src/index.ts` | 入口，组装 `AppRuntime`、多 bot 启动、定时调度启动、`onMessage` 任务编排、文档评论入口与收尾路由 |
+| `src/app/runtime.ts` | `AppRuntime` 共享状态容器（会话、任务、协作队列、澄清 / 产品方案 / 审批流程），入口组装一次传给 `app/` 各处理模块 |
+| `src/app/command-handler.ts` | 斜杠命令处理（`/help` `/team` `/schedule` `/schedules` `/new` `/resume` `/compact` `/cd` `/close` `/status` 与引擎切换守卫） |
+| `src/app/card-action-handler.ts` | 卡片回调：`approve_product_spec` / `answer_clarification` / `decide_approval` / `resume_cli_session` / `abort_task` 五类动作 |
 | `src/app/clarification-runner.ts` | 澄清答案收齐后的 CLI 续跑（详见 [需求澄清](../domain/clarification.md)） |
-| `src/app/cli-execution.ts` | `executeCli`：对 `runCli` 的薄封装 |
+| `src/app/approval-runner.ts` | 审批决定回传 CLI 续跑（详见 [高危操作审批](../domain/approval.md)） |
+| `src/app/collaboration-service.ts` | 协作派发服务（详见 [多 bot 协作](../domain/collaboration.md)） |
+| `src/app/scheduler.ts` 及 `schedule-*.ts` | 定时任务调度、热更新对账、HTTP 管理接口（详见 [定时任务调度](../domain/scheduling.md)） |
+| `src/app/product-spec-*.ts` / `product-comment-runner.ts` | 产品方案提交与落盘校验、评论区修改（详见 [产品方案交付](../domain/product-spec.md)） |
+| `src/app/cli-execution.ts` | `executeCli`：对 `runCli` 的薄封装（多出 `stopToolNames`） |
 | `src/app/notification-service.ts` | `sendResultNotification` @ 发起人的结果通知（失败只记日志） |
 | `src/app/session-view.ts` | `/status` 文本渲染与 `markSessionIdle` 收尾回落 |
 | `src/im/lark.ts` | WS 连接、事件分发、Bot 接口实现、消息文本提取 |
 | `src/im/message-parser.ts` | @ 提及解析、资源 key 提取（纯函数） |
 | `src/im/card.ts` | 卡片构建与节流更新（详见 [任务卡片系统](../domain/task-card.md)） |
-| `src/core/command-parser.ts` | 斜杠命令与 `/claude` `/codex` 引擎选择解析 |
+| `src/core/command-parser.ts` | 斜杠命令（含 `/schedule` `/schedules`）与 `/claude` `/codex` 引擎选择解析 |
 | `src/core/clarification.ts` | 澄清数据模型、校验与流程存储（详见 [需求澄清](../domain/clarification.md)） |
 | `src/core/task-progress.ts` | CLI 事件 → 进度快照 |
 | `src/cli/registry.ts` | 按 `CliId` 取适配器 |
