@@ -17,7 +17,8 @@ Agent-Team 通过 `config/bots.json`（路径由环境变量 `BOTS_CONFIG` 指�
 
 ```json
 {
-  "teamLeader": "developer",
+  "teamLeader": "ceo-assistant",
+  "defaultProductDeliveryMode": "lark-doc",
   "bots": [
     {
       "id": "developer",
@@ -25,14 +26,15 @@ Agent-Team 通过 `config/bots.json`（路径由环境变量 `BOTS_CONFIG` 指�
       "appSecretEnv": "FEISHU_DEVELOPER_APP_SECRET",
       "defaultCli": "claude",
       "role": "开发",
-      "systemPrompt": "你是主力开发助手，负责理解需求并完成实现。",
-      "reviewBy": "reviewer"
+      "systemPrompt": "你是主力开发助手，负责理解需求并完成实现。"
     }
   ]
 }
 ```
 
-字段说明（zod `BotSchema` 校验）：
+顶层字段（`BotConfigFileSchema`）：`teamLeader` 必填，指向某个启用的 bot；`defaultProductDeliveryMode` 可选（`local` / `lark-doc`，默认 `lark-doc`），决定产品类 bot 的默认产物交付方式，进入 `buildBotPrompt` 的交付规则与定时任务派发（见 [产品方案交付](product-spec.md)）。
+
+bot 字段说明（zod `BotSchema` 校验）：
 
 | 字段 | 校验规则 | 说明 |
 |------|----------|------|
@@ -43,7 +45,7 @@ Agent-Team 通过 `config/bots.json`（路径由环境变量 `BOTS_CONFIG` 指�
 | `skills` | 可选字符串数组（`/^[a-z0-9][a-z0-9-]{0,63}$/`），默认 `[]` | 项目 Skill 清单，见下文 |
 | `workspace` | 可选非空字符串 | 该 bot 的工作目录，相对路径按进程 cwd 解析 |
 | `systemPrompt` | 可选，默认空串 | 角色说明，拼接在任务前 |
-| `reviewBy` | 可选，bot id 格式 | 指定审查 bot：该 bot 的普通任务完成后自动发起第 1 轮独立审查，交接机制见 [多 bot 协作](collaboration.md) |
+| `reviewBy` | 可选，bot id 格式 | 历史字段：启动时仍做指向校验，但运行时不再自动触发审查；协作派发统一走 `dispatch_task` 工具（见 [多 bot 协作](collaboration.md)） |
 | `collaborationMaxRounds` | 整数 1–32，默认 16 | 协作允许的交接总次数（见 [多 bot 协作](collaboration.md)） |
 | `enabled` | 可选，默认 `true` | 为 `false` 的 bot 在解析阶段即被过滤，不索取凭证、不建连接 |
 
@@ -91,19 +93,20 @@ bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键
 
 ## systemPrompt 与任务拼接
 
-`buildBotPrompt(config, prompt, teamContext)` 组装最终任务提示词，各段落用空行连接：
+`buildBotPrompt(config, prompt, teamContext, defaultProductDeliveryMode)` 组装最终任务提示词，各段落用空行连接：
 
 ```
 你的角色：<role>
 <systemPrompt>
 <teamContext（TeamRegistry.contextFor 的团队名单）>
+产品方案交付规则（配置 to-spec / to-tickets / lark-doc skill 时）：默认交付方式、用户明确指定时覆盖、必须实际调用 request_spec_approval
 项目 Skill 加载规则（配了 skills 时）：工作区 .agents/skills 优先于 .claude/skills，最后才允许全局同名 Skill
 飞书输出规则（必须遵守）：最终回复 ≤1200 中文字符、不贴完整代码/长日志/Markdown 表格、详细产物写文件、需要用户决策时调用 request_clarification
 
-当前任务：<用户消息或协作 prompt>
+当前任务：<用户消息、协作 prompt 或定时任务包装>
 ```
 
-飞书输出规则与 Skill 加载顺序**写死在提示词里**：前者是因为飞书是聊天界面，大段内容会刷屏；后者防止 CLI 跳过工作区版本直接用全局同名 Skill。`skills` 含 `grill-me` 的 bot 才会启用 [需求澄清](clarification.md) 闭环。
+飞书输出规则与 Skill 加载顺序**写死在提示词里**：前者是因为飞书是聊天界面，大段内容会刷屏；后者防止 CLI 跳过工作区版本直接用全局同名 Skill。`skills` 含 `grill-me` 的 bot 才会启用 [需求澄清](clarification.md) 闭环；`to-spec` / `lark-doc` 启用 [产品方案交付](product-spec.md)；`lark-drive` 额外订阅飞书文档评论事件。
 
 这让同一套执行链路可以承载「开发」「审查」等不同分工的 bot，同时把长产物引导进工作区文件而不是聊天窗口。
 
@@ -116,5 +119,5 @@ bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键
 - **新增配置字段**：同时改 `BotSchema` 与 `BotConfig` 接口；字段是可选的注意给默认值，否则旧 bots.json 启动即失败
 - **会话迁移**：`JsonSessionStore` 用 `legacyBotId`（取 `botConfigs[0].id`）和 `defaultWorkspaces` 给缺 `botId` / `workspaceDir` 的旧记录补值，改动字段时要同步 `migrateLegacySession`，详见 [会话与任务管理](session.md)
 - **凭证安全**：bots.json 只写环境变量**名**，真实凭证放 `.env`（见 [运维手册](../operations/runbook.md)），不要把密钥写进配置文件
-- **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseAgentOsConfig` 里的指向校验与 [多 bot 协作](collaboration.md) 的路由分支
+- **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseAgentOsConfig` 里的指向校验；`collaborationMaxRounds` 是 `dispatch_task` 发起协作的轮次上限（见 [多 bot 协作](collaboration.md)）
 - **新增 Skill**：除 bots.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空

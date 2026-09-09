@@ -53,12 +53,13 @@ flowchart TD
 
 ### Lark.EventDispatcher（分发）
 
-将 WS 连接上收到的原始事件按事件名路由到处理函数。当前注册了两个事件处理器：
+将 WS 连接上收到的原始事件按事件名路由到处理函数。当前注册了三个事件处理器：
 
 | 事件 | 处理逻辑 |
 |------|----------|
 | `im.message.receive_v1` | 解析消息内容，组装为 `IncomingMessage`，回调 `onMessage` |
-| `card.action.trigger` | 卡片按钮回调（「停止任务」「恢复会话」「澄清作答」），解析操作者、表单值与 value 后回调 `onCardAction` |
+| `card.action.trigger` | 卡片按钮回调（「停止任务」「恢复会话」「澄清作答」「方案确认」「审批决定」），解析操作者、表单值与 value 后回调 `onCardAction` |
+| `drive.notice.comment_add_v1` | 飞书文档评论事件（需 bot 配 `lark-drive` skill 并在连接后订阅）：组装 `IncomingDocumentComment` 回调 `onDocumentComment`，驱动待确认方案的评论区修改 |
 
 ### onMessage 回调（核心逻辑）
 
@@ -74,14 +75,17 @@ flowchart TD
 
 ### 应用编排层（src/app/）
 
-入口组装一次 `AppRuntime`（`src/app/runtime.ts`：会话、运行中任务、协作收件箱、澄清流程等共享状态），传给各处理模块，避免各自持有引用：
+入口组装一次 `AppRuntime`（`src/app/runtime.ts`：会话、运行中任务、协作收件箱、澄清 / 产品方案 / 审批流程等共享状态），传给各处理模块，避免各自持有引用：
 
 | 模块 | 职责 |
 |------|------|
-| `command-handler.ts` | 斜杠命令与引擎切换守卫（`/team` 团队卡片也在此） |
-| `card-action-handler.ts` | 卡片回调三动作：澄清作答、恢复会话、停止任务 |
-| `clarification-runner.ts` | 澄清答案收齐后的 CLI 续跑（见 [需求澄清](../domain/clarification.md)） |
-| `cli-execution.ts` / `notification-service.ts` / `session-view.ts` | `runCli` 薄封装、@ 通知发送、`/status` 渲染与会话 idle 回落 |
+| `command-handler.ts` | 斜杠命令与引擎切换守卫（`/team` 团队卡片、`/schedules` 列表、`/schedule` 管理子命令也在此） |
+| `card-action-handler.ts` | 卡片回调五动作：方案确认、澄清作答、审批决定、恢复会话、停止任务 |
+| `clarification-runner.ts` / `approval-runner.ts` | 澄清答案收齐 / 审批出结果后的 CLI 续跑（见 [需求澄清](../domain/clarification.md)、[高危操作审批](../domain/approval.md)） |
+| `collaboration-service.ts` | `CollaborationService`：协作派发三步（登记收件箱 → 发卡片 → @ 目标 bot），失败回滚（见 [多 bot 协作](../domain/collaboration.md)） |
+| `scheduler.ts` / `schedule-*.ts` | 定时任务调度中枢、文件热更新对账、本地 HTTP 管理接口与到期执行（见 [定时任务调度](../domain/scheduling.md)） |
+| `product-spec-*.ts` / `product-comment-runner.ts` | 产品方案提交校验、落盘校验与评论区修改（见 [产品方案交付](../domain/product-spec.md)） |
+| `cli-execution.ts` / `notification-service.ts` / `session-view.ts` | `runCli` 薄封装（含 `stopToolNames`）、@ 通知发送、`/status` 渲染与会话 idle 回落 |
 
 ### Bot 接口（出站）
 
@@ -110,27 +114,30 @@ flowchart TD
 
 ### 核心域（src/core/）
 
-- `bot-registry.ts` — 读取并校验 `config/bots.json`（含 `teamLeader`），解析凭证环境变量、默认引擎与工作目录，`buildBotPrompt` 组装任务提示词（详见 [多 bot 注册](../domain/bot-registry.md)）
+- `bot-registry.ts` — 读取并校验 `config/bots.json`（含 `teamLeader` 与 `defaultProductDeliveryMode`），解析凭证环境变量、默认引擎与工作目录，`buildBotPrompt` 组装任务提示词（详见 [多 bot 注册](../domain/bot-registry.md)）
 - `team-registry.ts` — `TeamRegistry` 团队注册表：团队名单上下文、Skill 缺失检查、`/team` 数据源
 - `clarification.ts` — [需求澄清](../domain/clarification.md) 的数据模型（zod 校验）、流程存储 `ClarificationFlowStore` 与身份/文案工具函数
-- `collaboration.ts` — bot 间协作的交接单（`CollaborationMessage`）、共享收件箱 `CollaborationInbox` 与按「任务 + 轮次 + 接收方」的去重键（详见 [多 bot 协作](../domain/collaboration.md)）
+- `approval.ts` / `approval-store.ts` — [高危操作审批](../domain/approval.md) 的请求校验、`ApprovalFlowStore` 与 JSON 持久化
+- `product-spec.ts` / `product-spec-store.ts` — [产品方案交付](../domain/product-spec.md) 的 local / lark-doc 请求校验与流程存储
+- `schedule.ts` / `schedule-store.ts` / `schedule-run-store.ts` — [定时任务调度](../domain/scheduling.md) 的规则模型、管理协议、任务与运行记录持久化
+- `collaboration.ts` — bot 间协作的交接单（`CollaborationMessage`）、共享收件箱 `CollaborationInbox`、`dispatch_task` 请求校验与按「任务 + 轮次 + 接收方」的去重键（详见 [多 bot 协作](../domain/collaboration.md)）
 - `session-manager.ts` / `session-store.ts` — 话题级会话状态机与 JSON 持久化（zod 校验、原子写入、重启恢复、旧记录迁移）
-- `topic-task.ts` — `topicTaskId`：把 `chatId + 话题` 哈希成稳定短任务 id，澄清流程按它归属话题
+- `topic-task.ts` — `topicTaskId`：把 `chatId + 话题` 哈希成稳定短任务 id，澄清 / 方案 / 审批流程按它归属话题
 - `task-progress.ts` — 把 CLI 事件折叠成工具级进度快照，供卡片渲染
 - `task-abort.ts` — 「停止任务」的发起人权限校验
-- `command-parser.ts` — 斜杠命令与 `/claude` `/codex` 引擎选择解析
+- `command-parser.ts` — 斜杠命令（含 `/schedule` `/schedules`）与 `/claude` `/codex` 引擎选择解析
 - `workspace.ts` — 工作目录解析与存在性校验（`/cd` 与 bot 配置共用）
 
 详见 [会话与任务管理](../domain/session.md)。
 
 ### CLI 执行层（src/cli/）
 
-- `types.ts` — `CliAdapter` / `CliEvent` 统一事件协议，隔离各家 CLI 的原生输出差异；`tool_call` 事件专为应用层工具（如 `request_clarification`）携带原始入参
-- `app-tools.ts` — 把 `request_clarification` 注册为 stdio MCP 服务（`src/mcp/clarification-server.ts`）：Claude 走 `--mcp-config` JSON，Codex 走 `-c` 配置覆盖（见 [需求澄清](../domain/clarification.md)）
+- `types.ts` — `CliAdapter` / `CliEvent` 统一事件协议，隔离各家 CLI 的原生输出差异；`tool_call` 事件专为应用层工具（如 `request_clarification`）携带原始入参，`stats` 事件供适配器中途汇报用量
+- `app-tools.ts` — 五个应用层工具名常量与 stdio MCP 服务（`src/mcp/app-tools-server.ts`）的注册参数：Claude 走 `--mcp-config` JSON，Codex 走 `-c` 配置覆盖（见 [需求澄清](../domain/clarification.md)）
 - `registry.ts` — 按 `CliId` 取适配器（`claude` / `codex`），并列出启动日志中打印的引擎清单
 - `claude-adapter.ts` — 把 Claude Code `--output-format stream-json` 的一行输出翻译为 `CliEvent`
 - `codex-adapter.ts` — 把 Codex `exec --json` 的事件流翻译为同一套 `CliEvent`
-- `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、默认不限时（`DEFAULT_TIMEOUT_MS = 0`，调用方可传 `timeoutMs` 设上限并经 `armTimeout` 钳制）、支持 `AbortSignal` 取消；`tool_call` 按 `toolUseId` 去重收集，失败的调用在 `tool_end` 剔除，只把成功的随结果返回
+- `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、默认 2 小时超时（可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）、支持 `AbortSignal` 取消；`stopToolNames` 命中应用层工具调用时立即终止子进程并把该次调用随结果返回；`tool_call` 按 `toolUseId` 去重收集，失败的调用在 `tool_end` 剔除，只把成功的随结果返回
 - `native-compact.ts` — `/compact` 的原生上下文压缩：Claude 走 stream-json，Codex 走 app-server JSON-RPC
 - `native-sessions.ts` — `/resume` 的会话清单：Claude 扫本地 JSONL，Codex 走 app-server `thread/list`
 - `spawn-cli.ts` — Windows 下以 shell 启动 `.cmd` 包装的 CLI，并用 `taskkill /t /f` 连进程树清理
@@ -164,14 +171,16 @@ sequenceDiagram
     Bot->>Bot: 创建 Lark.Client + 注册 EventDispatcher
     Bot->>WS: new WSClient + start()
     WS-->Entry: 各 bot 长连接建立，等待事件
+    Entry->>Entry: scheduler.start 恢复定时任务
+    Entry->>Entry: startScheduleFileWatcher + startScheduleApi（本地 HTTP 3101）
 ```
 
-应用启动时的初始化序列（每个启用的 bot 一条独立连接）。
+应用启动时的初始化序列（每个启用的 bot 一条独立连接，收尾拉起定时调度，见 [定时任务调度](../domain/scheduling.md)）。
 
 ## 关键设计决策
 
 - **事件回调尽快返回**：`onMessage` 回调中先回复初始卡片，后续执行通过 `void executeCli(...)` 在后台异步执行，不阻塞飞书事件确认；卡片回调同理——澄清答案收齐后先返回 toast + 过渡卡片，CLI 续跑放进 `queueMicrotask`
 - **卡片更新复用 message_id**：先 `replyCard` 拿到 `message_id`，后续用 `updateCard` 同卡刷新
-- **统一事件协议**：Runner 只消费适配器翻译后的 `CliEvent`，新增 CLI 只需实现 `CliAdapter` 并在 `registry.ts` 注册，不动执行与展示逻辑；应用层 MCP 工具（`request_clarification`）通过额外的 `tool_call` 事件携带原始入参，应用层据此截获并渲染交互卡片
+- **统一事件协议**：Runner 只消费适配器翻译后的 `CliEvent`，新增 CLI 只需实现 `CliAdapter` 并在 `registry.ts` 注册，不动执行与展示逻辑；应用层 MCP 工具（五个 agent_os 工具）通过额外的 `tool_call` 事件携带原始入参，应用层据此截获并渲染交互卡片；主任务执行时把 `request_approval` 声明为**停止型工具**——runner 一看到就终止子进程，CLI 不必等审批结果再退出
 - **bot 配置与凭证分离**：bots.json 只存环境变量名，真实凭证只从 `process.env` 读取，详见 [多 bot 注册](../domain/bot-registry.md) 与 [运维手册](../operations/runbook.md)
 - **ESM only**：所有导入使用 `.js` 后缀（TypeScript 的 ESM 约定）
