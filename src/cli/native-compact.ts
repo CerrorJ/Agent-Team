@@ -1,10 +1,10 @@
 import { createInterface } from 'node:readline'
 import type { CliAdapter, CliCompactPlan } from './types.js'
 import { killCli, spawnCli } from './spawn-cli.js'
-import { armTimeout } from './timeout.js'
+import { armTimeout, envTimeoutMs } from './timeout.js'
 
-// 0 表示不限时；需要上限时调用方传正数 timeoutMs（超过 2^31-1 会被钳制）。
-const DEFAULT_TIMEOUT_MS = 0
+// 压缩也是一次真实 CLI 执行，与 runCli 同样的超时语义：env 覆盖 → 默认 2 小时。
+const DEFAULT_TIMEOUT_MS = 2 * 60 * 60 * 1000
 
 export interface CompactCliSessionOptions {
   adapter: CliAdapter
@@ -97,7 +97,7 @@ const runClaudeCompact = (
 
     const timer = armTimeout(
       () => fail(new Error(`${options.adapter.displayName} 上下文整理超时`)),
-      options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      options.timeoutMs ?? envTimeoutMs(options.adapter) ?? DEFAULT_TIMEOUT_MS,
     )
 
     options.signal?.addEventListener('abort', abort, { once: true })
@@ -202,7 +202,7 @@ const runCodexCompact = (
 
     const timer = armTimeout(
       () => fail(new Error(`${options.adapter.displayName} 上下文整理超时`)),
-      options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      options.timeoutMs ?? envTimeoutMs(options.adapter) ?? DEFAULT_TIMEOUT_MS,
     )
 
     options.signal?.addEventListener('abort', abort, { once: true })

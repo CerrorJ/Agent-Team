@@ -31,14 +31,14 @@ const callScheduleManage = async (
   content: Array<{ type: 'text'; text: string }>
   isError?: boolean
 }> => {
-  const chatId = process.env.AGENT_OS_CHAT_ID
-  const creatorOpenId = process.env.AGENT_OS_OWNER_OPEN_ID
+  const chatId = process.env.AGENT_TEAM_CHAT_ID
+  const creatorOpenId = process.env.AGENT_TEAM_OWNER_OPEN_ID
   if (!chatId || !creatorOpenId) {
     return {
       content: [
         {
           type: 'text',
-          text: '缺少 AGENT_OS_CHAT_ID / AGENT_OS_OWNER_OPEN_ID，MCP 子进程没有拿到当前会话上下文。',
+          text: '缺少 AGENT_TEAM_CHAT_ID / AGENT_TEAM_OWNER_OPEN_ID，MCP 子进程没有拿到当前会话上下文。',
         },
       ],
       isError: true,

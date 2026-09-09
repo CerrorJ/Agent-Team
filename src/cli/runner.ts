@@ -1,21 +1,10 @@
 import { killCli, spawnCli } from './spawn-cli.js'
+import { armTimeout, envTimeoutMs } from './timeout.js'
 import { promptInputForPlatform } from './types.js'
 import { createInterface } from 'node:readline'
 import type { CliAdapter, CliEvent, CliRunResult } from './types.js'
 
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 60 * 1000
-
-// 超时上限 2^31-1ms（约 24.8 天）：超过的延迟会被 Node 改成 1ms 立即触发（错题本有案底），
-// 环境变量设 0 或非法值时回退默认 2 小时，不再支持「不限时」。
-const envTimeoutMs = (adapter: CliAdapter): number | undefined => {
-  const raw =
-    process.env[`${adapter.id.toUpperCase()}_TIMEOUT_MS`] ??
-    process.env.CLI_TIMEOUT_MS
-
-  if (!raw) return undefined
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
-}
 
 export interface RunCliOptions {
   adapter: CliAdapter
@@ -88,7 +77,7 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     let settled = false
     let timedOut = false
 
-    const timer = setTimeout(() => {
+    const timer = armTimeout(() => {
       timedOut = true
       killCli(child)
     }, timeoutMs)

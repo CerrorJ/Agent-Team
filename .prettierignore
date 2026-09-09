@@ -1,5 +1,7 @@
 node_modules
 dist
+ao-31-deploy
+demo-server
 data
 openwiki
 docs

@@ -17,7 +17,7 @@ export interface BotConfig {
   reviewBy?: string
   collaborationMaxRounds: number
 }
-export interface AgentOsConfig {
+export interface AgentTeamConfig {
   teamLeaderId: string
   defaultProductDeliveryMode: ProductDeliveryMode
   bots: BotConfig[]
@@ -64,11 +64,11 @@ const BotConfigFileSchema = z.object({
   bots: z.array(BotSchema).min(1),
 })
 
-export const parseAgentOsConfig = (
+export const parseAgentTeamConfig = (
   input: unknown,
   env: Environment,
   baseDirectory = process.cwd(),
-): AgentOsConfig => {
+): AgentTeamConfig => {
   const parsed = BotConfigFileSchema.parse(input)
   const ids = new Set<string>()
   for (const bot of parsed.bots) {
@@ -130,14 +130,14 @@ export const parseBotConfigs = (
   env: Environment,
   baseDirectory = process.cwd(),
 ): BotConfig[] => {
-  return parseAgentOsConfig(input, env, baseDirectory).bots
+  return parseAgentTeamConfig(input, env, baseDirectory).bots
 }
 
-export const loadAgentOsConfig = async (
+export const loadAgentTeamConfig = async (
   filePath: string,
   env: Environment = process.env,
   baseDirectory = process.cwd(),
-): Promise<AgentOsConfig> => {
+): Promise<AgentTeamConfig> => {
   let content: string
   try {
     content = await readFile(filePath, 'utf8')
@@ -151,7 +151,7 @@ export const loadAgentOsConfig = async (
   }
 
   try {
-    return parseAgentOsConfig(JSON.parse(content), env, baseDirectory)
+    return parseAgentTeamConfig(JSON.parse(content), env, baseDirectory)
   } catch (error) {
     throw new Error(`bot 配置文件格式错误: ${(error as Error).message}`)
   }
@@ -162,7 +162,7 @@ export const loadBotConfigs = async (
   env: Environment = process.env,
   baseDirectory = process.cwd(),
 ): Promise<BotConfig[]> => {
-  return (await loadAgentOsConfig(filePath, env, baseDirectory)).bots
+  return (await loadAgentTeamConfig(filePath, env, baseDirectory)).bots
 }
 
 // 把角色说明放到真实任务前面。

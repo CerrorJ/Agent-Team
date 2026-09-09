@@ -6,11 +6,11 @@ export const DISPATCH_TASK_TOOL_NAME = 'dispatch_task'
 export const REQUEST_APPROVAL_TOOL_NAME = 'request_approval'
 export const SCHEDULE_MANAGE_TOOL_NAME = 'schedule_manage'
 // Claude Code 会给 MCP 工具名加 mcp__<server>__ 前缀，事件里要用这个名字匹配
-export const CLAUDE_CLARIFICATION_TOOL_NAME = `mcp__agent_os__${CLARIFICATION_TOOL_NAME}`
-export const CLAUDE_PRODUCT_SPEC_TOOL_NAME = `mcp__agent_os__${PRODUCT_SPEC_TOOL_NAME}`
-export const CLAUDE_DISPATCH_TASK_TOOL_NAME = `mcp__agent_os__${DISPATCH_TASK_TOOL_NAME}`
-export const CLAUDE_REQUEST_APPROVAL_TOOL_NAME = `mcp__agent_os__${REQUEST_APPROVAL_TOOL_NAME}`
-export const CLAUDE_SCHEDULE_MANAGE_TOOL_NAME = `mcp__agent_os__${SCHEDULE_MANAGE_TOOL_NAME}`
+export const CLAUDE_CLARIFICATION_TOOL_NAME = `mcp__agent_team__${CLARIFICATION_TOOL_NAME}`
+export const CLAUDE_PRODUCT_SPEC_TOOL_NAME = `mcp__agent_team__${PRODUCT_SPEC_TOOL_NAME}`
+export const CLAUDE_DISPATCH_TASK_TOOL_NAME = `mcp__agent_team__${DISPATCH_TASK_TOOL_NAME}`
+export const CLAUDE_REQUEST_APPROVAL_TOOL_NAME = `mcp__agent_team__${REQUEST_APPROVAL_TOOL_NAME}`
+export const CLAUDE_SCHEDULE_MANAGE_TOOL_NAME = `mcp__agent_team__${SCHEDULE_MANAGE_TOOL_NAME}`
 
 // 启动应用层 MCP 服务的命令行：开发态直接跑 .ts（借根目录的 tsx），编译产物用 node 跑 .js
 const serverInvocation = (): { command: string; args: string[] } => {
@@ -44,7 +44,7 @@ export const claudeAppToolArgs = (): string[] => {
     '--mcp-config',
     JSON.stringify({
       mcpServers: {
-        agent_os: {
+        agent_team: {
           type: 'stdio',
           command: invocation.command,
           args: invocation.args,
@@ -58,8 +58,8 @@ export const codexAppToolArgs = (): string[] => {
   const invocation = serverInvocation()
   return [
     '-c',
-    `mcp_servers.agent_os.command=${JSON.stringify(invocation.command)}`,
+    `mcp_servers.agent_team.command=${JSON.stringify(invocation.command)}`,
     '-c',
-    `mcp_servers.agent_os.args=${JSON.stringify(invocation.args)}`,
+    `mcp_servers.agent_team.args=${JSON.stringify(invocation.args)}`,
   ]
 }

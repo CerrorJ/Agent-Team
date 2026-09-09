@@ -15,6 +15,16 @@ const ProductSpecFlowSchema = z.object({
   sessionId: z.string().min(1),
   ownerOpenId: z.string().min(1),
   ownerUnionId: z.string().min(1).optional(),
+  // 协作派发来源：审批通过后要向 Team Leader 回报的上下文，缺失会导致回报链路断裂
+  collaboration: z
+    .object({
+      taskId: z.string().min(1),
+      fromBotId: z.string().min(1),
+      reportToBotId: z.string().min(1),
+      round: z.number().int().positive(),
+      maxRounds: z.number().int().positive(),
+    })
+    .optional(),
   request: ProductSpecRequestSchema,
   status: z.enum(['pending', 'approved', 'expired']),
   approvedAt: z.iso.datetime().optional(),

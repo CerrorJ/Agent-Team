@@ -65,8 +65,8 @@ export const runScheduledTaskDirectly = async (options: {
       signal: run.signal,
       // 把群聊与发起人传给子进程，应用层工具（确认卡片等）要知道结果发回哪里
       env: {
-        AGENT_OS_CHAT_ID: task.chatId,
-        AGENT_OS_OWNER_OPEN_ID: task.creatorOpenId,
+        AGENT_TEAM_CHAT_ID: task.chatId,
+        AGENT_TEAM_OWNER_OPEN_ID: task.creatorOpenId,
       },
       onEvent: (event) => {
         if (event.type === 'tool_start') {

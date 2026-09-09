@@ -107,6 +107,15 @@ export interface Bot {
     text: string,
     replyInThread?: boolean,
   ) => Promise<string | undefined>
+  sendCardToChat: (
+    chatId: string,
+    card: CardJson,
+  ) => Promise<string | undefined>
+  sendMentionToChat: (
+    chatId: string,
+    target: BotIdentity,
+    text: string,
+  ) => Promise<string | undefined>
   updateCard: (messageId: string, card: CardJson) => Promise<void>
   subscribeToDocumentComments: () => Promise<void>
   replyToDocumentComment: (
@@ -281,6 +290,34 @@ export const startBot = (opts: BotOptions): Bot => {
           msg_type: 'post',
           content: JSON.stringify(buildMentionPostContent(target, text)),
           ...(replyInThread ? { reply_in_thread: true } : {}),
+        },
+      })
+
+      return res.data?.message_id
+    },
+
+    // 没有可回复的原消息时（例如定时任务触发），直接往群里发一条新卡片
+    async sendCardToChat(chatId, card) {
+      const res = await client.im.v1.message.create({
+        params: { receive_id_type: 'chat_id' },
+        data: {
+          receive_id: chatId,
+          msg_type: 'interactive',
+          content: JSON.stringify(card),
+        },
+      })
+
+      return res.data?.message_id
+    },
+
+    // 同上，@ 通知也走群消息而不是话题回复
+    async sendMentionToChat(chatId, target, text) {
+      const res = await client.im.v1.message.create({
+        params: { receive_id_type: 'chat_id' },
+        data: {
+          receive_id: chatId,
+          msg_type: 'post',
+          content: JSON.stringify(buildMentionPostContent(target, text)),
         },
       })
 

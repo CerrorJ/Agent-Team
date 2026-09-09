@@ -226,10 +226,10 @@ export class CodexAdapter implements CliAdapter {
         },
       ]
 
-      // 应用层 MCP 工具（agent_os 服务）：额外吐 tool_call，把原始入参交给应用层
+      // 应用层 MCP 工具（agent_team 服务）：额外吐 tool_call，把原始入参交给应用层
       if (
         item.type === 'mcp_tool_call' &&
-        item.server === 'agent_os' &&
+        item.server === 'agent_team' &&
         (item.tool === CLARIFICATION_TOOL_NAME ||
           item.tool === PRODUCT_SPEC_TOOL_NAME ||
           item.tool === DISPATCH_TASK_TOOL_NAME ||

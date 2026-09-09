@@ -55,7 +55,7 @@ import {
 } from './core/workspace.js'
 import {
   buildBotPrompt,
-  loadAgentOsConfig,
+  loadAgentTeamConfig,
   type BotConfig,
 } from './core/bot-registry.js'
 import { TeamRegistry } from './core/team-registry.js'
@@ -82,9 +82,9 @@ const botConfigPath = resolve(
   process.env.BOTS_CONFIG ?? join('config', 'bots.json'),
 )
 
-const agentOsConfig = await loadAgentOsConfig(botConfigPath)
-const botConfigs = agentOsConfig.bots
-const teamRegistry = new TeamRegistry(agentOsConfig.teamLeaderId, botConfigs)
+const agentTeamConfig = await loadAgentTeamConfig(botConfigPath)
+const botConfigs = agentTeamConfig.bots
+const teamRegistry = new TeamRegistry(agentTeamConfig.teamLeaderId, botConfigs)
 await Promise.all(
   botConfigs.map((config) => ensureWorkspaceDirectory(config.workspaceDir)),
 )
@@ -166,7 +166,7 @@ const scheduler = new Scheduler({
   runtime,
   scheduleStore,
   runStore: scheduleRunStore,
-  defaultProductDeliveryMode: agentOsConfig.defaultProductDeliveryMode,
+  defaultProductDeliveryMode: agentTeamConfig.defaultProductDeliveryMode,
 })
 
 console.log('Agent Team 启动，正在建立飞书长连接…')
@@ -193,7 +193,7 @@ const startConfiguredBot = async (
       runtime,
       config,
       collaborationService,
-      defaultProductDeliveryMode: agentOsConfig.defaultProductDeliveryMode,
+      defaultProductDeliveryMode: agentTeamConfig.defaultProductDeliveryMode,
     }),
     onDocumentComment: config.skills.includes('lark-drive')
       ? async (comment, bot) => scheduleDocumentComment(config, bot, comment)
@@ -309,7 +309,7 @@ const startConfiguredBot = async (
         config,
         taskText,
         teamRegistry.contextFor(config.id),
-        agentOsConfig.defaultProductDeliveryMode,
+        agentTeamConfig.defaultProductDeliveryMode,
       )
 
       const taskCardTitle = isCompacting ? '整理上下文' : cliAdapter.displayName
@@ -485,8 +485,9 @@ const startConfiguredBot = async (
       progressHeartbeat.unref()
 
       const cliEnv = {
-        AGENT_OS_CHAT_ID: msg.chatId,
-        AGENT_OS_OWNER_OPEN_ID: collaboration?.ownerOpenId ?? msg.senderOpenId,
+        AGENT_TEAM_CHAT_ID: msg.chatId,
+        AGENT_TEAM_OWNER_OPEN_ID:
+          collaboration?.ownerOpenId ?? msg.senderOpenId,
       }
 
       // 让事件回调尽快返回，CLI 在后台继续执行。
@@ -584,7 +585,7 @@ const startConfiguredBot = async (
           if (managesProductSpec) {
             const submission = await ensureProductSpecSubmission({
               result,
-              defaultDeliveryMode: agentOsConfig.defaultProductDeliveryMode,
+              defaultDeliveryMode: agentTeamConfig.defaultProductDeliveryMode,
               retry: (retryPrompt, resultSessionId) =>
                 executeCli(
                   cliAdapter,
@@ -625,7 +626,7 @@ const startConfiguredBot = async (
             : undefined
 
           if (dispatchRequest) {
-            if (config.id !== agentOsConfig.teamLeaderId) {
+            if (config.id !== agentTeamConfig.teamLeaderId) {
               throw new Error(
                 '只有 CEO 助理可以调用 dispatch_task 派发团队任务',
               )
@@ -959,7 +960,15 @@ const startConfiguredBot = async (
   botRuntimes.set(config.id, botRuntime)
   persistBotIdentities()
   if (config.skills.includes('lark-drive')) {
-    await startedBot.subscribeToDocumentComments()
+    // 订阅失败只告警，不能让整个进程在启动阶段崩掉（scheduler、其余 bot 都还没起）
+    try {
+      await startedBot.subscribeToDocumentComments()
+    } catch (error) {
+      console.warn(
+        `[Bot ${config.id}] 文档评论订阅失败，不影响消息链路:`,
+        (error as Error).message,
+      )
+    }
   }
   console.log(
     `[Bot ${config.id.toUpperCase()}] 已连接 name=${identity.name} open_id=${identity.openId}`,

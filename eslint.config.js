@@ -3,7 +3,13 @@ import stylistic from '@stylistic/eslint-plugin'
 
 export default [
   {
-    ignores: ['dist/**', 'data/**', 'node_modules/**'],
+    ignores: [
+      'dist/**',
+      'data/**',
+      'node_modules/**',
+      'ao-31-deploy/**',
+      'demo-server/**',
+    ],
   },
   {
     files: ['**/*.{js,ts}'],

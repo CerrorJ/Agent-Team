@@ -10,7 +10,11 @@ import type { AppRuntime } from './runtime.js'
 export interface CollaborationDispatch {
   senderConfig: BotConfig
   senderBot: Bot
-  replyToMessageId: string
+  // 有原消息就回复到话题里；没有（例如定时任务触发）就填 chatId 直接发群
+  replyToMessageId?: string
+  chatId?: string
+  // 只要 @ 通知、不要协作卡片时置 true，必须配合 chatId
+  skipCard?: boolean
   targetBotId: string
   taskId: string
   ownerOpenId: string
@@ -53,9 +57,28 @@ export class CollaborationService {
     this.runtime.collaborationInbox.register(collaboration)
 
     try {
-      const cardMessageId = await options.senderBot.replyCard(
-        options.replyToMessageId,
-        buildCollaborationCard({
+      if (options.chatId && options.skipCard) {
+        // 不发卡片时，任务详情只能塞进这条 @ 正文里
+        const mentionText = [
+          `新的协作任务：${options.objective}`,
+          options.instruction,
+          options.expectedOutput ? `期望产出：${options.expectedOutput}` : '',
+          `任务编号：${collaboration.dispatchId}`,
+        ]
+          .filter(Boolean)
+          .join('\n')
+
+        const mentionMessageId = await options.senderBot.sendMentionToChat(
+          options.chatId,
+          target.identity,
+          mentionText,
+        )
+
+        if (!mentionMessageId) {
+          throw new Error('飞书没有返回协作通知 message_id')
+        }
+      } else {
+        const collaborationCard = buildCollaborationCard({
           senderName:
             this.runtime.botRuntimes.get(options.senderConfig.id)?.identity
               .name ?? options.senderConfig.id,
@@ -67,25 +90,45 @@ export class CollaborationService {
           expectedOutput: options.expectedOutput,
           round: options.round,
           maxRounds: options.maxRounds,
-        }),
-        true,
-      )
+        })
 
-      if (!cardMessageId) {
-        throw new Error('飞书没有返回协作卡片 message_id')
-      }
+        const cardMessageId = options.chatId
+          ? await options.senderBot.sendCardToChat(
+              options.chatId,
+              collaborationCard,
+            )
+          : await options.senderBot.replyCard(
+              options.replyToMessageId!,
+              collaborationCard,
+              true,
+            )
 
-      const mentionMessageId = await options.senderBot.replyMention(
-        cardMessageId,
-        target.identity,
-        options.round === 1
-          ? `新的协作任务：${options.objective}（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
-          : `协作结果已经返回（任务编号：${collaboration.dispatchId}），请查看上方卡片。`,
-        true,
-      )
+        if (!cardMessageId) {
+          throw new Error('飞书没有返回协作卡片 message_id')
+        }
 
-      if (!mentionMessageId) {
-        throw new Error('飞书没有返回协作通知 message_id')
+        const mentionText =
+          options.round === 1
+            ? `新的协作任务：${options.objective}（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
+            : `协作结果已经返回（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
+
+        // 发群时 @ 挂在群里，回复时 @ 挂在刚发出的卡片下，保证顺序相邻
+        const mentionMessageId = options.chatId
+          ? await options.senderBot.sendMentionToChat(
+              options.chatId,
+              target.identity,
+              mentionText,
+            )
+          : await options.senderBot.replyMention(
+              cardMessageId,
+              target.identity,
+              mentionText,
+              true,
+            )
+
+        if (!mentionMessageId) {
+          throw new Error('飞书没有返回协作通知 message_id')
+        }
       }
     } catch (error) {
       // 卡片或 @ 通知失败就撤销 inbox 登记，否则这条协作永远等不到目标 bot 回话

@@ -243,7 +243,7 @@ export class ClaudeAdapter implements CliAdapter {
             },
           ]
 
-          // 应用层 MCP 工具：Claude 事件里带 mcp__agent_os__ 前缀，归一成统一名后吐 tool_call
+          // 应用层 MCP 工具：Claude 事件里带 mcp__agent_team__ 前缀，归一成统一名后吐 tool_call
           if (block.name === CLAUDE_CLARIFICATION_TOOL_NAME) {
             events.push({
               type: 'tool_call',
