@@ -95,6 +95,7 @@ flowchart TD
 |------|----------|------|
 | `reply()` | `im.v1.message.reply` | 回复纯文本消息 |
 | `replyCard()` | `im.v1.message.reply`（`msg_type: interactive`） | 回复交互卡片 |
+| `sendCardToChat()` / `sendMentionToChat()` | `im.v1.message.create`（`receive_id_type: chat_id`） | 无可回复原消息时直接往群里发卡片 / @ 通知（协作直发场景） |
 | `updateCard()` | `im.v1.message.patch` | 更新已有卡片内容 |
 | `downloadResource()` | `im.v1.messageResource.get` | 下载消息中的图片/文件 |
 
@@ -159,7 +160,7 @@ sequenceDiagram
     participant WS as Lark.WSClient
 
     Entry->>Entry: 读取 BOTS_CONFIG 路径
-    Entry->>Reg: loadAgentOsConfig 解析并校验 bots.json（含 teamLeader）
+    Entry->>Reg: loadAgentTeamConfig 解析并校验 bots.json（含 teamLeader）
     alt 凭证缺失或配置非法
         Entry->>Entry: 报错退出
     end
@@ -181,6 +182,7 @@ sequenceDiagram
 
 - **事件回调尽快返回**：`onMessage` 回调中先回复初始卡片，后续执行通过 `void executeCli(...)` 在后台异步执行，不阻塞飞书事件确认；卡片回调同理——澄清答案收齐后先返回 toast + 过渡卡片，CLI 续跑放进 `queueMicrotask`
 - **卡片更新复用 message_id**：先 `replyCard` 拿到 `message_id`，后续用 `updateCard` 同卡刷新
-- **统一事件协议**：Runner 只消费适配器翻译后的 `CliEvent`，新增 CLI 只需实现 `CliAdapter` 并在 `registry.ts` 注册，不动执行与展示逻辑；应用层 MCP 工具（五个 agent_os 工具）通过额外的 `tool_call` 事件携带原始入参，应用层据此截获并渲染交互卡片；主任务执行时把 `request_approval` 声明为**停止型工具**——runner 一看到就终止子进程，CLI 不必等审批结果再退出
+- **统一事件协议**：Runner 只消费适配器翻译后的 `CliEvent`，新增 CLI 只需实现 `CliAdapter` 并在 `registry.ts` 注册，不动执行与展示逻辑；应用层 MCP 工具（五个 agent_team 工具）通过额外的 `tool_call` 事件携带原始入参，应用层据此截获并渲染交互卡片；主任务执行时把 `request_approval` 声明为**停止型工具**——runner 一看到就终止子进程，CLI 不必等审批结果再退出
 - **bot 配置与凭证分离**：bots.json 只存环境变量名，真实凭证只从 `process.env` 读取，详见 [多 bot 注册](../domain/bot-registry.md) 与 [运维手册](../operations/runbook.md)
+- **ESM only**：所有导入使用 `.js` 后缀（TypeScript 的 ESM 约定）
 - **ESM only**：所有导入使用 `.js` 后缀（TypeScript 的 ESM 约定）

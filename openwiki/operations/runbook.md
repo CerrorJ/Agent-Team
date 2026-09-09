@@ -38,8 +38,10 @@ tags: [operations, runbook, configuration, troubleshooting]
 | `pnpm start` | 同 dev | 启动应用 |
 | `pnpm start:once` | `tsx src/index.ts` | 单次运行（无 watch） |
 | `pnpm build` | `tsc` | 类型检查 + 编译到 `dist/` |
+| `pnpm agent-team <cmd>` | `tsx src/deploy-cli.ts` | pm2 常驻部署封装：`doctor`（检查 node/pnpm/pm2/claude/codex 与配置文件）、`start` / `stop` / `restart` / `status` / `logs`；`start` 缺 `dist/` 时自动 build，详见 `SETUP.md`（含国内 ECS 部署与 `pm2 startup` 开机自启） |
+| `pnpm demo:server` / `pnpm demo:traffic` | `pnpm --filter agent-team-demo-server start/traffic` | 启动故障注入演示服务与流量场景脚本（normal / slow / error-spike / repeated-error / db-down） |
 | `pnpm probe:cli` | `tsx src/probe-cli.ts` | 运行 AI CLI 输出解析工具 |
-| `pnpm probe:tool` | `tsx src/probe-app-tool.ts` | 验证两家 CLI 能注册 `agent_os` MCP 服务且 `request_clarification` 入参通过校验（详见 [需求澄清](../domain/clarification.md)） |
+| `pnpm probe:tool` | `tsx src/probe-app-tool.ts` | 验证两家 CLI 能注册 `agent_team` MCP 服务且 `request_clarification` 入参通过校验（详见 [需求澄清](../domain/clarification.md)） |
 | `pnpm lint` / `pnpm lint:fix` | `eslint . [--fix]` | 检查/修复箭头函数与声明间空行规则（`eslint.config.js`） |
 | `pnpm format` / `pnpm format:check` | `prettier --write/--check .` | 格式化/检查格式（`.prettierrc`） |
 
