@@ -34,11 +34,12 @@ bot 之间通过交接单（`CollaborationMessage`）传递任务：Team Leader�
 
 ## 派发服务（CollaborationService）
 
-`dispatch()` 的三步全成语义，任一步失败都会撤销 inbox 登记并抛错（否则这条协作永远等不到目标 bot 回话）：
+`dispatch()` 的三步全成语义，任一步失败都会撤销 inbox 登记并抛错（否则这条协作永远等不到目标 bot 回话）。投递目标有两种形态：
 
-1. `collaborationInbox.register(collaboration)` 登记
-2. `replyCard(buildCollaborationCard(...))` 发协作卡片（带 workspace 名、目标、要求、轮次）
-3. `replyMention(...)` 在卡片下 @ 目标 bot，文本带任务编号；round=1 用「新的协作任务」话术，其余用「协作结果已经返回」
+- **有原消息**（`replyToMessageId`）：回复到话题里——协作卡片 + 卡片下 @ 目标 bot 的通知，round=1 用「新的协作任务」话术，其余用「协作结果已经返回」
+- **无原消息**（如定时任务触发、只有 `chatId`）：`sendCardToChat` / `sendMentionToChat` 按 chatId 直接发群，@ 挂在群里保证与卡片相邻；置 `skipCard: true` 时完全省掉卡片，把任务详情（objective / instruction / expectedOutput / 任务编号）全部塞进这条 @ 正文里
+
+三步全成：1. `collaborationInbox.register(collaboration)` 登记 → 2. 发协作卡片（带 workspace 名、目标、要求、轮次）或直发文本 → 3. `replyMention` / `sendMentionToChat` @ 目标 bot，文本带任务编号。
 
 派发前校验（`src/index.ts`）：只有 `teamLeaderId` 可以调用 `dispatch_task`（其他 bot 调用抛错）、目标必须在团队名单中且不能是自己、协作任务已到轮次上限时不能再派发。
 
@@ -69,7 +70,11 @@ sequenceDiagram
     CLI->>Lead: dispatch_task 工具调用
     Lead->>Svc: dispatch（校验 teamLeader 与目标）
     Svc->>Inbox: register 交接单（round=1）
-    Svc->>Dev: 协作卡片 + @ 目标（带任务编号）
+    alt 有原消息
+        Svc->>Dev: replyCard 协作卡 + replyMention @ 目标（带任务编号）
+    else 只有 chatId（定时任务等）
+        Svc->>Dev: sendCardToChat / sendMentionToChat 按 chatId 直发群（skipCard 时纯 @ 文本）
+    end
     Dev->>Inbox: consume(dispatchId, dev) 领取
     Dev->>CLI: 在同一 workspaceDir 执行 instruction
     CLI-->>Dev: 结果

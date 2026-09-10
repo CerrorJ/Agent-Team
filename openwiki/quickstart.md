@@ -25,7 +25,7 @@ Agent-Team 把**飞书**变成 AI 编程 CLI（Claude Code / Codex）的**指挥
 | Node.js | >= 22 | 运行时 |
 | pnpm | ^12.3.4（`devEngines`，缺失时自动下载） | 包管理 |
 | @larksuiteoapi/node-sdk | ^1.71 | 飞书 SDK |
-| @modelcontextprotocol/sdk | ^1.29 | 应用层 stdio MCP 服务（五个 `agent_os` 工具注册，见 [AI CLI 输出解析](domain/ai-cli-probe.md)） |
+| @modelcontextprotocol/sdk | ^1.29 | 应用层 stdio MCP 服务（五个 `agent_team` 工具注册，见 [AI CLI 输出解析](domain/ai-cli-probe.md)） |
 | croner | ^10 | 定时任务 cron 规则的下一次触发点计算（见 [定时任务调度](domain/scheduling.md)） |
 | tsx | ^4.23 | TS 直接执行（ESM） |
 | zod | ^4.4 | 配置与会话数据校验（`src/core/bot-registry.ts`、`src/core/session-store.ts`） |
@@ -101,4 +101,4 @@ flowchart LR
 |------|------|----------|
 | 任意 @ 触发协作 | [多 bot 协作](domain/collaboration.md) 的取件分支 | bot 消息 @ 当前 bot 但领取不到交接单时仅记日志按外部派活处理，通用路由未实现 |
 | 测试体系 | 无测试文件 | 当前无测试目录和测试框架 |
-| 部署/CI | `.github/workflows/openwiki-update.yml` | 仅有 OpenWiki 文档自动更新，无应用部署 CI |
+| 部署 CI | `SETUP.md`、`src/deploy-cli.ts`、`.github/workflows/` | 部署常驻已有 pm2 封装（`pnpm agent-team`，见 [运维手册](operations/runbook.md)），但仍无应用部署的 CI 流水线，仅有 OpenWiki 文档自动更新工作流 |

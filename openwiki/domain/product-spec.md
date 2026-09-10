@@ -62,13 +62,13 @@ sequenceDiagram
 几个关键点：
 
 - **落盘校验只做 local**：`assertProductSpecDocuments` 要求 Spec 是文件、Tickets 是目录且至少含一个 `.md` 的独立 ticket；CLI 声称写完但文件缺失时不允许进入确认环节。lark-doc 的产物在飞书侧，本地无文件可查
-- **确认后不自动派发**：只有 flow 带 `collaboration` 来源（方案是在协作任务中产出的）时，确认回调才经 [协作派发](collaboration.md) 把已确认方案交回 `reportToBotId`，指示「需要开发者实现时用 dispatch_task 交给 developer」；普通任务确认即结束
+- **确认后不自动派发**：只有 flow 带 `collaboration` 来源（方案是在协作任务中产出的）时，确认回调才经 [协作派发](collaboration.md) 把已确认方案交回 `reportToBotId`，指示「需要开发者实现时用 dispatch_task 交给 developer」；普通任务确认即结束。这份协作上下文随 flow 落盘在 `data/product-spec-flows.json`，重启后审批回报链路保持完整
 - **owner 校验**：`isProductSpecOwner` 优先比对 `unionId`（跨应用稳定身份），缺失才退回 `openId`；只有任务发起人可以确认
 - **同任务单流程**：`create()` 先把同 `taskId + botId` 的 pending 流程置 `expired`，重新提交即让旧卡片上的 token 失效
 
 ## 云文档评论区修订流
 
-配置 `lark-drive` skill 的 bot 会在启动时 `subscribeToDocumentComments()`（飞书 `drive.v1.user.subscription`，事件 `drive.notice.comment_add_v1`），用户在**待确认**的飞书方案文档评论区 @ 该 bot 时触发修订：
+配置 `lark-drive` skill 的 bot 会在启动时 `subscribeToDocumentComments()`（飞书 `drive.v1.user.subscription`，事件 `drive.notice.comment_add_v1`），订阅失败只打告警日志、不阻断进程启动（此时评论区修订流不可用，消息链路不受影响）。用户在**待确认**的飞书方案文档评论区 @ 该 bot 时触发修订：
 
 1. `src/index.ts` 的 `scheduleDocumentComment` 只处理 @ 本 bot 且 `findPendingByDocument` 命中待确认文档的评论；其余忽略
 2. 重复事件（飞书可能重推）按 `eventId` 去重，去重集合只记最近 1_000 条（Set 按插入序淘汰最旧）

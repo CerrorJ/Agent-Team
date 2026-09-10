@@ -13,6 +13,7 @@ tags: [reference, source-map, navigation]
 Agent-Team/
 ├── src/
 │   ├── index.ts              # 应用入口，AppRuntime 组装 + 多 bot 启动 + 消息编排
+│   ├── deploy-cli.ts         # agent-team 部署 CLI（pm2 封装：doctor/start/stop/restart/status/logs）
 │   ├── probe-cli.ts          # AI CLI headless 输出解析工具（独立运行）
 │   ├── probe-app-tool.ts     # 验证两家 CLI 都能注册应用层 MCP 工具（pnpm probe:tool）
 │   ├── im/
@@ -70,16 +71,20 @@ Agent-Team/
 ├── docs/
 │   ├── ClaudeCode和Codex在headless输出结构.md  # 两种 CLI 输出对照表
 │   └── 完整的内部交接单.md    # bot 间协作设计文档
-├── workspace-template/
-│   └── docs/agents/issue-tracker.md  # 新工作区的 issue 跟踪文档模板
+├── workspace-template/       # 新工作区模板：grill-me / to-spec / to-tickets / implement-ticket 四个 Skill
+│   │                         # + code-reviewer / tester 子代理定义（.claude .md 与 .codex .toml）
+│   └── docs/agents/issue-tracker.md  # 本地 Markdown issue 跟踪约定（.scratch/<slug>/ 下 spec 与 tickets）
+├── demo-server/              # 故障注入演示子包（pnpm --filter agent-team-demo-server）：可控故障模式
+│                             # 的 HTTP 服务 + 流量场景脚本 + log-patrol 巡检 Skill，演示定时巡检派活
 ├── .github/
 │   └── workflows/
 │       └── openwiki-update.yml    # OpenWiki 文档自动更新工作流
-├── .env.example              # 环境变量模板（BOTS_CONFIG、FEISHU_* 凭证、CLI_WORKDIR、*_TIMEOUT_MS）
+├── .env.example              # 环境变量模板（BOTS_CONFIG、FEISHU_* 凭证、CLI_WORKDIR、*_TIMEOUT_MS、PATROL_WEBHOOK_URL）
 ├── .gitignore                # 忽略 node_modules/ dist/ .env data/ *.log
 ├── .prettierrc / .prettierignore  # Prettier 格式化配置
 ├── eslint.config.js          # ESLint：箭头函数 + 声明间空行规则
 ├── CLAUDE.md                 # AI Agent 约定 + 运行说明 + 错题本
+├── SETUP.md                  # 部署手册：pm2 常驻（pnpm agent-team）与国内 ECS 部署步骤
 ├── AGENTS.md                 # OpenWiki 引用说明
 ├── package.json              # 项目配置与脚本
 ├── pnpm-lock.yaml            # 锁定依赖版本
@@ -117,7 +122,7 @@ Agent-Team/
 | `CardAction` | interface | 卡片回调：操作者 openId/unionId、messageId、按钮 value、`formValue` 表单值 |
 | `CardActionResponse` | interface | 回调应答：toast 与卡片更新 |
 | `BotOptions` | interface | 启动 bot 的配置（appId, appSecret, onMessage, onCardAction） |
-| `Bot` | interface | bot 能力接口（reply, replyCard, updateCard, replyMention, downloadResource, getIdentity） |
+| `Bot` | interface | bot 能力接口（reply, replyCard, updateCard, replyMention, sendCardToChat, sendMentionToChat, subscribeToDocumentComments, replyToDocumentComment, downloadResource, getIdentity） |
 | `startBot` | function | 创建 Lark.Client + 注册 dispatcher + 启动 WS 连接 |
 
 **内部函数：**
@@ -167,7 +172,7 @@ Agent-Team/
 
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
-| `bot-registry.ts` | `loadAgentOsConfig` / `parseAgentOsConfig` / `buildBotPrompt` / `BotConfig` / `AgentOsConfig` | bots.json 的 zod 校验（含 teamLeader）、凭证环境变量解析、工作目录优先级、提示词组装（详见 [多 bot 注册](domain/bot-registry.md)） |
+| `bot-registry.ts` | `loadAgentTeamConfig` / `parseAgentTeamConfig` / `buildBotPrompt` / `BotConfig` / `AgentTeamConfig` | bots.json 的 zod 校验（含 teamLeader）、凭证环境变量解析、工作目录优先级、提示词组装（详见 [多 bot 注册](domain/bot-registry.md)） |
 | `team-registry.ts` | `TeamRegistry` / `MissingSkill` | 团队名单上下文、Skill 缺失检查、`/team` 数据源 |
 | `clarification.ts` | `ClarificationRequestSchema` / `ClarificationFlowStore` / `findClarificationRequest` / `isClarificationOwner` | 需求澄清数据模型、按任务存储的流程状态机（详见 [需求澄清](domain/clarification.md)） |
 | `approval.ts` / `approval-store.ts` | `ApprovalRequestSchema` / `ApprovalFlowStore` / `JsonApprovalFlowStore` / `findApprovalRequest` / `formatApprovalDecision` | 高危操作审批数据模型、同任务旧流程过期、JSON 持久化（详见 [高危操作审批](domain/approval.md)） |
@@ -209,7 +214,7 @@ Agent-Team/
 
 | 文件 | 说明 |
 |------|------|
-| `app-tools-server.ts` | stdio MCP 服务（`agent_os`）：向两家 CLI 注册 `request_clarification` / `request_spec_approval` / `dispatch_task` / `schedule_manage` / `request_approval` 五个工具，返回值只是给 CLI 的确认文案，真正的卡片渲染与答案回传发生在应用层；`schedule_manage` 经本地 HTTP 接口回传主进程 |
+| `app-tools-server.ts` | stdio MCP 服务（`agent_team`）：向两家 CLI 注册 `request_clarification` / `request_spec_approval` / `dispatch_task` / `schedule_manage` / `request_approval` 五个工具，返回值只是给 CLI 的确认文案，真正的卡片渲染与答案回传发生在应用层；`schedule_manage` 经本地 HTTP 接口回传主进程 |
 
 ### src/cli/ — CLI 执行层
 
@@ -218,8 +223,8 @@ Agent-Team/
 | `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `CliCompactPlan` / `CliSessionSummary` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / stats / tool_call / result / error；Windows 下 prompt 走 stdin；压缩计划与会话摘要类型 |
 | `app-tools.ts` | 五个工具名常量 / `claudeAppToolArgs` / `codexAppToolArgs` | 应用层 MCP 工具注册：Claude 用 `--mcp-config` JSON，Codex 用 `-c` 配置覆盖；开发态借 tsx 跑 .ts 服务，编译产物用 node 跑 .js |
 | `registry.ts` | `getCliAdapter` / `listCliAdapters` / `parseCliId` | 按 `CliId` 取适配器（claude / codex）并列出引擎清单 |
-| `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译；`mcp__agent_os__*` 五个工具名归一为统一名后吐 `tool_call` |
-| `codex-adapter.ts` | `CodexAdapter` | `codex exec --json --skip-git-repo-check --yolo` 的参数组装与事件翻译（Windows 用 stdin prompt 与 `--dangerously-bypass-approvals-and-sandbox`）；`agent_os` 的 `mcp_tool_call` 吐 `tool_call`，`turn.completed` 额外吐 `stats` |
+| `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译；`mcp__agent_team__*` 五个工具名归一为统一名后吐 `tool_call` |
+| `codex-adapter.ts` | `CodexAdapter` | `codex exec --json --skip-git-repo-check --yolo` 的参数组装与事件翻译（Windows 用 stdin prompt 与 `--dangerously-bypass-approvals-and-sandbox`）；`agent_team` 的 `mcp_tool_call` 吐 `tool_call`，`turn.completed` 额外吐 `stats` |
 | `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、默认 2 小时超时（`CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖，0 或非法值回退默认）、AbortSignal 取消、`stopToolNames` 命中即杀进程；`tool_call` 按 toolUseId 去重收集，失败调用剔除 |
 | `native-compact.ts` | `compactCliSession` / `CompactCliSessionResult` | `/compact` 的原生上下文压缩：Claude 走 `-p - --resume` + stream-json，Codex 走 app-server JSON-RPC |
 | `native-sessions.ts` | `listNativeCliSessions` / `CliSessionSummary` | `/resume` 的会话清单：Claude 扫 `~/.claude/projects` JSONL，Codex 走 app-server `thread/list` |
@@ -238,9 +243,15 @@ Agent-Team/
 
 ### src/probe-app-tool.ts — 应用层工具探测
 
-**职责：** 验证两家 CLI 都能注册 `agent_os` MCP 服务，且 `request_clarification` 的入参能以统一工具名通过 zod 校验（`pnpm probe:tool <claude|codex> [工作目录]`）。出现未统一的工具名或没有合法澄清请求时直接抛错。
+**职责：** 验证两家 CLI 都能注册 `agent_team` MCP 服务，且 `request_clarification` 的入参能以统一工具名通过 zod 校验（`pnpm probe:tool <claude|codex> [工作目录]`）。出现未统一的工具名或没有合法澄清请求时直接抛错。
 
 **参见：** [需求澄清](domain/clarification.md)
+
+### src/deploy-cli.ts — 部署 CLI
+
+**职责：** `pnpm agent-team <命令>` 的 pm2 常驻封装（`doctor` / `start` / `stop` / `restart` / `status` / `logs`）。`start` 先检查 pm2 与 `.env` / `config/bots.json`、缺 `dist/index.js` 时自动 `pnpm build`，再按 pm2 中是否已登记同名进程选择 `restart` 或全新 `start`，最后 `pm2 save`。部署步骤见 `SETUP.md`（本地常驻与国内 ECS 部署）。
+
+**参见：** [运维手册](operations/runbook.md)
 
 ## 配置文件
 
@@ -261,4 +272,6 @@ Agent-Team/
 
 ### pnpm-workspace.yaml
 
-允许构建的原生依赖：`esbuild`、`protobufjs`
+工作区包含根包与 `demo-server`（故障注入演示子包）；允许构建的原生依赖：`esbuild`、`protobufjs`
+`
+`

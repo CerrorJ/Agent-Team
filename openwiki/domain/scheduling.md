@@ -87,7 +87,7 @@ sequenceDiagram
 - dispatcher（`src/app/scheduled-task-dispatcher.ts`）目前只有「直接执行」一条路，单独留层是为了以后接队列、并发上限等分发策略
 - runner 用 `messageId = threadId = scheduled-<task.id>` 的合成地址 `resolve` 会话，**同一任务每一轮都回到同一话题会话**，CLI 会话得以续接而不是每轮新开；会话状态走 creating→idle→active→idle
 - 会话仍处于 `active` 时抛「目标 bot 当前会话仍在执行」，由 scheduler 记 failed
-- 子进程 env 注入 `AGENT_OS_CHAT_ID` / `AGENT_OS_OWNER_OPEN_ID`，让应用层工具（审批卡、确认卡）知道结果发回哪里；这些事件也要求 CLI 内部流程产生 tool_call 才能触发
+- 子进程 env 注入 `AGENT_TEAM_CHAT_ID` / `AGENT_TEAM_OWNER_OPEN_ID`，让应用层工具（审批卡、确认卡）知道结果发回哪里；这些事件也要求 CLI 内部流程产生 tool_call 才能触发
 
 ## schedule_manage 工具
 
@@ -103,7 +103,7 @@ sequenceDiagram
 | `pause` / `resume` | 暂停 / 恢复 |
 | `logs` | 查看运行记录，只回最近 10 条避免刷爆 CLI 上下文 |
 
-工具调用本身走 MCP 子进程 → 本地 HTTP 接口的回路：`schedule_manage` 在 `src/mcp/app-tools-server.ts` 里用 `fetch` POST `http://127.0.0.1:${SCHEDULE_API_PORT}/api/schedules/manage`（默认 3101 端口），body 里带 `AGENT_OS_CHAT_ID` / `AGENT_OS_OWNER_OPEN_ID` 环境变量提供的会话上下文；接口不存在或连不上时返回 isError 文案给 CLI。
+工具调用本身走 MCP 子进程 → 本地 HTTP 接口的回路：`schedule_manage` 在 `src/mcp/app-tools-server.ts` 里用 `fetch` POST `http://127.0.0.1:${SCHEDULE_API_PORT}/api/schedules/manage`（默认 3101 端口），body 里带 `AGENT_TEAM_CHAT_ID` / `AGENT_TEAM_OWNER_OPEN_ID` 环境变量提供的会话上下文；接口不存在或连不上时返回 isError 文案给 CLI。
 
 ## 本地 HTTP 管理接口
 

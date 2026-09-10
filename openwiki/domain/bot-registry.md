@@ -53,7 +53,7 @@ bot 字段说明（zod `BotSchema` 校验）：
 
 ## 团队注册表（TeamRegistry）
 
-`src/core/team-registry.ts` 的 `TeamRegistry` 由 `AgentOsConfig`（`loadAgentOsConfig` 返回 `teamLeaderId + bots`）构造，提供三件事：
+`src/core/team-registry.ts` 的 `TeamRegistry` 由 `AgentTeamConfig`（`loadAgentTeamConfig` 返回 `teamLeaderId + bots`）构造，提供三件事：
 
 - **`contextFor(botId)`**：生成团队名单文本（成员 id、是否 Team Leader、role、Skills），由 `buildBotPrompt` 拼进每条任务提示词，并声明「团队成员都是真实飞书 bot，CLI 内部子 Agent 不能冒充」
 - **`findMissingSkills()`**：启动时逐 bot 检查 skills 是否存在于 `<workspace>/.agents/skills/<skill>/SKILL.md` 或 `.claude/skills/` 路径，缺失只打 `[Skill]` 告警不阻断启动
@@ -63,7 +63,7 @@ bot 字段说明（zod `BotSchema` 校验）：
 
 ```mermaid
 flowchart TD
-    ENV["读取 BOTS_CONFIG 路径"] --> LOAD["loadAgentOsConfig 读取 bots.json"]
+    ENV["读取 BOTS_CONFIG 路径"] --> LOAD["loadAgentTeamConfig 读取 bots.json"]
     LOAD --> SCHEMA{"zod 校验 + id 查重 + teamLeader 指向"}
     SCHEMA -->|失败| FAIL["报错退出（缺凭证 / 重复 id / 零启用 / 指向无效）"]
     SCHEMA -->|成功| TEAM["new TeamRegistry 构建团队注册表"]
@@ -76,14 +76,14 @@ flowchart TD
 
 从 bots.json 到多条长连接的启动链路。
 
-- **`loadAgentOsConfig`**：文件不存在时报「请复制 config/bots.example.json 后填写配置」；JSON/校验错误统一包装为「bot 配置文件格式错误」
-- **凭证解析**：`parseAgentOsConfig` 按 `appIdEnv` / `appSecretEnv` 读环境变量，缺失即抛「bot xxx 缺少环境变量 FOO」
+- **`loadAgentTeamConfig`**：文件不存在时报「请复制 config/bots.example.json 后填写配置」；JSON/校验错误统一包装为「bot 配置文件格式错误」
+- **凭证解析**：`parseAgentTeamConfig` 按 `appIdEnv` / `appSecretEnv` 读环境变量，缺失即抛「bot xxx 缺少环境变量 FOO」
 - **至少一个 bot**：全部停用时抛「至少需要启用一个 bot」
 - **每个 bot 独立连接**：`src/index.ts` 的 `startConfiguredBot()` 为每个配置创建 `startBot()`（各自 `Lark.Client` + `WSClient`），`Promise.all` 并发拉起，控制台打印 `[Bot XXX] default_cli=... workspace=...` 与 `[Bot XXX] 已连接`
 
 ## 工作目录优先级
 
-`workspaceDir` 的取值链（`parseAgentOsConfig` 内）：
+`workspaceDir` 的取值链（`parseAgentTeamConfig` 内）：
 
 ```
 bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键兜底）→ '.'（进程 cwd）
@@ -119,5 +119,7 @@ bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键
 - **新增配置字段**：同时改 `BotSchema` 与 `BotConfig` 接口；字段是可选的注意给默认值，否则旧 bots.json 启动即失败
 - **会话迁移**：`JsonSessionStore` 用 `legacyBotId`（取 `botConfigs[0].id`）和 `defaultWorkspaces` 给缺 `botId` / `workspaceDir` 的旧记录补值，改动字段时要同步 `migrateLegacySession`，详见 [会话与任务管理](session.md)
 - **凭证安全**：bots.json 只写环境变量**名**，真实凭证放 `.env`（见 [运维手册](../operations/runbook.md)），不要把密钥写进配置文件
-- **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseAgentOsConfig` 里的指向校验；`collaborationMaxRounds` 是 `dispatch_task` 发起协作的轮次上限（见 [多 bot 协作](collaboration.md)）
-- **新增 Skill**：除 bots.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空
+- **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseAgentTeamConfig` 里的指向校验；`collaborationMaxRounds` 是 `dispatch_task` 发起协作的轮次上限（见 [多 bot 协作](collaboration.md)）
+- **新增 Skill**：除 bots.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空。`workspace-template/` 提供了 `grill-me` / `to-spec` / `to-tickets` / `implement-ticket` 四个工作流 Skill 与 `code-reviewer` / `tester` 子代理定义（`.claude` 的 md 与 `.codex` 的 toml），可作为新工作区的起点
+s.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空
+�

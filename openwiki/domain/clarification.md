@@ -23,12 +23,12 @@ sequenceDiagram
     participant User as 飞书用户
     participant App as 应用层 index.ts
     participant CLI as CLI 子进程
-    participant MCP as agent_os MCP 服务
+    participant MCP as agent_team MCP 服务
     participant Store as ClarificationFlowStore
     participant Runner as clarification-runner
 
     User->>App: 发布任务（bot 带 grill-me skill）
-    App->>CLI: executeCli（已注入 agent_os MCP 配置）
+    App->>CLI: executeCli（已注入 agent_team MCP 配置）
     CLI->>MCP: request_clarification(questions)
     MCP-->>CLI: 确认文案（仅回执）
     CLI-->>App: tool_call 事件（统一工具名）
@@ -49,14 +49,14 @@ CLI 调工具、应用层收答案、答案回流续跑的完整闭环。
 
 ## 工具如何到达 CLI
 
-`src/cli/app-tools.ts` 在两家适配器组装命令行时**无条件**注入 `agent_os` stdio MCP 服务（`buildArgs` 与 `buildResumeArgs` 都带）：Claude Code 吃 `--mcp-config` JSON；Codex 只能用多段 `-c mcp_servers.agent_os.*=` 覆盖。服务端 `src/mcp/app-tools-server.ts` 注册的工具描述明确要求「一次最多 5 个问题、每题 2–4 个选项、提交后不要自行补全答案」。
+`src/cli/app-tools.ts` 在两家适配器组装命令行时**无条件**注入 `agent_team` stdio MCP 服务（`buildArgs` 与 `buildResumeArgs` 都带）：Claude Code 吃 `--mcp-config` JSON；Codex 只能用多段 `-c mcp_servers.agent_team.*=` 覆盖。服务端 `src/mcp/app-tools-server.ts` 注册的工具描述明确要求「一次最多 5 个问题、每题 2–4 个选项、提交后不要自行补全答案」。
 
 MCP 返回给 CLI 的只是一句确认文案——**真正的卡片渲染与答案回传发生在应用层**，依赖事件截获：
 
 | 引擎 | 截获点 | 归一 |
 |------|--------|------|
-| Claude Code | `tool_use` 块，工具名为 `mcp__agent_os__request_clarification` | 归一成 `request_clarification` 再吐 `tool_call`（`src/cli/claude-adapter.ts`） |
-| Codex | `item.started` + `mcp_tool_call` 且 `server === 'agent_os'` | 直接用统一名吐 `tool_call`（`src/cli/codex-adapter.ts`） |
+| Claude Code | `tool_use` 块，工具名为 `mcp__agent_team__request_clarification` | 归一成 `request_clarification` 再吐 `tool_call`（`src/cli/claude-adapter.ts`） |
+| Codex | `item.started` + `mcp_tool_call` 且 `server === 'agent_team'` | 直接用统一名吐 `tool_call`（`src/cli/codex-adapter.ts`） |
 
 `tool_call` 是 `CliEvent` 里专为应用层工具新增的事件类型（见 [AI CLI 输出解析](ai-cli-probe.md)）：`tool_start` 面向进度展示（带中文标签），`tool_call` 携带原始入参供应用层重建状态。`src/cli/runner.ts` 按 `toolUseId` 去重收集、失败的调用在 `tool_end` 剔除，最终随 `CliRunResult.toolCalls` 返回——所以 CLI 重试或提交多份时，`findClarificationRequest()` **从后往前**只认最后一份通过校验的请求。
 
