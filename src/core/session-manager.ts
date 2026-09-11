@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { CliId } from '../cli/types.js'
 import type { SessionStore } from './session-store.js'
+import { formatLocalDateTime } from './local-time.js'
 
 export interface Session {
   // Agent Team 自己的会话 ID，通过 Node.js 的 randomUUID() 生成
@@ -113,7 +114,7 @@ export class SessionManager {
     const existing = this.sessions.get(key)
     if (existing) return { session: existing, isNew: false }
 
-    const now = this.now().toISOString()
+    const now = formatLocalDateTime(this.now())
 
     const session: Session = {
       id: this.createId(),
@@ -151,7 +152,7 @@ export class SessionManager {
     const updated: Session = {
       ...current,
       status: nextStatus,
-      updatedAt: this.now().toISOString(),
+      updatedAt: formatLocalDateTime(this.now()),
     }
 
     const key = sessionKey(updated.botId, updated.chatId, updated.threadId)
@@ -180,7 +181,7 @@ export class SessionManager {
     const updated: Session = {
       ...rest,
       workspaceDir,
-      updatedAt: this.now().toISOString(),
+      updatedAt: formatLocalDateTime(this.now()),
     }
 
     const key = sessionKey(updated.botId, updated.chatId, updated.threadId)
@@ -219,7 +220,7 @@ export class SessionManager {
     const updated: Session = {
       ...current,
       cliSessionId,
-      updatedAt: this.now().toISOString(),
+      updatedAt: formatLocalDateTime(this.now()),
     }
 
     const key = sessionKey(updated.botId, updated.chatId, updated.threadId)

@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { z } from 'zod'
 import type { Session } from './session-manager.js'
+import { isLocalDateTime, migrateToLocalDateTime } from './local-time.js'
 
 export interface SessionStore {
   load(): Promise<Session[]>
@@ -17,8 +18,8 @@ const SessionSchema = z.object({
   cliSessionId: z.string().min(1).optional(),
   workspaceDir: z.string().min(1),
   status: z.enum(['creating', 'active', 'idle', 'closed']),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
+  createdAt: z.string().refine(isLocalDateTime),
+  updatedAt: z.string().refine(isLocalDateTime),
 })
 
 const recoverInterruptedSession = (session: Session): Session => {
@@ -31,8 +32,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null
 }
 
-// 给旧记录补齐缺失的 botId 和 workspaceDir。load() 里的循环现在只剩迁移、校验和恢复状态三步
-const migrateLegacySession = (
+// 给旧记录补齐缺失字段，并把历史 UTC ISO 时间转换为本机本地时间。
+const migrateSessionRecord = (
   row: unknown,
   legacyBotId: string,
   defaultWorkspaces: Readonly<Record<string, string>>,
@@ -41,20 +42,28 @@ const migrateLegacySession = (
 
   const needsBotId = !('botId' in row)
   const needsWorkspace = !('workspaceDir' in row)
-  if (!needsBotId && !needsWorkspace) {
-    return { candidate: row, migrated: false }
-  }
-
   const candidate: Record<string, unknown> = { ...row }
+  let migrated = false
   if (needsBotId) candidate.botId = legacyBotId
+  if (needsBotId) migrated = true
 
   const botId =
     typeof candidate.botId === 'string' ? candidate.botId : legacyBotId
 
   if (needsWorkspace) {
     candidate.workspaceDir = defaultWorkspaces[botId] ?? process.cwd()
+    migrated = true
   }
-  return { candidate, migrated: true }
+
+  for (const field of ['createdAt', 'updatedAt'] as const) {
+    if (typeof candidate[field] !== 'string') continue
+    const converted = migrateToLocalDateTime(candidate[field])
+    if (converted && converted !== candidate[field]) {
+      candidate[field] = converted
+      migrated = true
+    }
+  }
+  return { candidate, migrated }
 }
 
 export class JsonSessionStore implements SessionStore {
@@ -84,7 +93,7 @@ export class JsonSessionStore implements SessionStore {
     let needsCleanup = false
     for (const row of rows) {
       // 磁盘数据交给 zod 验证，过滤坏掉数据，active/creating 会被恢复成 idle，重启会话进程，active/creating 已经不存在了
-      const { candidate, migrated } = migrateLegacySession(
+      const { candidate, migrated } = migrateSessionRecord(
         row,
         this.legacyBotId,
         this.defaultWorkspaces,
