@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const CLARIFICATION_TOOL_NAME = 'request_clarification'
@@ -36,13 +38,17 @@ const serverInvocation = (): { command: string; args: string[] } => {
   return { command: process.execPath, args: [tsxCli, server] }
 }
 
-// 两个 CLI 注册 stdio MCP 服务的方式不同：Claude Code 吃 --mcp-config JSON，
-// Codex 只能用 -c 配置覆盖逐项展开
-export const claudeAppToolArgs = (): string[] => {
-  const invocation = serverInvocation()
-  return [
-    '--mcp-config',
-    JSON.stringify({
+// Windows 的 cmd 会剥掉内联 JSON 的引号，使 Claude 把它误判为相对配置文件路径。
+// Claude Code 同时支持 JSON 文件，因此统一落盘后传路径，避免转义差异。
+const writeClaudeMcpConfig = (invocation: {
+  command: string
+  args: string[]
+}): string => {
+  const directory = join(process.cwd(), 'data')
+  const filePath = join(directory, 'agent-team-mcp.json')
+
+  const content = JSON.stringify(
+    {
       mcpServers: {
         agent_team: {
           type: 'stdio',
@@ -50,8 +56,22 @@ export const claudeAppToolArgs = (): string[] => {
           args: invocation.args,
         },
       },
-    }),
-  ]
+    },
+    null,
+    2,
+  )
+
+  mkdirSync(directory, { recursive: true })
+  writeFileSync(filePath, `${content}\n`, 'utf8')
+
+  return filePath
+}
+
+// 两个 CLI 注册 stdio MCP 服务的方式不同：Claude Code 吃 --mcp-config 文件，
+// Codex 只能用 -c 配置覆盖逐项展开。
+export const claudeAppToolArgs = (): string[] => {
+  const invocation = serverInvocation()
+  return ['--mcp-config', writeClaudeMcpConfig(invocation)]
 }
 
 export const codexAppToolArgs = (): string[] => {

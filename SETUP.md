@@ -1,5 +1,3 @@
-# 第 31 节环境准备：部署 Agent Team
-
 ## 本地环境
 
 本机需要 Node 22+、pnpm，以及部署 CLI 依赖的 pm2：
