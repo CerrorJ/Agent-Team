@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type {
   CliAdapter,
   CliPromptInput,
@@ -35,6 +38,26 @@ const asModelName = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined
   const model = value.trim()
   return model ? model : undefined
+}
+
+const configModel = (path: string): string | undefined => {
+  try {
+    const content = readFileSync(path, 'utf8')
+    const match = content.match(/^\s*model\s*=\s*["']([^"']+)["']\s*$/m)
+    return match ? asModelName(match[1]) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// Codex exec 的 thread.started 通常不返回 model；先读 Agent Team profile，
+// 缺失时回退用户的默认 config.toml。CLI 真正报告模型时会优先采用报告值。
+const configuredCodexModel = (): string | undefined => {
+  const codexHome = process.env.CODEX_HOME?.trim() || join(homedir(), '.codex')
+  return (
+    configModel(join(codexHome, 'agent-team-runtime.config.toml')) ??
+    configModel(join(codexHome, 'config.toml'))
+  )
 }
 
 const shortText = (value: unknown, maxLength = 72): string | undefined => {
@@ -203,9 +226,20 @@ export class CodexAdapter implements CliAdapter {
       event.type === 'thread.started' &&
       typeof event.thread_id === 'string'
     ) {
-      const model = asModelName(event.model)
+      const reportedModel = asModelName(event.model)
+      const model = reportedModel ?? configuredCodexModel()
       return [
-        ...(model ? [{ type: 'model' as const, model }] : []),
+        ...(model
+          ? [
+              {
+                type: 'model' as const,
+                model,
+                source: reportedModel
+                  ? ('reported' as const)
+                  : ('configured' as const),
+              },
+            ]
+          : []),
         { type: 'session', sessionId: event.thread_id },
       ]
     }

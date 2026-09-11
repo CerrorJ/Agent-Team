@@ -222,7 +222,9 @@ export class ClaudeAdapter implements CliAdapter {
       const model = asModelName(event.model)
       return [
         ...(sessionId ? [{ type: 'session' as const, sessionId }] : []),
-        ...(model ? [{ type: 'model' as const, model }] : []),
+        ...(model
+          ? [{ type: 'model' as const, model, source: 'reported' as const }]
+          : []),
       ]
     }
     if (event.type === 'assistant') {

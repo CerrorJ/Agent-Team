@@ -240,6 +240,9 @@ const buildRunningElements = (
   const progress = options.progress
   const model = options.model ?? progress?.model
 
+  const modelLabel =
+    progress?.modelSource === 'configured' ? '配置模型' : '模型'
+
   const currentIcon = progress?.currentToolName
     ? `${TOOL_ICONS[progress.currentToolName] ?? '⚙️'} `
     : ''
@@ -266,7 +269,7 @@ const buildRunningElements = (
   const elements: Record<string, unknown>[] = [
     {
       tag: 'markdown',
-      content: `**${currentIcon}${progress?.current ?? options.detail}**${currentDetail}\n\n${meta}${model ? `\n_模型：\`${escapeInlineCode(model)}\`_` : '\n_模型：检测中_'}${context ? `\n_${context}_` : ''}${contextGrowth ? `\n_${contextGrowth}_` : ''}`,
+      content: `**${currentIcon}${progress?.current ?? options.detail}**${currentDetail}\n\n${meta}${model ? `\n_${modelLabel}：\`${escapeInlineCode(model)}\`_` : '\n_模型：检测中_'}${context ? `\n_${context}_` : ''}${contextGrowth ? `\n_${contextGrowth}_` : ''}`,
     },
   ]
 
@@ -304,6 +307,10 @@ const buildFinishedElements = (
 ): Record<string, unknown>[] => {
   const progress = options.progress
   const model = options.model ?? progress?.model
+
+  const modelLabel =
+    progress?.modelSource === 'configured' ? '配置模型' : '模型'
+
   const durationMs = options.stats?.durationMs ?? progress?.elapsedMs
   const totalTokens = usageTotal(options.stats)
 
@@ -319,7 +326,9 @@ const buildFinishedElements = (
   )
 
   const executionMeta = [
-    model ? `**模型** \`${escapeInlineCode(model)}\`` : '**模型** CLI 未返回',
+    model
+      ? `**${modelLabel}** \`${escapeInlineCode(model)}\``
+      : '**模型** CLI 未返回',
     durationMs !== undefined
       ? `**耗时** ${formatDuration(durationMs)}`
       : undefined,
