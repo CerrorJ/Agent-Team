@@ -10,6 +10,7 @@ export interface TaskActivity {
 
 export interface TaskProgressSnapshot {
   current: string
+  model?: string
   currentToolName?: string
   currentDetail?: string
   elapsedMs: number
@@ -39,6 +40,7 @@ export class TaskProgressTracker {
   private completedCount = 0
   private contextUsedTokens: number | undefined
   private contextStartTokens: number | undefined
+  private model: string | undefined
   constructor(
     private readonly now: () => number = Date.now,
     private readonly contextWindowTokens?: number,
@@ -49,6 +51,9 @@ export class TaskProgressTracker {
   }
   // 所有事件入口，用 ID 配对避免多个工具同时运行串线
   accept(event: CliEvent): TaskProgressSnapshot {
+    if (event.type === 'model') {
+      this.model = event.model
+    }
     if (event.type === 'context') {
       // 首个 context 事件的用量作为本轮基线
       this.contextStartTokens ??= event.usedTokens
@@ -86,6 +91,7 @@ export class TaskProgressTracker {
     return {
       current:
         active?.label ?? (this.toolCount ? '正在分析执行结果' : '正在理解任务'),
+      ...(this.model ? { model: this.model } : {}),
       ...(active ? { currentToolName: active.toolName } : {}),
       ...(active?.detail ? { currentDetail: active.detail } : {}),
       elapsedMs: Math.max(0, this.now() - this.startedAt),

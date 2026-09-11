@@ -16,6 +16,7 @@ import {
 interface CodexEvent {
   type?: unknown
   thread_id?: unknown
+  model?: unknown
   item?: unknown
   usage?: unknown
   error?: unknown
@@ -28,6 +29,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
 
 const asNumber = (value: unknown): number | undefined => {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+const asModelName = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined
+  const model = value.trim()
+  return model ? model : undefined
 }
 
 const shortText = (value: unknown, maxLength = 72): string | undefined => {
@@ -196,7 +203,11 @@ export class CodexAdapter implements CliAdapter {
       event.type === 'thread.started' &&
       typeof event.thread_id === 'string'
     ) {
-      return [{ type: 'session', sessionId: event.thread_id }]
+      const model = asModelName(event.model)
+      return [
+        ...(model ? [{ type: 'model' as const, model }] : []),
+        { type: 'session', sessionId: event.thread_id },
+      ]
     }
     if (event.type === 'error' || event.type === 'turn.failed') {
       return [{ type: 'error', message: errorMessage(event) }]

@@ -22,6 +22,7 @@ import {
 interface ClaudeEvent {
   type?: unknown
   subtype?: unknown
+  model?: unknown
   is_error?: unknown
   result?: unknown
   session_id?: unknown
@@ -63,6 +64,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
 
 const asNumber = (value: unknown): number | undefined => {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+const asModelName = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined
+  const model = value.trim()
+  return model ? model : undefined
 }
 
 const shortPath = (value: unknown): string | undefined => {
@@ -210,9 +217,13 @@ export class ClaudeAdapter implements CliAdapter {
     const sessionId =
       typeof event.session_id === 'string' ? event.session_id : undefined
 
-    // Claude Code 启动后会发出 system/init
-    if (event.type === 'system' && event.subtype === 'init' && sessionId) {
-      return [{ type: 'session', sessionId }]
+    // Claude Code 启动后会发出 system/init，其中 model 是这次实际使用的模型。
+    if (event.type === 'system' && event.subtype === 'init') {
+      const model = asModelName(event.model)
+      return [
+        ...(sessionId ? [{ type: 'session' as const, sessionId }] : []),
+        ...(model ? [{ type: 'model' as const, model }] : []),
+      ]
     }
     if (event.type === 'assistant') {
       const message = isRecord(event.message) ? event.message : {}

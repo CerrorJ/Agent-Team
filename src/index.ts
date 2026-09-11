@@ -485,6 +485,7 @@ const startConfiguredBot = async (
       progressHeartbeat.unref()
 
       const cliEnv = {
+        ...config.cliEnv,
         AGENT_TEAM_CHAT_ID: msg.chatId,
         AGENT_TEAM_OWNER_OPEN_ID:
           collaboration?.ownerOpenId ?? msg.senderOpenId,
@@ -498,6 +499,7 @@ const startConfiguredBot = async (
             cwd: session.workspaceDir,
             instructions: command.instructions,
             signal: run.signal,
+            env: cliEnv,
           }).then((result) => ({
             answer: result.message ?? '',
             sessionId: result.sessionId,
@@ -515,7 +517,8 @@ const startConfiguredBot = async (
               if (
                 event.type !== 'tool_start' &&
                 event.type !== 'tool_end' &&
-                event.type !== 'context'
+                event.type !== 'context' &&
+                event.type !== 'model'
               )
                 return
               progress.accept(event)
@@ -598,7 +601,8 @@ const startConfiguredBot = async (
                     if (
                       event.type !== 'tool_start' &&
                       event.type !== 'tool_end' &&
-                      event.type !== 'context'
+                      event.type !== 'context' &&
+                      event.type !== 'model'
                     )
                       return
                     progress.accept(event)
@@ -1024,6 +1028,7 @@ const scheduleDocumentComment = (
     try {
       await runProductDocumentComment({
         runtime,
+        config,
         bot,
         flow,
         comment,

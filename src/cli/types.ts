@@ -52,6 +52,8 @@ export interface CliSessionSummary {
 // tool_start 面向进度展示（带 label），tool_call 携带原始入参供应用层重建状态。
 export type CliEvent =
   | { type: 'session'; sessionId: string }
+  // CLI 在启动事件中报告的实际模型名；用于卡片展示，不参与会话状态机。
+  | { type: 'model'; model: string }
   | {
       type: 'tool_start'
       toolUseId: string

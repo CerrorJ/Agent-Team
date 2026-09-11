@@ -13,6 +13,7 @@ export interface CompactCliSessionOptions {
   instructions?: string
   signal?: AbortSignal
   timeoutMs?: number
+  env?: Record<string, string>
 }
 
 export interface CompactCliSessionResult {
@@ -65,6 +66,7 @@ const runClaudeCompact = (
 
     const child = spawnCli(plan.command, plan.args, {
       cwd: options.cwd,
+      env: options.env ? { ...process.env, ...options.env } : undefined,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 
@@ -165,6 +167,7 @@ const runCodexCompact = (
 
     const child = spawnCli(plan.command, plan.args, {
       cwd: options.cwd,
+      env: options.env ? { ...process.env, ...options.env } : undefined,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 

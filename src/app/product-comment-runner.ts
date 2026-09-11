@@ -3,6 +3,7 @@
  * 把最终回答回写到原评论。不产生新的确认卡，原待确认状态继续有效。
  */
 import { getCliAdapter } from '../cli/registry.js'
+import type { BotConfig } from '../core/bot-registry.js'
 import type { ProductSpecFlow } from '../core/product-spec.js'
 import type { Bot, IncomingDocumentComment } from '../im/lark.js'
 import { executeCli } from './cli-execution.js'
@@ -11,11 +12,12 @@ import type { AppRuntime } from './runtime.js'
 
 export const runProductDocumentComment = async (options: {
   runtime: AppRuntime
+  config: BotConfig
   bot: Bot
   flow: ProductSpecFlow
   comment: IncomingDocumentComment
 }): Promise<void> => {
-  const { runtime, bot, flow, comment } = options
+  const { runtime, config, bot, flow, comment } = options
   const session = runtime.sessions.get(flow.sessionId)
   if (!session || session.status === 'closed') {
     throw new Error('评论对应的产品会话已经失效')
@@ -45,6 +47,7 @@ export const runProductDocumentComment = async (options: {
       run.signal,
       [],
       () => undefined,
+      config.cliEnv,
     )
 
     if (result.sessionId) {

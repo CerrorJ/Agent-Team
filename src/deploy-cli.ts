@@ -83,16 +83,16 @@ const localStart = (): void => {
   requireConfig()
   ensureBuild()
 
-  // pm2 里已登记同名进程就 restart，否则全新 start
+  // 每次都重建 PM2 条目，防止 --update-env 保留已经从 CC Switch 移除的旧变量。
+  // 会话与定时任务都在本地持久化文件中，重建进程不会丢失它们。
   const running =
     runCommandSync('pm2', ['describe', 'agent-team'], { stdio: 'ignore' })
       .status === 0
 
   if (running) {
-    run(['pm2', 'restart', 'agent-team'])
-  } else {
-    run(['pm2', 'start', 'dist/index.js', '--name', 'agent-team'])
+    run(['pm2', 'delete', 'agent-team'])
   }
+  run(['pm2', 'start', 'dist/index.js', '--name', 'agent-team'])
   run(['pm2', 'save'])
 }
 
@@ -102,10 +102,7 @@ cli.command('stop', '停止本地进程').action(() => {
   requirePm2()
   run(['pm2', 'stop', 'agent-team'])
 })
-cli.command('restart', '重启本地进程').action(() => {
-  requirePm2()
-  run(['pm2', 'restart', 'agent-team'])
-})
+cli.command('restart', '重启本地进程').action(localStart)
 cli.command('status', '查看本地进程状态').action(() => {
   requirePm2()
   run(['pm2', 'status'])

@@ -36,6 +36,7 @@ export interface TaskCardOptions {
   status: TaskStatus
   detail: string
   progress?: TaskProgressSnapshot
+  model?: string
   answer?: string
   stats?: CliRunStats
   technicalDetail?: string
@@ -237,6 +238,7 @@ const buildRunningElements = (
   options: TaskCardOptions,
 ): Record<string, unknown>[] => {
   const progress = options.progress
+  const model = options.model ?? progress?.model
 
   const currentIcon = progress?.currentToolName
     ? `${TOOL_ICONS[progress.currentToolName] ?? '⚙️'} `
@@ -264,7 +266,7 @@ const buildRunningElements = (
   const elements: Record<string, unknown>[] = [
     {
       tag: 'markdown',
-      content: `**${currentIcon}${progress?.current ?? options.detail}**${currentDetail}\n\n${meta}${context ? `\n_${context}_` : ''}${contextGrowth ? `\n_${contextGrowth}_` : ''}`,
+      content: `**${currentIcon}${progress?.current ?? options.detail}**${currentDetail}\n\n${meta}${model ? `\n_模型：\`${escapeInlineCode(model)}\`_` : '\n_模型：检测中_'}${context ? `\n_${context}_` : ''}${contextGrowth ? `\n_${contextGrowth}_` : ''}`,
     },
   ]
 
@@ -301,6 +303,7 @@ const buildFinishedElements = (
   options: TaskCardOptions,
 ): Record<string, unknown>[] => {
   const progress = options.progress
+  const model = options.model ?? progress?.model
   const durationMs = options.stats?.durationMs ?? progress?.elapsedMs
   const totalTokens = usageTotal(options.stats)
 
@@ -316,6 +319,7 @@ const buildFinishedElements = (
   )
 
   const executionMeta = [
+    model ? `**模型** \`${escapeInlineCode(model)}\`` : '**模型** CLI 未返回',
     durationMs !== undefined
       ? `**耗时** ${formatDuration(durationMs)}`
       : undefined,

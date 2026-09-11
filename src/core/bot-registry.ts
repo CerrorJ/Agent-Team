@@ -16,6 +16,9 @@ export interface BotConfig {
   workspaceDir: string
   reviewBy?: string
   collaborationMaxRounds: number
+  // 键为传给 CLI 的环境变量名，值为 .env 中保存实际值的变量名。
+  // 配置文件只保存引用，避免把模型供应商密钥写入 bots.json。
+  cliEnv: Record<string, string>
 }
 export interface AgentTeamConfig {
   teamLeaderId: string
@@ -54,6 +57,13 @@ const BotSchema = z.object({
     .max(32)
     .optional()
     .default(16),
+  cliEnv: z
+    .record(
+      z.string().regex(/^[A-Z_][A-Z0-9_]*$/),
+      z.string().regex(/^[A-Z_][A-Z0-9_]*$/),
+    )
+    .optional()
+    .default({}),
   enabled: z.boolean().optional().default(true),
 })
 
@@ -87,6 +97,19 @@ export const parseAgentTeamConfig = (
       if (!appSecret) {
         throw new Error(`bot ${bot.id} 缺少环境变量 ${bot.appSecretEnv}`)
       }
+
+      const cliEnv = Object.fromEntries(
+        Object.entries(bot.cliEnv).map(([targetName, sourceName]) => {
+          const value = env[sourceName]?.trim() ?? ''
+          if (!value) {
+            throw new Error(
+              `bot ${bot.id} 的 CLI 环境变量 ${targetName} 缺少 ${sourceName}`,
+            )
+          }
+          return [targetName, value]
+        }),
+      )
+
       return {
         id: bot.id,
         appId,
@@ -97,6 +120,7 @@ export const parseAgentTeamConfig = (
         systemPrompt: bot.systemPrompt,
         reviewBy: bot.reviewBy,
         collaborationMaxRounds: bot.collaborationMaxRounds,
+        cliEnv,
         workspaceDir: resolveWorkspacePath(
           bot.workspace ?? env.CLI_WORKDIR ?? env.CLAUDE_WORKDIR ?? '.',
           baseDirectory,

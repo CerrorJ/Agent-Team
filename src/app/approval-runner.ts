@@ -79,12 +79,14 @@ export const continueApprovalFlow = async (options: {
         if (
           event.type !== 'tool_start' &&
           event.type !== 'tool_end' &&
-          event.type !== 'context'
+          event.type !== 'context' &&
+          event.type !== 'model'
         )
           return
         progress.accept(event)
         renderProgress()
       },
+      config.cliEnv,
     )
 
     clearInterval(heartbeat)
