@@ -138,7 +138,7 @@ flowchart TD
 - `registry.ts` — 按 `CliId` 取适配器（`claude` / `codex`），并列出启动日志中打印的引擎清单
 - `claude-adapter.ts` — 把 Claude Code `--output-format stream-json` 的一行输出翻译为 `CliEvent`
 - `codex-adapter.ts` — 把 Codex `exec --json` 的事件流翻译为同一套 `CliEvent`
-- `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、默认 2 小时超时（可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）、支持 `AbortSignal` 取消；`stopToolNames` 命中应用层工具调用时立即终止子进程并把该次调用随结果返回；`tool_call` 按 `toolUseId` 去重收集，失败的调用在 `tool_end` 剔除，只把成功的随结果返回
+- `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、默认 2 小时超时（可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）、支持 `AbortSignal` 取消；`env` 选项以 `{...process.env, ...env}` 合并注入 per-bot `cliEnv` 模型覆盖与 `AGENT_TEAM_*` 会话上下文（见 [多 bot 注册](../domain/bot-registry.md)）；`stopToolNames` 命中应用层工具调用时立即终止子进程并把该次调用随结果返回；`tool_call` 按 `toolUseId` 去重收集，失败的调用在 `tool_end` 剔除，只把成功的随结果返回
 - `native-compact.ts` — `/compact` 的原生上下文压缩：Claude 走 stream-json，Codex 走 app-server JSON-RPC
 - `native-sessions.ts` — `/resume` 的会话清单：Claude 扫本地 JSONL，Codex 走 app-server `thread/list`
 - `spawn-cli.ts` — Windows 下以 shell 启动 `.cmd` 包装的 CLI，并用 `taskkill /t /f` 连进程树清理
@@ -183,6 +183,5 @@ sequenceDiagram
 - **事件回调尽快返回**：`onMessage` 回调中先回复初始卡片，后续执行通过 `void executeCli(...)` 在后台异步执行，不阻塞飞书事件确认；卡片回调同理——澄清答案收齐后先返回 toast + 过渡卡片，CLI 续跑放进 `queueMicrotask`
 - **卡片更新复用 message_id**：先 `replyCard` 拿到 `message_id`，后续用 `updateCard` 同卡刷新
 - **统一事件协议**：Runner 只消费适配器翻译后的 `CliEvent`，新增 CLI 只需实现 `CliAdapter` 并在 `registry.ts` 注册，不动执行与展示逻辑；应用层 MCP 工具（五个 agent_team 工具）通过额外的 `tool_call` 事件携带原始入参，应用层据此截获并渲染交互卡片；主任务执行时把 `request_approval` 声明为**停止型工具**——runner 一看到就终止子进程，CLI 不必等审批结果再退出
-- **bot 配置与凭证分离**：bots.json 只存环境变量名，真实凭证只从 `process.env` 读取，详见 [多 bot 注册](../domain/bot-registry.md) 与 [运维手册](../operations/runbook.md)
-- **ESM only**：所有导入使用 `.js` 后缀（TypeScript 的 ESM 约定）
+- **bot 配置与凭证分离**：bots.json 只存环境变量名（飞书凭证与 per-bot CLI 模型后端的 `cliEnv` 映射同理），真实值只从 `process.env` 读取，详见 [多 bot 注册](../domain/bot-registry.md) 与 [运维手册](../operations/runbook.md)
 - **ESM only**：所有导入使用 `.js` 后缀（TypeScript 的 ESM 约定）

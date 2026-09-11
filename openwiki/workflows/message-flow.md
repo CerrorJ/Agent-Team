@@ -143,7 +143,7 @@ const hasThread = !!msg.threadId || !!msg.rootId;
 
 后台执行链路由 [架构总览](../architecture/overview.md) 中的执行层组成：
 
-1. `runCli()`（`src/cli/runner.ts`）`spawn` CLI 子进程，命令与参数由所选适配器的 `buildArgs` / `buildResumeArgs` 生成：Claude Code 为 `-p <prompt> --output-format stream-json --verbose --dangerously-skip-permissions`（续跑加 `--resume <sessionId>`），Codex 为 `exec --json --skip-git-repo-check --yolo <prompt>`（续跑为 `exec resume --json ... <sessionId>`；Windows 下以 stdin 传 prompt 并用 `--dangerously-bypass-approvals-and-sandbox` 替代 `--yolo`）。两家都无条件注入 `agent_team` stdio MCP 服务（Claude `--mcp-config` / Codex `-c` 覆盖，见 [需求澄清](../domain/clarification.md)）
+1. `runCli()`（`src/cli/runner.ts`）`spawn` CLI 子进程，命令与参数由所选适配器的 `buildArgs` / `buildResumeArgs` 生成：Claude Code 为 `-p <prompt> --output-format stream-json --verbose --dangerously-skip-permissions`（续跑加 `--resume <sessionId>`），Codex 为 `exec --json --skip-git-repo-check --yolo <prompt>`（续跑为 `exec resume --json ... <sessionId>`；Windows 下以 stdin 传 prompt 并用 `--dangerously-bypass-approvals-and-sandbox` 替代 `--yolo`）。两家都无条件注入 `agent_team` stdio MCP 服务（Claude `--mcp-config` / Codex `-c` 覆盖，见 [需求澄清](../domain/clarification.md)）。子进程环境为 `{...process.env, ...cliEnv, AGENT_TEAM_CHAT_ID, AGENT_TEAM_OWNER_OPEN_ID}`：`cliEnv` 是该 bot 的 per-bot CLI 模型后端覆盖（可选，见 [多 bot 注册](../domain/bot-registry.md)），两个 `AGENT_TEAM_*` 变量把会话上下文传给应用层工具
 2. stdout 逐行进入适配器的 `parseEvents()`，翻译成统一 `CliEvent`（两套引擎的翻译对照见 [AI CLI 输出解析](../domain/ai-cli-probe.md)）
 3. `onEvent` 回调只处理 `tool_start` / `tool_end` / `context` 三类事件，喂给 `TaskProgressTracker`
 4. `TaskProgressTracker` 用 `toolUseId` 配对起止事件，维护当前工具、最近完成轨迹（上限 12 条）和上下文 token 基线，`snapshot()` 输出卡片所需快照

@@ -1,7 +1,7 @@
 ---
 type: Domain
 title: 多 bot 注册
-description: config/bots.json 注册多个飞书 bot——zod 校验、凭证环境变量解析、默认执行引擎与工作目录优先级、systemPrompt 拼接、每个 bot 独立长连接与会话隔离
+description: config/bots.json 注册多个飞书 bot——zod 校验、凭证环境变量解析、默认执行引擎与工作目录优先级、cliEnv per-bot CLI 模型配置、systemPrompt 拼接、每个 bot 独立长连接与会话隔离
 tags: [domain, bots, config, multi-tenant]
 ---
 
@@ -48,6 +48,7 @@ bot 字段说明（zod `BotSchema` 校验）：
 | `reviewBy` | 可选，bot id 格式 | 历史字段：启动时仍做指向校验，但运行时不再自动触发审查；协作派发统一走 `dispatch_task` 工具（见 [多 bot 协作](collaboration.md)） |
 | `collaborationMaxRounds` | 整数 1–32，默认 16 | 协作允许的交接总次数（见 [多 bot 协作](collaboration.md)） |
 | `enabled` | 可选，默认 `true` | 为 `false` 的 bot 在解析阶段即被过滤，不索取凭证、不建连接 |
+| `cliEnv` | 可选 `Record<string, string>`，键值均须匹配 `/^[A-Z_][A-Z0-9_]*$/`，默认 `{}` | per-bot CLI 模型配置：键为传给 CLI 子进程的环境变量名，值为 `.env` 中保存实际值的变量名，见下文 |
 
 启动期校验（失败即退出）：`teamLeader` 指向未启用的 bot、`reviewBy` 指向未启用或指向自己、bot id 重复、启用的 bot 缺凭证、全部停用。
 
@@ -80,6 +81,40 @@ flowchart TD
 - **凭证解析**：`parseAgentTeamConfig` 按 `appIdEnv` / `appSecretEnv` 读环境变量，缺失即抛「bot xxx 缺少环境变量 FOO」
 - **至少一个 bot**：全部停用时抛「至少需要启用一个 bot」
 - **每个 bot 独立连接**：`src/index.ts` 的 `startConfiguredBot()` 为每个配置创建 `startBot()`（各自 `Lark.Client` + `WSClient`），`Promise.all` 并发拉起，控制台打印 `[Bot XXX] default_cli=... workspace=...` 与 `[Bot XXX] 已连接`
+
+## per-bot CLI 模型配置（cliEnv）
+
+默认情况下，Claude Code 与 Codex 的模型后端使用各自的用户级配置（`~/.claude/settings.json` 或 CC Switch）。`cliEnv` 允许**单个 bot 覆盖**这套默认：配置文件只保存「环境变量名 → 环境变量名」的引用，真实值（如 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL` 及各档位模型映射）放 `.env`，模型供应商密钥不会写进 `bots.json`。
+
+模板示例（`config/bots.example.json` 的 ceo-assistant，把 11 个 `ANTHROPIC_*` 键映射到 `CEO_ZHIPU_*` 变量）：
+
+```json
+{
+  "id": "ceo-assistant",
+  "cliEnv": {
+    "ANTHROPIC_BASE_URL": "CEO_ZHIPU_ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN": "CEO_ZHIPU_ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_MODEL": "CEO_ZHIPU_ANTHROPIC_MODEL"
+  }
+}
+```
+
+行为要点（`src/core/bot-registry.ts` 的 `parseAgentTeamConfig`）：
+
+- **启动期严格解析**：逐条按 source 变量名读 `.env`，缺失或为空即抛 `bot xxx 的 CLI 环境变量 ANTHROPIC_BASE_URL 缺少 CEO_ZHIPU_ANTHROPIC_BASE_URL` 并退出——与 `.env.example`「留空表示不启用」的注释不同，**写了 cliEnv 映射就必须填值**；不启用覆盖就不要在 bots.json 里写该映射
+- **注入是合并而非替换**：`runCli` 以 `{ ...process.env, ...env }` 注入子进程（`src/cli/runner.ts`），未覆盖的变量照常继承用户级 CLI 配置
+- **不配 cliEnv 的 bot 完全继承用户级配置**，与其他 bot 的覆盖互不影响
+- **覆盖只按 bot 生效**，与话题使用的引擎无关：映射变量名由 CLI 自行解释（示例用 Claude 的 `ANTHROPIC_*` 族），给 Codex bot 配覆盖需用 `CODEX_*` 相应变量
+
+注入点覆盖该 bot 的**每一次** CLI 子进程执行，保证续跑不丢后端：
+
+| 执行路径 | 注入位置 |
+|----------|----------|
+| 主任务与 `/compact` 压缩 | `src/index.ts`（`cliEnv` 与 `AGENT_TEAM_CHAT_ID` / `AGENT_TEAM_OWNER_OPEN_ID` 一并注入 `executeCli` / `compactCliSession`） |
+| 澄清答案收齐续跑、方案重试 | `src/app/clarification-runner.ts` |
+| 审批决定回传续跑 | `src/app/approval-runner.ts` |
+| 方案评论区修改 | `src/app/product-comment-runner.ts` |
+| 定时任务直接执行 | `src/app/scheduled-task-runner.ts`（`target.cliEnv` + `AGENT_TEAM_*`） |
 
 ## 工作目录优先级
 
@@ -118,8 +153,7 @@ bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键
 
 - **新增配置字段**：同时改 `BotSchema` 与 `BotConfig` 接口；字段是可选的注意给默认值，否则旧 bots.json 启动即失败
 - **会话迁移**：`JsonSessionStore` 用 `legacyBotId`（取 `botConfigs[0].id`）和 `defaultWorkspaces` 给缺 `botId` / `workspaceDir` 的旧记录补值，改动字段时要同步 `migrateLegacySession`，详见 [会话与任务管理](session.md)
-- **凭证安全**：bots.json 只写环境变量**名**，真实凭证放 `.env`（见 [运维手册](../operations/runbook.md)），不要把密钥写进配置文件
+- **凭证安全**：bots.json 只写环境变量**名**（飞书凭证与 `cliEnv` 模型后端同理），真实凭证放 `.env`（见 [运维手册](../operations/runbook.md)），不要把密钥写进配置文件
+- **cliEnv 覆盖**：新增映射时必须同步在 `.env` 补上 source 变量的值，否则启动即抛「缺少 xxx」；调整后用 [运维手册](../operations/runbook.md) 的启动检查验证
 - **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseAgentTeamConfig` 里的指向校验；`collaborationMaxRounds` 是 `dispatch_task` 发起协作的轮次上限（见 [多 bot 协作](collaboration.md)）
 - **新增 Skill**：除 bots.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空。`workspace-template/` 提供了 `grill-me` / `to-spec` / `to-tickets` / `implement-ticket` 四个工作流 Skill 与 `code-reviewer` / `tester` 子代理定义（`.claude` 的 md 与 `.codex` 的 toml），可作为新工作区的起点
-s.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空
-�

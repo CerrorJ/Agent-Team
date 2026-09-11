@@ -19,10 +19,11 @@ tags: [operations, runbook, configuration, troubleshooting]
 | `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` | 按引擎覆盖 CLI 子进程超时（默认 2 小时）；也可用统一 `CLI_TIMEOUT_MS`，设 0 或非法值回退默认，**不支持不限时** | 否 |
 | `SCHEDULE_API_PORT` / `SCHEDULE_API_TOKEN` | 定时任务本地 HTTP 管理接口的端口（默认 3101）与 `x-api-token` 鉴权令牌；未配置 token 时接口完全不设防，只当本机接口用 | 否 |
 | `TEST_CHAT_ID` / `OWNER_OPEN_ID` | 测试群与所有者 open_id；bot 消息（外部派活）场景下 `OWNER_OPEN_ID` 兜底作为发起人 | 否 |
+| `CEO_ZHIPU_ANTHROPIC_*` 等被 `cliEnv` 引用的变量 | per-bot CLI 模型后端覆盖：`bots.json` 里 `cliEnv` 映射的 source 变量（模板把 ceo-assistant 的 11 个 `ANTHROPIC_*` 键指向 `CEO_ZHIPU_*`），值留空会启动报错；变量名自定义，见 [多 bot 注册](../domain/bot-registry.md) | 否（配置了 cliEnv 才必需） |
 
 首次配置需要两步：`cp .env.example .env` 填凭证，再 `cp config/bots.example.json config/bots.json` 注册 bot（字段含义见 [多 bot 注册](../domain/bot-registry.md)）。
 
-> Claude Code 与 Codex 的模型后端使用各自的用户级配置（如 `~/.claude/settings.json` 或 CC Switch），不经过本项目环境变量。
+> Claude Code 与 Codex 的模型后端默认使用各自的用户级配置（如 `~/.claude/settings.json` 或 CC Switch），不经过本项目环境变量；仅当 bot 在 `bots.json` 配置了 `cliEnv` 时才按 bot 覆盖（如 CEO 走智谱直连、其他 Claude bot 继续跟随 CC Switch），机制见 [多 bot 注册](../domain/bot-registry.md) 的 per-bot CLI 模型配置一节。
 
 ### 安全约定
 
@@ -55,6 +56,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 |------|------|------|
 | `找不到 bot 配置文件` | 未创建 `config/bots.json` | `cp config/bots.example.json config/bots.json` 后填写 |
 | `bot xxx 缺少环境变量 XXX` | `.env` 缺少该 bot 的凭证变量 | 按 `bots.json` 里的 `appIdEnv` / `appSecretEnv` 名字补齐 |
+| `bot xxx 的 CLI 环境变量 X 缺少 Y` | `cliEnv` 映射的 source 变量在 `.env` 里缺失或为空（严格校验，留空即报错） | 补上 `Y` 的值；不启用该 bot 的模型覆盖就从 `bots.json` 删掉这条映射 |
 | `bot id 不能重复` / 校验失败 | `bots.json` 结构不合法（如缺 `teamLeader`、bot 缺 `role`） | 对照 zod 校验规则，见 [多 bot 注册](../domain/bot-registry.md) |
 | `工作目录不存在` | bot `workspace` / `CLI_WORKDIR` 指向的路径无效 | 修正路径或创建目录 |
 | 连接超时 | 网络问题或凭证错误 | 确认 App ID / Secret 正确，网络可达飞书 OpenAPI |
