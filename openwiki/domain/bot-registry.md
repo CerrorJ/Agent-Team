@@ -152,8 +152,8 @@ bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键
 ## 变更指引
 
 - **新增配置字段**：同时改 `BotSchema` 与 `BotConfig` 接口；字段是可选的注意给默认值，否则旧 bots.json 启动即失败
-- **会话迁移**：`JsonSessionStore` 用 `legacyBotId`（取 `botConfigs[0].id`）和 `defaultWorkspaces` 给缺 `botId` / `workspaceDir` 的旧记录补值，改动字段时要同步 `migrateLegacySession`，详见 [会话与任务管理](session.md)
+- **会话迁移**：`JsonSessionStore` 用 `legacyBotId`（取 `botConfigs[0].id`）和 `defaultWorkspaces` 给缺 `botId` / `workspaceDir` 的旧记录补值，改动字段时要同步 `migrateSessionRecord`，详见 [会话与任务管理](session.md)
 - **凭证安全**：bots.json 只写环境变量**名**（飞书凭证与 `cliEnv` 模型后端同理），真实凭证放 `.env`（见 [运维手册](../operations/runbook.md)），不要把密钥写进配置文件
 - **cliEnv 覆盖**：新增映射时必须同步在 `.env` 补上 source 变量的值，否则启动即抛「缺少 xxx」；调整后用 [运维手册](../operations/runbook.md) 的启动检查验证
 - **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseAgentTeamConfig` 里的指向校验；`collaborationMaxRounds` 是 `dispatch_task` 发起协作的轮次上限（见 [多 bot 协作](collaboration.md)）
-- **新增 Skill**：除 bots.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空。`workspace-template/` 提供了 `grill-me` / `to-spec` / `to-tickets` / `implement-ticket` 四个工作流 Skill 与 `code-reviewer` / `tester` 子代理定义（`.claude` 的 md 与 `.codex` 的 toml），可作为新工作区的起点
+- **新增 Skill**：除 bots.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空。`workspace-template/` 提供了 `grill-me` / `to-spec` / `to-tickets` / `implement-ticket` / `verify` 五个工作流 Skill 与 `code-reviewer` / `tester` 子代理定义（`.claude` 的 md 与 `.codex` 的 toml），可作为新工作区的起点（模板里 tester bot 的 `verify` Skill 按验收标准操作真实运行的应用给出独立结论）
