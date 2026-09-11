@@ -51,7 +51,7 @@ stateDiagram-v2
 `src/core/session-store.ts` 把会话数组写到 `data/sessions.json`：
 
 - **zod 校验**：`SessionSchema` 逐行 `safeParse`，坏数据直接丢弃并触发清理重写
-- **旧记录迁移**：`migrateLegacySession` 给缺少 `botId` / `workspaceDir` 的旧记录补默认值（归入首个 bot 的工作目录），迁移后同样触发清理重写
+- **旧记录迁移**：`migrateSessionRecord` 给缺少 `botId` / `workspaceDir` 的旧记录补默认值（归入首个 bot 的工作目录），并把历史 UTC ISO 时间戳转成本地时间格式（`src/core/local-time.ts` 的 `migrateToLocalDateTime`；会话时间统一用 `formatLocalDateTime` 的 `YYYY-MM-DD HH:mm:ss` 本地时间、不带时区，便于人工排查），迁移后同样触发清理重写
 - **重启恢复**：加载时 `creating` / `active` 一律回落成 `idle`——进程重启意味着任务已死，不能让会话卡在假活跃状态
 - **原子写入**：先写 `.tmp` 临时文件再 `rename`，避免写一半导致文件损坏
 - **串行写队列**：`writeQueue` Promise 链保证并发保存不交错
@@ -86,7 +86,7 @@ stateDiagram-v2
 
 ## 变更指引
 
-- **新增状态或流转**：同时改 `SessionStatus`、`ALLOWED_TRANSITIONS` 和 `session-store.ts` 的 zod `SessionSchema`，三处不一致会在加载时把会话当坏数据丢掉
+- **新增状态或流转**：同时改 `SessionStatus`、`ALLOWED_TRANSITIONS` 和 `session-store.ts` 的 zod `SessionSchema`，三处不一致会在加载时把会话当坏数据丢掉（时间字段还被 `isLocalDateTime` 约束为本地时间格式）
 - **新增命令**：在 `command-parser.ts` 的正则和 `SlashCommand` / `CliRequest` 里加，再到 `src/app/command-handler.ts` 补处理分支
 - **执行引擎扩展**：`cliId` 与 `src/cli/types.ts` 的 `CliId` 联动，`claude` / `codex` 均已实现，适配器在 `src/cli/registry.ts` 注册；对照表见 [AI CLI 输出解析](ai-cli-probe.md)
 - **切换工作目录**：`setWorkspaceDir` 变更目录时会清空 `cliSessionId`，因为旧 CLI 会话绑定旧目录

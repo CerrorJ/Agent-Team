@@ -30,6 +30,7 @@ Agent-Team/
 │   │   ├── schedule.ts       # 定时任务领域模型：once/interval/cron 规则 + schedule_manage 协议
 │   │   ├── session-manager.ts # 会话状态机（botId:chatId:threadId → 会话）
 │   │   ├── session-store.ts   # 会话 JSON 持久化（zod 校验 + 原子写 + 旧记录迁移）
+│   │   ├── local-time.ts     # 本地时间格式（YYYY-MM-DD HH:mm:ss）的格式化/校验/UTC 迁移
 │   │   ├── topic-task.ts     # chatId+话题 → 稳定短任务 id（澄清流程归属）
 │   │   ├── task-progress.ts   # CLI 事件 → 进度快照
 │   │   ├── task-abort.ts      # 停止任务的权限校验
@@ -71,7 +72,7 @@ Agent-Team/
 ├── docs/
 │   ├── ClaudeCode和Codex在headless输出结构.md  # 两种 CLI 输出对照表
 │   └── 完整的内部交接单.md    # bot 间协作设计文档
-├── workspace-template/       # 新工作区模板：grill-me / to-spec / to-tickets / implement-ticket 四个 Skill
+├── workspace-template/       # 新工作区模板：grill-me / to-spec / to-tickets / implement-ticket / verify 五个 Skill
 │   │                         # + code-reviewer / tester 子代理定义（.claude .md 与 .codex .toml）
 │   └── docs/agents/issue-tracker.md  # 本地 Markdown issue 跟踪约定（.scratch/<slug>/ 下 spec 与 tickets）
 ├── demo-server/              # 故障注入演示子包（pnpm --filter agent-team-demo-server）：可控故障模式
@@ -179,7 +180,8 @@ Agent-Team/
 | `product-spec.ts` / `product-spec-store.ts` | `ProductSpecRequestSchema` / `ProductSpecFlowStore` / `JsonProductSpecFlowStore` / `isProductSpecOwner` | local/lark-doc 双模式方案请求校验（工作区内相对路径、Docx 链接）、流程存储（详见 [产品方案交付](domain/product-spec.md)） |
 | `schedule.ts` / `schedule-store.ts` / `schedule-run-store.ts` | `ScheduleRuleSchema` / `ScheduleManageRequestSchema` / `ScheduledTask` / `JsonScheduleStore` / `ScheduleRunStore` | 定时任务模型（once/interval/cron）、管理协议、任务与运行记录的 JSON 原子持久化（详见 [定时任务调度](domain/scheduling.md)） |
 | `session-manager.ts` | `SessionManager` / `Session` / `SessionStatus` | 话题级会话状态机，`resolve` 按 `botId:chatId:threadId` 查找或创建，`transition` 校验合法流转，`setWorkspaceDir` 切目录时清空 `cliSessionId` |
-| `session-store.ts` | `JsonSessionStore` / `SessionStore` | zod 校验 + 临时文件重命名的原子写 + 串行写队列，重启时把 creating/active 恢复为 idle，`migrateLegacySession` 给旧记录补 `botId` / `workspaceDir` |
+| `session-store.ts` | `JsonSessionStore` / `SessionStore` | zod 校验 + 临时文件重命名的原子写 + 串行写队列，重启时把 creating/active 恢复为 idle，`migrateSessionRecord` 给旧记录补 `botId` / `workspaceDir` 并把历史 UTC 时间转本地时间 |
+| `local-time.ts` | `formatLocalDateTime` / `isLocalDateTime` / `migrateToLocalDateTime` | 会话时间戳的本地时间格式（`YYYY-MM-DD HH:mm:ss`，无时区后缀，面向人工排查）；`SessionManager` 写入、`SessionSchema` 校验、旧记录迁移共用 |
 | `topic-task.ts` | `topicTaskId` / `topicIdOf` | chatId + 话题哈希成稳定短任务 id，澄清流程按它归属话题 |
 | `task-progress.ts` | `TaskProgressTracker` / `TaskProgressSnapshot` | 以 `toolUseId` 配对 tool_start/tool_end，维护最近 12 条活动与上下文 token 基线 |
 | `task-abort.ts` | `requestTaskAbort` / `ActiveRun` / `AbortTaskOutcome` | 停止任务时的存在性/发起人/重复取消校验 |
