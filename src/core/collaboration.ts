@@ -73,10 +73,11 @@ export const buildCollaborationPrompt = (
     .join('\n\n')
 }
 
-// 飞书可能重推同一条消息，用「任务 + 轮次 + 接收方」做去重键；
-// 键里带 round，领取过上一轮不会挡住下一轮的新交接
+// 飞书可能重推同一条消息，用本次投递唯一的 dispatchId 做去重键。
+// taskId 是话题级标识，新的协作会在同一话题里重新从第 1 轮开始；
+// 因此不能用「任务 + 轮次 + 接收方」，否则会误拦截后续的新派发。
 export const collaborationTurnKey = (message: CollaborationMessage): string => {
-  return `${message.taskId}:${message.round}:${message.toBotId}`
+  return message.dispatchId
 }
 
 // CollaborationInbox 只做两件事：发送前用 register() 登记，目标 bot 收到任务编号后用 consume() 领取。领取时还会核对目标 bot，成功后立即删除。同一条派活消息不会再次执行，并发交接也不会互相覆盖。
