@@ -15,7 +15,7 @@ Agent-Team 把**飞书**变成 AI 编程 CLI（Claude Code / Codex）的**指挥
 - **Bot 互相 @ 协作**——多 agent 分工
 - **任务进度实时可视化**——通过可刷新的飞书卡片展示
 
-> **当前阶段：** 飞书消息已经可以真实驱动 Claude Code 与 Codex 执行任务：会话按话题持久化、卡片实时展示工具级进度、发起人可从卡片停止任务。可在 `config/bots.json` 注册多个 bot（需声明 `teamLeader` 与 `defaultProductDeliveryMode`），每个 bot 独立建立长连接并指定默认执行引擎（详见 [多 bot 注册](domain/bot-registry.md)）。团队协作由 `dispatch_task` 应用层工具驱动：CLI（目前限定 Team Leader）把任务派给其他成员、结果按轮次回传（详见 [多 bot 协作](domain/collaboration.md)）。bot 配置 `grill-me` skill 后可经 `request_clarification` 逐题澄清需求（详见 [需求澄清](domain/clarification.md)）；`to-spec` / `lark-doc` 启用产品方案确认闭环（详见 [产品方案交付](domain/product-spec.md)）；开发类任务的高危操作经 `request_approval` 审批卡放行（详见 [高危操作审批](domain/approval.md)）；定时任务支持 once / interval / cron 三类规则、`/schedule` 命令与本地 HTTP 管理接口（详见 [定时任务调度](domain/scheduling.md)）。整体链路见 [消息处理流程](workflows/message-flow.md)，CLI 事件解析见 [AI CLI 输出解析](domain/ai-cli-probe.md)。
+> **当前阶段：** 飞书消息已经可以真实驱动 Claude Code 与 Codex 执行任务：会话按话题持久化、卡片实时展示工具级进度、发起人可从卡片停止任务。可在 `config/bots.json` 注册多个 bot（需声明 `teamLeader` 与 `defaultProductDeliveryMode`），每个 bot 独立建立长连接并指定默认执行引擎，也可用 `cliEnv` 给单个 bot 覆盖 CLI 模型后端（详见 [多 bot 注册](domain/bot-registry.md)）。团队协作由 `dispatch_task` 应用层工具驱动：CLI（目前限定 Team Leader）把任务派给其他成员、结果按轮次回传（详见 [多 bot 协作](domain/collaboration.md)）。bot 配置 `grill-me` skill 后可经 `request_clarification` 逐题澄清需求（详见 [需求澄清](domain/clarification.md)）；`to-spec` / `lark-doc` 启用产品方案确认闭环（详见 [产品方案交付](domain/product-spec.md)）；开发类任务的高危操作经 `request_approval` 审批卡放行（详见 [高危操作审批](domain/approval.md)）；定时任务支持 once / interval / cron 三类规则、`/schedule` 命令与本地 HTTP 管理接口（详见 [定时任务调度](domain/scheduling.md)）。整体链路见 [消息处理流程](workflows/message-flow.md)，CLI 事件解析见 [AI CLI 输出解析](domain/ai-cli-probe.md)。
 
 ## 技术栈
 
@@ -43,6 +43,7 @@ cp .env.example .env
 # 填入 FEISHU_* 系列变量（变量名由 bots.json 的 appIdEnv/appSecretEnv 决定）
 cp config/bots.example.json config/bots.json
 # 注册 bot：teamLeader、id、凭证环境变量名、defaultCli（claude 或 codex）、role、systemPrompt
+# 可选：给单个 bot 配 cliEnv 覆盖 CLI 模型后端（如 CEO 走智谱直连），映射的值也放 .env
 
 # 3. 启动（watch 模式，自动重载）
 pnpm dev
