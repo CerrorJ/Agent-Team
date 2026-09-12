@@ -26,7 +26,7 @@ bot 之间通过交接单（`CollaborationMessage`）传递任务：Team Leader�
 
 | 字段 | 说明 |
 |------|------|
-| `taskId` | 贯穿整项协作的任务编号；首轮派发用 `randomUUID()` 生成 |
+| `taskId` | 话题级任务编号，取 `topicTaskId(msg)`（`chatId` + 话题 ID 哈希成 24 位 hex，见 `src/core/topic-task.ts`）；同话题内所有协作共用，同一话题里发起的新协作会重新从第 1 轮开始 |
 | `dispatchId` | 只服务于**这一次投递**的 12 位十六进制取件码（`randomUUID()` 去连字符截前 12 位） |
 | `round` / `maxRounds` | 当前是第几次交接与上限；用户发起任务不计入轮次 |
 
@@ -37,7 +37,7 @@ bot 之间通过交接单（`CollaborationMessage`）传递任务：Team Leader�
 `dispatch()` 的三步全成语义，任一步失败都会撤销 inbox 登记并抛错（否则这条协作永远等不到目标 bot 回话）。投递目标有两种形态：
 
 - **有原消息**（`replyToMessageId`）：回复到话题里——协作卡片 + 卡片下 @ 目标 bot 的通知，round=1 用「新的协作任务」话术，其余用「协作结果已经返回」
-- **无原消息**（如定时任务触发、只有 `chatId`）：`sendCardToChat` / `sendMentionToChat` 按 chatId 直接发群，@ 挂在群里保证与卡片相邻；置 `skipCard: true` 时完全省掉卡片，把任务详情（objective / instruction / expectedOutput / 任务编号）全部塞进这条 @ 正文里
+- **无原消息**（只有 `chatId`）：`sendCardToChat` / `sendMentionToChat` 按 chatId 直接发群，@ 挂在群里保证与卡片相邻；置 `skipCard: true` 时完全省掉卡片，把任务详情（objective / instruction / expectedOutput / 任务编号）全部塞进这条 @ 正文里。这是预留的派发形态，当前仓库内没有调用方（定时任务已改为直接执行 CLI，见 [定时任务调度](scheduling.md)）
 
 三步全成：1. `collaborationInbox.register(collaboration)` 登记 → 2. 发协作卡片（带 workspace 名、目标、要求、轮次）或直发文本 → 3. `replyMention` / `sendMentionToChat` @ 目标 bot，文本带任务编号。
 
@@ -50,7 +50,7 @@ bot 之间通过交接单（`CollaborationMessage`）传递任务：Team Leader�
 - `register()`：派发方在发送飞书消息**之前**登记交接单
 - `consume(dispatchId, toBotId)`：接收方领取时核对目标 bot，成功后**立即删除**——同一条派活消息不会重复执行，飞书重推也天然幂等
 
-接收 bot 收到 `senderType` 为 `app`/`bot` 的富文本消息时，先确认消息真的 @ 了自己，再用正则 `任务编号：([a-f0-9]{12})` 从文本提取 `dispatchId` 去收件箱领取。提取不到时：@ 了当前 bot 的按「外部派活」继续走正常消息管线，没 @ 的直接忽略。领取之外还有第二层去重：`processedCollaborationTurns` 用 `taskId:round:toBotId` 三元组挡住同一轮的重复处理，且因为键里带 `round`，上一轮领取过不会挡住下一轮的新交接。
+接收 bot 收到 `senderType` 为 `app`/`bot` 的富文本消息时，先确认消息真的 @ 了自己，再用正则 `任务编号：([a-f0-9]{12})` 从文本提取 `dispatchId` 去收件箱领取。提取不到时：@ 了当前 bot 的按「外部派活」继续走正常消息管线，没 @ 的直接忽略。领取之外还有第二层去重：`processedCollaborationTurns` 以 `dispatchId` 为键（`collaborationTurnKey`），挡住飞书对同一条派活消息的重推；因为键是单次投递的取件码而不是「任务 + 轮次 + 接收方」三元组，同一话题里后续新协作从第 1 轮重新派发时不会被误拦截（源码注释记录了这个坑：taskId 是话题级标识，新协作会重新从第 1 轮开始）。
 
 > 多台 bot 由同一进程启动（见 [架构总览](../architecture/overview.md)），所以它们共享同一个 `CollaborationInbox` 实例，无需跨进程存储。
 
@@ -72,7 +72,7 @@ sequenceDiagram
     Svc->>Inbox: register 交接单（round=1）
     alt 有原消息
         Svc->>Dev: replyCard 协作卡 + replyMention @ 目标（带任务编号）
-    else 只有 chatId（定时任务等）
+    else 只有 chatId（预留分支，当前无调用方）
         Svc->>Dev: sendCardToChat / sendMentionToChat 按 chatId 直发群（skipCard 时纯 @ 文本）
     end
     Dev->>Inbox: consume(dispatchId, dev) 领取
@@ -89,7 +89,7 @@ dispatch_task 派发、结果按 reportToBotId 回传直至收尾的完整链路
 
 任务成功收尾时（`/compact` 除外），`src/index.ts` 按以下优先级路由：
 
-1. **本次结果截获到 `dispatch_task`**（且通过 teamLeader / 目标 / 轮次校验）→ `CollaborationService.dispatch` 派发：非协作上下文用新 `taskId`、`maxRounds` 取发起方 `collaborationMaxRounds`；已在协作中则 `round + 1` 沿用同一 `taskId`，目标为 `collaboration.reportToBotId`
+1. **本次结果截获到 `dispatch_task`**（且通过 teamLeader / 目标 / 轮次校验）→ `CollaborationService.dispatch` 派发：非协作上下文 `round=1`、`maxRounds` 取发起方 `collaborationMaxRounds`，`taskId` 用当前话题的 `topicTaskId`；已在协作中则 `round + 1` 沿用同一 `taskId`，目标为 `collaboration.reportToBotId`
 2. **本次是协作任务** → 按 `reportToBotId` 分流：接收方是自己（即最后一棒回到 Leader）→ @ 人类发起人「协作任务已经完成」；`round >= maxRounds` → @ 发起人说明已达上限请决定下一步；否则把「本 bot 的结果 + 继续组织后续工作」作为 instruction 交回 `reportToBotId`（接收方仍可用 dispatch_task 继续派发或直接向用户汇总结论）
 3. **普通任务** → 不触发协作，直接 @ 发起人发结果通知
 
@@ -105,5 +105,6 @@ dispatch_task 派发、结果按 reportToBotId 回传直至收尾的完整链路
 ## 变更指引
 
 - **改交接单字段**：`CollaborationMessage`、`docs/完整的内部交接单.md` 与飞书消息里的取件码格式（12 位 hex）需保持一致，接收方正则 `任务编号：([a-f0-9]{12})` 同步改
+- **改去重键**：`collaborationTurnKey` 现在只返回 `dispatchId`。不要轻易改回「任务 + 轮次 + 接收方」组合键——taskId 是话题级标识，同话题的新协作会重新从第 1 轮开始，组合键会误拦这些新派发
 - **跨进程协作**：当前 Inbox 是进程内存，若未来拆成多进程部署，需要把 `register`/`consume` 换成共享存储，并保留「领取即删」语义
 - **协作触发点**：路由只在成功分支且 `!isCompacting` 时执行，改动收尾逻辑时注意不要让失败/取消路径意外派发；dispatch 与 [产品方案交付](product-spec.md) 的提交互斥，同轮同时出现要抛错
