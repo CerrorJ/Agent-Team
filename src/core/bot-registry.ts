@@ -196,12 +196,12 @@ export const buildBotPrompt = (
   teamContext = '',
   defaultProductDeliveryMode: ProductDeliveryMode = 'lark-doc',
 ): string => {
-  // 只给负责产品文档的 bot 注入交付方式规则，其他角色不感知
-  const managesProductDocuments = config.skills.some((skill) =>
-    ['to-spec', 'to-tickets', 'lark-doc'].includes(skill),
+  // lark-doc 是通用的文档读写能力；只有产品方案 Skill 才需要审批交付流程。
+  const ownsProductSpecs = config.skills.some((skill) =>
+    ['to-spec', 'to-tickets'].includes(skill),
   )
 
-  const productDeliveryPolicy = managesProductDocuments
+  const productDeliveryPolicy = ownsProductSpecs
     ? [
         '产品方案交付规则（必须遵守）：',
         `- 当前默认交付方式：${defaultProductDeliveryMode}。`,

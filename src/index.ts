@@ -577,13 +577,13 @@ const startConfiguredBot = async (
             return
           }
           let finalResult = result
-          // to-spec / lark-doc：从工具调用里截获 request_spec_approval，校验产物后展示待确认卡片
+          // 仅产品方案 Skill：从工具调用里截获 request_spec_approval，校验产物后展示待确认卡片
           let productSpecRequest: ProductSpecRequest | undefined
 
           const managesProductSpec =
             !isCompacting &&
             (config.skills.includes('to-spec') ||
-              config.skills.includes('lark-doc'))
+              config.skills.includes('to-tickets'))
 
           if (managesProductSpec) {
             const submission = await ensureProductSpecSubmission({

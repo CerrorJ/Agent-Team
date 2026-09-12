@@ -28,6 +28,17 @@ const run = (parts: string[]): void => {
   }
 }
 
+// CC Switch 的 Claude 配置保存在用户级配置文件中。若 PM2 从切换前的终端
+// 继承了 ANTHROPIC_*，这些环境变量会覆盖 CC Switch 的当前选择并永久留在守护进程里。
+// CEO 的专属模型变量会在实际执行 CLI 时由 bot 配置单独注入，因此不依赖这里的继承值。
+const runtimeEnvironment = (): NodeJS.ProcessEnv => {
+  const env = { ...process.env }
+  for (const name of Object.keys(env)) {
+    if (name.startsWith('ANTHROPIC_')) delete env[name]
+  }
+  return env
+}
+
 const output = (parts: string[]): string => {
   const result = runCommandSync(parts[0], parts.slice(1), { encoding: 'utf8' })
   return result.status === 0 ? String(result.stdout ?? '').trim() : ''
@@ -92,7 +103,18 @@ const localStart = (): void => {
   if (running) {
     run(['pm2', 'delete', 'agent-team'])
   }
-  run(['pm2', 'start', 'dist/index.js', '--name', 'agent-team'])
+
+  const result = runCommandSync(
+    'pm2',
+    ['start', 'dist/index.js', '--name', 'agent-team'],
+    { stdio: 'inherit', env: runtimeEnvironment() },
+  )
+
+  if (result.status !== 0) {
+    const reason = result.error?.message ?? `exit code ${result.status}`
+    console.error(`[agent-team] 命令执行失败: pm2 start ${reason}`)
+    process.exit(result.status ?? 1)
+  }
   run(['pm2', 'save'])
 }
 

@@ -139,9 +139,9 @@ export const continueClarificationFlow = async (options: {
       return
     }
 
-    // to-spec / lark-doc：截获 request_spec_approval，校验产物后展示待确认卡片（同 index.ts 主流程）
+    // 仅产品方案 Skill：截获 request_spec_approval，校验产物后展示待确认卡片（同 index.ts 主流程）
     const managesProductSpec =
-      config.skills.includes('to-spec') || config.skills.includes('lark-doc')
+      config.skills.includes('to-spec') || config.skills.includes('to-tickets')
 
     if (managesProductSpec) {
       const submission = await ensureProductSpecSubmission({

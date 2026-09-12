@@ -1436,6 +1436,8 @@ export const splitLongText = (text: string, maxLength = 4_000): string[] => {
 
 type UpdateCard = (card: CardJson) => Promise<void>
 
+const CARD_UPDATE_RETRY_DELAYS_MS = [300, 800]
+
 /** 一秒窗口内无论 push 多少次，只提交最新的一张卡片。 */
 export class ThrottledCardUpdater {
   private pendingCard: CardJson | undefined
@@ -1461,7 +1463,7 @@ export class ThrottledCardUpdater {
     this.timer = undefined
     this.pendingCard = undefined
     await this.updateChain.catch(() => undefined)
-    await this.updateCard(finalCard)
+    await this.updateWithRetry(finalCard)
   }
 
   async cancel(): Promise<void> {
@@ -1487,9 +1489,25 @@ export class ThrottledCardUpdater {
     if (!card || this.closed) return
 
     this.updateChain = this.updateChain
-      .then(() => this.updateCard(card))
+      .then(() => this.updateWithRetry(card))
       .finally(() => {
         if (this.pendingCard && !this.closed) this.schedule()
       })
+  }
+
+  // 飞书消息更新偶发连接重置；最终卡片必须晚于所有运行中更新落盘，
+  // 因此在同一串行队列中重试，而不是让失败的中间更新阻塞收尾状态。
+  private async updateWithRetry(card: CardJson): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await this.updateCard(card)
+        return
+      } catch (error) {
+        const delay = CARD_UPDATE_RETRY_DELAYS_MS[attempt]
+        if (delay === undefined) throw error
+        console.warn(`[卡片] 更新失败，第 ${attempt + 1} 次重试中`)
+        await new Promise<void>((resolve) => setTimeout(resolve, delay))
+      }
+    }
   }
 }
