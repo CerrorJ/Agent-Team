@@ -20,8 +20,9 @@ tags: [operations, runbook, configuration, troubleshooting]
 | `SCHEDULE_API_PORT` / `SCHEDULE_API_TOKEN` | 定时任务本地 HTTP 管理接口的端口（默认 3101）与 `x-api-token` 鉴权令牌；未配置 token 时接口完全不设防，只当本机接口用 | 否 |
 | `TEST_CHAT_ID` / `OWNER_OPEN_ID` | 测试群与所有者 open_id；bot 消息（外部派活）场景下 `OWNER_OPEN_ID` 兜底作为发起人 | 否 |
 | `CEO_ZHIPU_ANTHROPIC_*` 等被 `cliEnv` 引用的变量 | per-bot CLI 模型后端覆盖：`bots.json` 里 `cliEnv` 映射的 source 变量（模板把 ceo-assistant 的 11 个 `ANTHROPIC_*` 键指向 `CEO_ZHIPU_*`），值留空会启动报错；变量名自定义，见 [多 bot 注册](../domain/bot-registry.md) | 否（配置了 cliEnv 才必需） |
+| `PATROL_WEBHOOK_URL` | 运维群自定义机器人 webhook，demo-server 巡检推送用；只被 `demo-server/scripts/notify.mjs` 读取，主进程不消费，留空时巡检跳过推送 | 否 |
 
-首次配置需要两步：`cp .env.example .env` 填凭证，再 `cp config/bots.example.json config/bots.json` 注册 bot（字段含义见 [多 bot 注册](../domain/bot-registry.md)）。
+首次配置需要三步：`cp .env.example .env` 填凭证，`cp config/bots.example.json config/bots.json` 注册 bot（字段含义见 [多 bot 注册](../domain/bot-registry.md)），再按根 README 的技能对照表安装 bots.json 声明的工作流 Skills（全局装到 `~/.agents/skills/`，或从 `workspace-template/` 复制定制版）。
 
 > Claude Code 与 Codex 的模型后端默认使用各自的用户级配置（如 `~/.claude/settings.json` 或 CC Switch），不经过本项目环境变量；仅当 bot 在 `bots.json` 配置了 `cliEnv` 时才按 bot 覆盖（如 CEO 走智谱直连、其他 Claude bot 继续跟随 CC Switch），机制见 [多 bot 注册](../domain/bot-registry.md) 的 per-bot CLI 模型配置一节。
 
@@ -142,7 +143,7 @@ Agent Team 启动，正在建立飞书长连接…
 | `[协作] task=... A -> B round=1/2` | 协作交接消息已投递：task 归属、来源与目标 bot、轮次（见 [多 bot 协作](../domain/collaboration.md)） |
 | `[协作] 忽略非目标 bot 消息` / `[协作] 忽略重复消息` | 收件箱领取失败或轮次去重命中，协作消息被安全跳过 |
 | `[澄清] 已发送交互卡片 questions=N` | CLI 发起 `request_clarification`，已转成飞书澄清卡片（见 [需求澄清](../domain/clarification.md)） |
-| `[Skill] bot=... 找不到 <skill>` | 启动时该 bot 声明的 Skill 在工作区 `.agents/skills` / `.claude/skills` 都不存在，只告警不阻断 |
+| `[Skill] bot=... 找不到 <skill>` | 启动时该 bot 声明的 Skill 在五级候选路径（工作区 `.agents/skills` / `.claude/skills` 与全局 `~/.agents/skills` / `~/.claude/skills` / `~/.codex/skills`）都不存在，只告警不阻断 |
 | `[定时] task=... succeeded / 执行失败` | 定时任务到期执行的结果（见 [定时任务调度](../domain/scheduling.md)） |
 | `[定时] schedules.json 已热更新` | 文件对账检测到任务增删改并已应用到内存调度器 |
 | `[API] 定时任务管理接口已启动` | 本地 HTTP 管理接口（默认 `http://localhost:3101/api/schedules`）已监听 |

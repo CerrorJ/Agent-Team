@@ -57,7 +57,7 @@ bot 字段说明（zod `BotSchema` 校验）：
 `src/core/team-registry.ts` 的 `TeamRegistry` 由 `AgentTeamConfig`（`loadAgentTeamConfig` 返回 `teamLeaderId + bots`）构造，提供三件事：
 
 - **`contextFor(botId)`**：生成团队名单文本（成员 id、是否 Team Leader、role、Skills），由 `buildBotPrompt` 拼进每条任务提示词，并声明「团队成员都是真实飞书 bot，CLI 内部子 Agent 不能冒充」
-- **`findMissingSkills()`**：启动时逐 bot 检查 skills 是否存在于 `<workspace>/.agents/skills/<skill>/SKILL.md` 或 `.claude/skills/` 路径，缺失只打 `[Skill]` 告警不阻断启动
+- **`findMissingSkills()`**：启动时逐 bot 检查 skills 是否存在于五级候选路径（工作区 `.agents/skills/<skill>/SKILL.md` → 工作区 `.claude/skills/` → `~/.agents/skills/` → `~/.claude/skills/` → `~/.codex/skills/`），全部缺失才打 `[Skill]` 告警，不阻断启动；各 Skill 的来源仓库与一键安装命令见根 README「安装与准备工作流 Skills」对照表（全局装到 `~/.agents/skills/` 即可被所有 bot 的工作区共享）
 - **`/team` 命令数据源**：成员卡片（名称、role、默认引擎、Skills、是否 Leader、是否就绪）由 `TeamRegistry.members` 驱动，见 [消息处理流程](../workflows/message-flow.md)
 
 ## 启动流程
@@ -156,4 +156,4 @@ bot.workspace（bots.json）→ CLI_WORKDIR（.env）→ CLAUDE_WORKDIR（旧键
 - **凭证安全**：bots.json 只写环境变量**名**（飞书凭证与 `cliEnv` 模型后端同理），真实凭证放 `.env`（见 [运维手册](../operations/runbook.md)），不要把密钥写进配置文件
 - **cliEnv 覆盖**：新增映射时必须同步在 `.env` 补上 source 变量的值，否则启动即抛「缺少 xxx」；调整后用 [运维手册](../operations/runbook.md) 的启动检查验证
 - **协作字段**：新增或调整 `reviewBy` / `collaborationMaxRounds` 时，同步检查 `parseAgentTeamConfig` 里的指向校验；`collaborationMaxRounds` 是 `dispatch_task` 发起协作的轮次上限（见 [多 bot 协作](collaboration.md)）
-- **新增 Skill**：除 bots.json 的 `skills` 数组外，还要在工作区放 `.agents/skills/<skill>/SKILL.md`（或 `.claude/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空。`workspace-template/` 提供了 `grill-me` / `to-spec` / `to-tickets` / `implement-ticket` / `verify` 五个工作流 Skill 与 `code-reviewer` / `tester` 子代理定义（`.claude` 的 md 与 `.codex` 的 toml），可作为新工作区的起点（模板里 tester bot 的 `verify` Skill 按验收标准操作真实运行的应用给出独立结论）
+- **新增 Skill**：除 bots.json 的 `skills` 数组外，还要让 SKILL.md 落在五级候选路径之一（工作区 `.agents/skills/` / `.claude/skills/`，或全局 `~/.agents/skills/` / `~/.claude/skills/` / `~/.codex/skills/`），否则启动只有 `[Skill]` 告警、提示词里的加载规则落空；安装方式见根 README 的技能对照表（`npx skills add larksuite/cli -g -y`、`npx skills add mattpocock/skills -g -y`，或复制 `workspace-template/` 的定制版到全局）。`workspace-template/` 提供了 `grill-me` / `to-spec` / `to-tickets` / `implement-ticket` / `verify` 五个工作流 Skill 与 `code-reviewer` / `tester` 子代理定义（`.claude` 的 md 与 `.codex` 的 toml），可作为新工作区的起点（模板里 tester bot 的 `verify` Skill 按验收标准操作真实运行的应用给出独立结论）
