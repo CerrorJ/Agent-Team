@@ -45,7 +45,13 @@ cp config/bots.example.json config/bots.json
 # 注册 bot：teamLeader、id、凭证环境变量名、defaultCli（claude 或 codex）、role、systemPrompt
 # 可选：给单个 bot 配 cliEnv 覆盖 CLI 模型后端（如 CEO 走智谱直连），映射的值也放 .env
 
-# 3. 启动（watch 模式，自动重载）
+# 3. 安装各 bot 声明的工作流 Skills（缺装启动只有 [Skill] 告警，澄清/方案等闭环不会生效）
+# 依赖技能的来源仓库与一键安装命令见 README「安装与准备工作流 Skills」对照表；
+# 本项目定制的 grill-me 等在 workspace-template/，可复制到工作区或 ~/.agents/skills/（全局）
+npx skills add larksuite/cli -g -y   # lark-doc / lark-drive 等飞书云文档技能（需 lark-cli login）
+npx skills add mattpocock/skills -g -y   # to-spec / to-tickets / implement-ticket / verify / code-review-expert
+
+# 4. 启动（watch 模式，自动重载）
 pnpm dev
 
 # 或单次运行
