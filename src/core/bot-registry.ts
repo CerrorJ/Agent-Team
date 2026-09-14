@@ -261,13 +261,10 @@ export const buildBotPrompt = (
     '- 需要用户决策时，必须调用 request_clarification 工具；不要用大段文字列出问题。工具调用后停止继续推断，等待用户回答。',
   ].join('\n')
 
-  // 验证与命令执行规则：确保测试在前台同步阻塞执行并等待结果，严禁后台派发导致卡片提前完成
+  // 确保测试与命令在前台同步运行并等待结果，严禁后台派发导致提前结束
   const commandExecutionPolicy = [
-    '命令与测试执行规则（必须遵守）：',
-    '- 严禁将冒烟测试、验证脚本、构建或测试命令放到后台执行（禁止使用 &、nohup、disown，以及 Claude Code 的 run_in_background: true 等后台派发方式）。',
-    '- 所有测试与本地命令必须在当前会话前台同步运行，CLI 必须持续阻塞等待本地进程退出并拿到完整输出；严禁在测试进程未返回前提前结束回复。',
-    '- 建议对多阶段测试按步骤分步执行命令（如先环境检查、再跑特定模块验证），使飞书卡片能实时展示当前执行阶段与步骤耗时。',
-    '- 必须在本地测试进程全部运行完毕并核实测试结果后，方可在最终回复中给出测试结论。',
+    '命令执行规则（必须遵守）：',
+    '- 所有命令与测试必须在前台同步运行并等待退出，严禁将命令或服务派发到后台运行（严禁使用 &、nohup、disown 或 run_in_background 等后台派发方式）。',
   ].join('\n')
 
   const sections = [
@@ -291,37 +288,4 @@ export const buildBotPrompt = (
   ]
 
   return sections.filter(Boolean).join('\n\n')
-}
-
-/**
- * 构造轻量级任务交接提示词（限额代班接力）
- * 核心原则：
- * 1. 节省 Token：严禁把旧窗口的大段历史消息或终端输出盲目塞入提示词。
- * 2. 独立 Session / 新窗口：指示新成员在全新独立会话窗口中继续推进，不要在原窗口纠缠。
- * 3. 继承工作区成果：前序成员已经在工作区进行了代码修改或创建了文件，直接基于现有工作区现场继续，避免从零重复劳动。
- */
-export const buildHandoffContinuationPrompt = (options: {
-  fallbackFromId: string
-  fallbackConfig: BotConfig
-  taskText: string
-  workspaceDir: string
-  resetText?: string
-}): string => {
-  const { fallbackFromId, fallbackConfig, taskText, workspaceDir, resetText } =
-    options
-
-  return [
-    '【任务交接接续通知】',
-    `原同组成员 ${fallbackFromId} 在推进此任务时触发了会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。`,
-    `现由你（${fallbackConfig.id}）在全新的独立会话窗口接替继续推进。`,
-    '',
-    '【核心任务目标】：',
-    taskText,
-    '',
-    '【极简续跑与节省 Token 规则（必须严格遵守）】：',
-    `1. 继承现场：前序成员已在当前工作区 (${workspaceDir}) 完成了部分改动与文件编写。`,
-    '2. 避免重复劳动：请直接基于当前工作区的文件现场继续推进，不要从零重写已有有效代码。开始前可简要查看文件或运行必要检查（如 git status）确认当前进度。',
-    '3. 独立推进与验证：在当前独立窗口中推进剩余未完成的目标，所有测试与验证命令必须在前台同步执行并等待结果。',
-    '4. 精炼交付：完成后提供简要的改动说明与交付结论。',
-  ].join('\n')
 }

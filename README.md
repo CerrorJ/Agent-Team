@@ -173,6 +173,7 @@ sequenceDiagram
   - [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) (`claude --version`)
   - [OpenAI Codex](https://github.com/openai/codex) (`codex --version`)
 - **PM2**（生产常驻可选）: `npm install -g pm2`
+- **agent-browser**（浏览器端到端验收可选）: 如需启用 UI 真实页面交互验收，需安装 `npm install -g agent-browser && agent-browser install`（受限网络可配置 `AGENT_BROWSER_EXECUTABLE_PATH` 指向本机 Chrome）
 
 ### 2. 获取代码与依赖安装
 
@@ -242,7 +243,7 @@ cp config/bots.example.json config/bots.json
       "workspace": "../my-project",
       "role": "开发工程师，负责根据需求完成实现和基础验证",
       "collaborationMaxRounds": 16,
-      "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。测试和验证命令必须在前台同步执行并等待结果，严禁派发后台进程。"
+      "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。"
     },
     {
       "id": "developer2",
@@ -257,7 +258,7 @@ cp config/bots.example.json config/bots.json
         "ANTHROPIC_BASE_URL": "CEO_ZHIPU_ANTHROPIC_BASE_URL",
         "ANTHROPIC_AUTH_TOKEN": "CEO_ZHIPU_ANTHROPIC_AUTH_TOKEN"
       },
-      "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。测试和验证命令必须在前台同步执行并等待结果，严禁派发后台进程。"
+      "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。"
     }
   ]
 }
@@ -283,6 +284,7 @@ cp config/bots.example.json config/bots.json
 | **研发工作流**     | `to-spec`<br>`to-tickets`<br>`implement-ticket`<br>`verify` | [github.com/mattpocock/skills](https://github.com/mattpocock/skills)      | `npx skills add mattpocock/skills -g -y`                                | 负责 PRD 规约提炼、功能切片 Tickets 拆解与验收验证。<br>💡 _本项目 `workspace-template/` 亦已内置优化版_ |
 | **交互式需求澄清** | `grill-me`                                                  | 本项目深度定制版                                                          | 复制本项目模板至全局（见下文）                                          | 专为飞书交互卡片（`request_clarification` 工具闭环）定制的高质量批量澄清技能                             |
 | **代码审查专家**   | `code-review-expert`                                        | 社区审查规范 / [mattpocock/skills](https://github.com/mattpocock/skills)  | `npx skills add mattpocock/skills -g -y`                                | 供 Reviewer 机器人针对 git diff 与验收标准进行独立代码审查与风险识别                                     |
+| **端到端浏览器验收** | `verify`（结合 `agent-browser`）                             | [github.com/vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) | `npm install -g agent-browser`<br>`agent-browser install`               | 供页面验收工程师使用真实浏览器操作 UI、表单交互与截图留证。<br>⚠️ 如受限网络无法下载 Chromium，可配置 `AGENT_BROWSER_EXECUTABLE_PATH` 指向本机 Chrome |
 
 ##### 🛠️ 快速安装方式
 
@@ -297,7 +299,10 @@ cp config/bots.example.json config/bots.json
   # 2. 安装研发流程与代码审查技能
   npx skills add mattpocock/skills -g -y
 
-  # 3. 将本项目定制的飞书卡片澄清技能（grill-me 等）同步到系统级目录
+  # 3. （可选）安装页面端到端浏览器验收工具
+  npm install -g agent-browser && agent-browser install
+
+  # 4. 将本项目定制的飞书卡片澄清技能（grill-me 等）同步到系统级目录
   # Windows (PowerShell):
   Copy-Item -Recurse -Force "workspace-template\.agents\skills\*" "$HOME\.agents\skills\"
   # Linux / macOS:

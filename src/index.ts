@@ -290,7 +290,7 @@ const handleBotMessage = async (
                     `成员 ${config.id} 当前处于会话额度限制中${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，无法接单。`,
                     `所在分组 "${groupName}" 内可用备用成员：${fallbackIds}。`,
                     `【原任务需求】：${collaboration?.objective ?? resolved}`,
-                    `【请 CEO 调度】：请使用 dispatch_task 派发给同组可用成员（${fallbackIds}）在全新独立会话中继承工作区代码推进；完成后交由测试工程师验收并汇总交付。`,
+                    `【请 CEO 调度】：请使用 dispatch_task 派发给同组可用成员（${fallbackIds}）基于工作区现场接续推进，并汇总交付。`,
                   ].join('\n\n')
                 : [
                     `【团队资源受限汇报】`,
@@ -1040,10 +1040,7 @@ const handleBotMessage = async (
                         `所在分组 "${groupName}" 内有可用备用成员：${fallbackIds}。`,
                         `【原任务目标】：${collaboration?.objective ?? resolved}`,
                         `【工作区目录】：${session.workspaceDir}`,
-                        `【请 CEO 调度】：`,
-                        `1. 请立即使用 dispatch_task 将原任务派发给同组可用备用成员（如 ${availableFallbacks[0].id}）接续推进。`,
-                        `2. 派发时请明确要求接替成员直接继承工作区 (${session.workspaceDir}) 的代码现场继续推进，并在全新独立会话中运行，严禁在原窗口纠缠，严格节省 Token。`,
-                        `3. 接替成员完成实现后，仍需按标准流程交由测试工程师验收，最终由你汇总交付。`,
+                        `【请 CEO 调度】：请使用 dispatch_task 派发给同组可用成员（${fallbackIds}）基于工作区现场接续推进，并汇总交付。`,
                       ].join('\n\n')
                     : [
                         `【团队资源受限汇报】`,

@@ -49,7 +49,7 @@ export class CollaborationService {
           `[协作] 检测到 ${effectiveTargetBotId} 受限，自动转派至同组备用成员 ${fallback.id} (${fallbackModel})`,
         )
         effectiveTargetBotId = fallback.id
-        effectiveInstruction = `【系统提示：原定成员 ${options.targetBotId} 当前触发会话限额，任务已由 CEO 助理转派由同组备用成员 ${fallback.id} (${fallbackModel}) 接替推进】\n\n【极简续跑与节省 Token 规则】：\n1. 继承现场：前序成员已在当前工作区 (${options.workspaceDir}) 完成了部分改动与文件编写。\n2. 避免重复劳动：直接基于当前工作区文件现场继续推进，不要从零重写已有代码，开始前可简要查看文件（如 git status）确认进度。\n3. 独立推进与验证：在当前会话中完成剩余目标，所有测试与验证命令必须在前台同步执行并等待结果。\n4. 精炼交付：完成后提供简要说明并交回 CEO 助理。\n\n${options.instruction}`
+        effectiveInstruction = `【任务接替提示：原定成员 ${options.targetBotId} 触发会话限额，已转派由你接替推进。请直接基于工作区当前现场继续推进，完成后交回 CEO 助理】\n\n${options.instruction}`
       }
     }
 
