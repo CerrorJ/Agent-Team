@@ -45,11 +45,13 @@
 - **角色专精团队**：可在 `config/bots.json` 注册多个 Bot（如 Team Leader、产品经理、开发工程师、审查工程师、测试工程师）。
 - **`dispatch_task` 工具与交接单**：通过交接单模型（`taskId` / `dispatchId` / `round`），Team Leader 可将任务确定性派发给团队成员，成员完成并验证后交回结论，形成「需求 ➔ 拆解 ➔ 研发 ➔ 审查 ➔ 验收」的完整自动化闭环。
 - **收件箱防重与幂等**：进程内 `CollaborationInbox` 取件码机制结合飞书重推去重，确保交接可靠不漏跑、不重跑。
+- **分组容灾与限额自动接力（Group Failover & Limit Continuation）**：支持同组配置（`"group": "developer"`）。当主力 Bot（如官方 Claude 架构的 `developer`）因触发 5 小时用量或 Token 达到上限被挂起拦截（`hit session limit`）时，系统自动识别并安全将控制权归还 CEO 助理；CEO 助理自动重定向唤醒同组备份成员（如接入智谱/DeepSeek 备用模型的 `developer2`），以全新的独立 Session 继承当前工作区代码产物继续执行，无需人工介入重跑，既规避上下文污染又节约 Token 开销。
 
 ### 3. 📊 飞书 2.0 交互卡片与工具级实时进度
 
 - **实时执行轨迹**：实时呈现当前执行步骤、工具名称（带中文动作标签与图标）、耗时、Token 累计、上下文窗口占用比例。
 - **节流刷新机制**：内置 `ThrottledCardUpdater`（1 秒时间窗口合并 + 串行链），杜绝卡片闪烁与飞书 API 限流。
+- **前台测试同步执行保障**：冒烟验证与验收测试全链路强制要求前台同步阻塞执行，严格禁止派发静默后台进程。确保 CLI 工具输出、退出码与卡片步骤实时对应，杜绝后台静默执行导致的任务提前误判完成或漏报测试失败。
 - **一键中止**：执行中卡片自带红色「停止任务」按钮，仅允许任务发起人快速阻断。
 - **超长回答优雅呈现**：900 字符内直接展示，超长自动收起并附带「查看完整回答」折叠面板；超出飞书限制时自动分条续发。
 
@@ -86,6 +88,9 @@
 
 - **无缝支持主流 CLI**：统一抽象 `CliAdapter` 事件协议，完整适配 Claude Code（`--output-format stream-json`）与 OpenAI Codex（`exec --json`）。
 - **支持 Per-bot 模型定制**：通过 `cliEnv` 映射，可为特定 Bot（如 CEO 助理）覆盖专属模型后端（如智谱 GLM、DeepSeek 等兼容接口），其余 Bot 继续使用系统全局配置或 CC Switch，灵活平衡成本与能力。
+- **双模式飞书接入**：
+  - **极简模式（单应用全员共享）**：仅需配置一组全局 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`，所有团队成员无缝共用。系统基于消息内 `dispatchId` 精准唤醒目标角色 Bot，无需在飞书开放平台繁琐创建多个应用。
+  - **多应用独立模式**：亦可为各成员单独配置专属自建应用凭证，实现独立机器人名字与专属头像；两种模式完全兼容、支持平滑混用与自动兜底。
 
 ---
 
@@ -189,8 +194,10 @@ cp .env.example .env
 
 根据实际情况编辑 `.env`：
 
+- **飞书凭证配置（支持两种模式）**：
+  - **极简模式（推荐，单套凭证跑全员）**：直接配置全局 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`，所有团队成员无缝共用一套凭证，事件分发通过 `dispatchId` 自动精准路由给目标 Bot，无需在飞书开放平台建多个应用。
+  - **多应用独立模式**：若需要各 Bot 拥有独立头像与名称，可在 `.env` 中为每个 Bot 配置专属环境变量（如 `FEISHU_CEO_ASSISTANT_APP_ID` / `FEISHU_DEVELOPER_APP_ID` 等）。两种模式完全兼容并支持混用（未配置独立凭证的 Bot 自动回退至全局凭证）。
 - `BOTS_CONFIG`: Bot 配置文件路径，默认 `config/bots.json`
-- `FEISHU_*_APP_ID` / `FEISHU_*_APP_SECRET`: 对应 Bot 的飞书凭证
 - `OWNER_OPEN_ID`: 你的飞书 `open_id`（可通过启动后发送消息从终端日志 `sender=` 处获取）
 - `CLI_WORKDIR`: 默认代码执行目录（留空则默认为当前项目根目录）
 - `SCHEDULE_API_PORT`: 定时任务本地管理接口端口（默认 `3101`）
@@ -228,12 +235,29 @@ cp config/bots.example.json config/bots.json
     },
     {
       "id": "developer",
+      "group": "developer",
       "appIdEnv": "FEISHU_DEVELOPER_APP_ID",
       "appSecretEnv": "FEISHU_DEVELOPER_APP_SECRET",
       "defaultCli": "claude",
       "workspace": "../my-project",
       "role": "开发工程师，负责根据需求完成实现和基础验证",
-      "collaborationMaxRounds": 16
+      "collaborationMaxRounds": 16,
+      "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。测试和验证命令必须在前台同步执行并等待结果，严禁派发后台进程。"
+    },
+    {
+      "id": "developer2",
+      "group": "developer",
+      "appIdEnv": "FEISHU_DEVELOPER2_APP_ID",
+      "appSecretEnv": "FEISHU_DEVELOPER2_APP_SECRET",
+      "defaultCli": "claude",
+      "workspace": "../my-project",
+      "role": "开发工程师（备用），负责在同组开发限流时代班完成实现和基础验证",
+      "collaborationMaxRounds": 16,
+      "cliEnv": {
+        "ANTHROPIC_BASE_URL": "CEO_ZHIPU_ANTHROPIC_BASE_URL",
+        "ANTHROPIC_AUTH_TOKEN": "CEO_ZHIPU_ANTHROPIC_AUTH_TOKEN"
+      },
+      "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。测试和验证命令必须在前台同步执行并等待结果，严禁派发后台进程。"
     }
   ]
 }
@@ -285,7 +309,7 @@ cp config/bots.example.json config/bots.json
 
 ### 4. 飞书开放平台配置指引
 
-为每一个在 `bots.json` 中配置的机器人创建飞书自建应用：
+根据所选凭证模式创建飞书自建应用（极简模式只需创建 1 个共用应用；独立模式为每个 Bot 创建独立应用）：
 
 1. 前往 [飞书开放平台](https://open.feishu.cn/)，创建自建应用并开启「机器人」能力。
 2. **连接模式**：选择 **WebSocket 长连接模式**（无需配置公网回调地址或公网 IP，本地即可运行！）。
@@ -444,6 +468,7 @@ Agent-Team/
 
 - **运行时规范**：Strict TypeScript，ESM only（导入显式带 `.js` 后缀），Node >= 22。
 - **凭证安全**：密钥与敏感 Token 绝不硬编码，只在 `.env` 中维护。
+- **前台测试执行保障**：冒烟验证与端到端测试必须前台同步阻塞执行并等待退出码，严禁派发静默后台进程，确保卡片实时流转透明。
 - **代码风格**：使用 ESLint + Prettier，强制使用箭头函数与声明空行。
   ```bash
   pnpm lint:fix
