@@ -88,6 +88,10 @@ export class CollaborationInbox {
     this.messages.set(message.dispatchId, message)
   }
 
+  peek(dispatchId: string): CollaborationMessage | undefined {
+    return this.messages.get(dispatchId)
+  }
+
   consume(
     dispatchId: string,
     toBotId: string,

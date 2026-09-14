@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { Bot } from '../im/lark.js'
 import { buildCollaborationCard } from '../im/card.js'
-import type { BotConfig } from '../core/bot-registry.js'
+import { getBotModelDisplayName, type BotConfig } from '../core/bot-registry.js'
 import type { CollaborationMessage } from '../core/collaboration.js'
+import { sessionLimitTracker } from '../core/session-limit-tracker.js'
 import type { AppRuntime } from './runtime.js'
 
 export interface CollaborationDispatch {
@@ -32,8 +33,37 @@ export class CollaborationService {
   constructor(private readonly runtime: AppRuntime) {}
 
   async dispatch(options: CollaborationDispatch): Promise<void> {
-    const target = this.runtime.botRuntimes.get(options.targetBotId)
-    if (!target) throw new Error(`协作 bot 尚未就绪: ${options.targetBotId}`)
+    let effectiveTargetBotId = options.targetBotId
+    let effectiveInstruction = options.instruction
+
+    // 如果目标 bot 当前受限，在同组中寻找可用的备用成员进行自动转派
+    if (sessionLimitTracker.isLimited(effectiveTargetBotId)) {
+      const availableFallbacks = this.runtime.teamRegistry
+        .getAvailableFallbackMembers(effectiveTargetBotId)
+        .filter((cfg) => this.runtime.botRuntimes.has(cfg.id))
+
+      if (availableFallbacks.length > 0) {
+        const fallback = availableFallbacks[0]
+        const fallbackModel = getBotModelDisplayName(fallback)
+        console.log(
+          `[协作] 检测到 ${effectiveTargetBotId} 受限，自动转派至同组备用成员 ${fallback.id} (${fallbackModel})`,
+        )
+        effectiveTargetBotId = fallback.id
+        effectiveInstruction = `【系统提示：原定成员 ${options.targetBotId} 当前触发会话限额，任务已由 CEO 助理转派由同组备用成员 ${fallback.id} (${fallbackModel}) 接替推进】\n\n【极简续跑与节省 Token 规则】：\n1. 继承现场：前序成员已在当前工作区 (${options.workspaceDir}) 完成了部分改动与文件编写。\n2. 避免重复劳动：直接基于当前工作区文件现场继续推进，不要从零重写已有代码，开始前可简要查看文件（如 git status）确认进度。\n3. 独立推进与验证：在当前会话中完成剩余目标，所有测试与验证命令必须在前台同步执行并等待结果。\n4. 精炼交付：完成后提供简要说明并交回 CEO 助理。\n\n${options.instruction}`
+      }
+    }
+
+    if (sessionLimitTracker.isLimited(effectiveTargetBotId)) {
+      const targetConfig = this.runtime.teamRegistry.get(options.targetBotId)
+      const groupName = targetConfig?.group ?? options.targetBotId
+      const resetInfo = sessionLimitTracker.getLimitInfo(options.targetBotId)
+      throw new Error(
+        `分组 "${groupName}" 内所有成员均处于会话限额状态${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，无法派发。请直接向用户汇报并确认下一步。`,
+      )
+    }
+
+    const target = this.runtime.botRuntimes.get(effectiveTargetBotId)
+    if (!target) throw new Error(`协作 bot 尚未就绪: ${effectiveTargetBotId}`)
     const reportTo = this.runtime.botRuntimes.get(options.reportToBotId)
     if (!reportTo)
       throw new Error(`结果接收 bot 尚未就绪: ${options.reportToBotId}`)
@@ -44,10 +74,10 @@ export class CollaborationService {
       ownerOpenId: options.ownerOpenId,
       ownerUnionId: options.ownerUnionId,
       fromBotId: options.senderConfig.id,
-      toBotId: options.targetBotId,
+      toBotId: effectiveTargetBotId,
       reportToBotId: options.reportToBotId,
       objective: options.objective,
-      instruction: options.instruction,
+      instruction: effectiveInstruction,
       expectedOutput: options.expectedOutput,
       round: options.round,
       maxRounds: options.maxRounds,

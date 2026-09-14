@@ -93,8 +93,12 @@ const toolDetail = (name: string, input: unknown): string | undefined => {
   }
   if (name === 'Glob') return shortText(input.pattern)
   if (name === 'Grep') return shortText(input.pattern)
-  if (name === 'Bash') return shortText(input.description)
-  if (name === 'Agent' || name === 'Task') return shortText(input.description)
+  if (name === 'Bash') {
+    return shortText(input.description) ?? shortText(input.command)
+  }
+  if (name === 'Agent' || name === 'Task') {
+    return shortText(input.description) ?? shortText(input.prompt)
+  }
   if (name === 'WebSearch') return shortText(input.query)
   return undefined
 }

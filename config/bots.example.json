@@ -23,7 +23,7 @@
         "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME": "CEO_ZHIPU_ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"
       },
       "skills": [],
-      "systemPrompt": "先明确目标和分工，再把任务交给合适的团队成员。"
+      "systemPrompt": "你是指挥者与协调者，严禁亲自编写业务代码、审查代码或执行冒烟测试/验证命令。先明确目标和分工，必须使用 dispatch_task 把具体任务派发给专业成员：开发交给 developer，审查交给 reviewer，冒烟测试与功能验收必须派发给 tester。只有在全部协作环节完成并拿到测试结论后，方可向用户汇总交付。"
     },
     {
       "id": "product",
@@ -37,15 +37,42 @@
     },
     {
       "id": "developer",
+      "group": "developer",
       "appIdEnv": "FEISHU_DEVELOPER_APP_ID",
       "appSecretEnv": "FEISHU_DEVELOPER_APP_SECRET",
       "defaultCli": "claude",
       "workspace": "../agent-team-team-example",
       "role": "开发工程师，负责根据需求完成实现和基础验证",
       "skills": [],
-      "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。",
+      "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。测试和验证命令必须在前台同步执行并等待结果，严禁派发后台进程。",
       "reviewBy": "reviewer",
       "collaborationMaxRounds": 16
+    },
+    {
+      "id": "developer2",
+      "group": "developer",
+      "appIdEnv": "FEISHU_DEVELOPER2_APP_ID",
+      "appSecretEnv": "FEISHU_DEVELOPER2_APP_SECRET",
+      "defaultCli": "claude",
+      "workspace": "../agent-team-team-example",
+      "role": "开发工程师（备用），负责在同组开发限流时代班完成实现和基础验证",
+      "skills": [],
+      "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。测试和验证命令必须在前台同步执行并等待结果，严禁派发后台进程。",
+      "reviewBy": "reviewer",
+      "collaborationMaxRounds": 16,
+      "cliEnv": {
+        "ANTHROPIC_BASE_URL": "CEO_ZHIPU_ANTHROPIC_BASE_URL",
+        "ANTHROPIC_AUTH_TOKEN": "CEO_ZHIPU_ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_MODEL": "CEO_ZHIPU_ANTHROPIC_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "CEO_ZHIPU_ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "CEO_ZHIPU_ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "CEO_ZHIPU_ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "ANTHROPIC_DEFAULT_FABLE_MODEL": "CEO_ZHIPU_ANTHROPIC_DEFAULT_FABLE_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "CEO_ZHIPU_ANTHROPIC_DEFAULT_OPUS_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "CEO_ZHIPU_ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "CEO_ZHIPU_ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME": "CEO_ZHIPU_ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"
+      }
     },
     {
       "id": "reviewer",
@@ -65,7 +92,7 @@
       "workspace": "../agent-team-team-example",
       "role": "测试工程师，负责按验收标准操作真实产品并给出独立结论",
       "skills": ["verify"],
-      "systemPrompt": "优先验证用户可观察行为，失败时提供可复现步骤和证据。"
+      "systemPrompt": "优先验证用户可观察行为，失败时提供可复现步骤和证据。冒烟与验收测试必须在前台同步运行并完整等待结果，严禁使用后台进程派发测试；测试未出最终结论前严禁结束任务。"
     }
   ]
 }

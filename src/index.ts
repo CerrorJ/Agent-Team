@@ -5,7 +5,17 @@
 import 'dotenv/config'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { startBot, type Bot, type IncomingDocumentComment } from './im/lark.js'
+import {
+  startBot,
+  type Bot,
+  type IncomingDocumentComment,
+  type IncomingMessage,
+} from './im/lark.js'
+import {
+  isSessionLimitError,
+  extractResetTime,
+  sessionLimitTracker,
+} from './core/session-limit-tracker.js'
 import {
   answerContinuation,
   answerNeedsContinuation,
@@ -182,27 +192,15 @@ for (const config of botConfigs) {
   )
 }
 
-const startConfiguredBot = async (
+const handleBotMessage = async (
   config: BotConfig,
-  collaborationService: CollaborationService,
+  msg: IncomingMessage,
+  bot: Bot,
 ): Promise<void> => {
-  const startedBot = startBot({
-    appId: config.appId,
-    appSecret: config.appSecret,
-    onCardAction: createCardActionHandler({
-      runtime,
-      config,
-      collaborationService,
-      defaultProductDeliveryMode: agentTeamConfig.defaultProductDeliveryMode,
-    }),
-    onDocumentComment: config.skills.includes('lark-drive')
-      ? async (comment, bot) => scheduleDocumentComment(config, bot, comment)
-      : undefined,
-    onMessage: async (msg, bot) => {
-      const resolved = resolveMentions(msg.text, msg.mentions)
-      const taskId = topicTaskId(msg)
-      let senderRuntime: BotRuntime | undefined
-      let collaboration: CollaborationMessage | undefined
+  const resolved = resolveMentions(msg.text, msg.mentions)
+  const taskId = topicTaskId(msg)
+  let senderRuntime: BotRuntime | undefined
+  let collaboration: CollaborationMessage | undefined
       if (msg.senderType === 'app' || msg.senderType === 'bot') {
         const currentRuntime = botRuntimes.get(config.id)
 
@@ -267,6 +265,89 @@ const startConfiguredBot = async (
           hasThread,
         )
         return
+      }
+
+      // 检查当前 bot 是否处于会话限额不可用状态，若受限则直接回传 CEO 调度派发
+      if (sessionLimitTracker.isLimited(config.id)) {
+        const resetInfo = sessionLimitTracker.getLimitInfo(config.id)
+        const leaderId = agentTeamConfig.teamLeaderId
+        const groupName = config.group ?? config.id
+
+        const availableFallbacks =
+          teamRegistry.getAvailableFallbackMembers(config.id)
+
+        if (config.id !== leaderId) {
+          const leaderRuntime = botRuntimes.get(leaderId)
+          if (leaderRuntime) {
+            const fallbackIds = availableFallbacks
+              .map((f) => f.id)
+              .join('、')
+
+            const instruction =
+              availableFallbacks.length > 0
+                ? [
+                    `【任务接续派发】`,
+                    `成员 ${config.id} 当前处于会话额度限制中${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，无法接单。`,
+                    `所在分组 "${groupName}" 内可用备用成员：${fallbackIds}。`,
+                    `【原任务需求】：${collaboration?.objective ?? resolved}`,
+                    `【请 CEO 调度】：请使用 dispatch_task 派发给同组可用成员（${fallbackIds}）在全新独立会话中继承工作区代码推进；完成后交由测试工程师验收并汇总交付。`,
+                  ].join('\n\n')
+                : [
+                    `【团队资源受限汇报】`,
+                    `用户向成员 ${config.id} 发起任务，但所在分组 "${groupName}" 内所有成员均处于会话限额状态。`,
+                    `【原任务需求】：${collaboration?.objective ?? resolved}`,
+                    `【请 CEO 处理】：请直接在当前话题向用户说明团队该分组资源受限不可用，并向用户确认下一步决策。`,
+                  ].join('\n\n')
+
+            try {
+              await collaborationService.dispatch({
+                senderConfig: config,
+                senderBot: bot,
+                replyToMessageId: msg.messageId,
+                targetBotId: leaderId,
+                taskId,
+                ownerOpenId,
+                ownerUnionId,
+                reportToBotId: leaderId,
+                objective:
+                  availableFallbacks.length > 0
+                    ? '同组成员限额接续派发'
+                    : '团队资源受限确认',
+                instruction,
+                expectedOutput:
+                  availableFallbacks.length > 0
+                    ? '调度备用成员接续完成任务'
+                    : '向用户汇报并确认决策',
+                round: collaboration ? collaboration.round + 1 : 1,
+                maxRounds:
+                  collaboration?.maxRounds ?? config.collaborationMaxRounds,
+                workspaceDir:
+                  collaboration?.workspaceDir ?? config.workspaceDir,
+              })
+            } catch (dispatchErr) {
+              console.error(
+                '[限额派发] 向 Team Leader 派发工单失败:',
+                (dispatchErr as Error).message,
+              )
+            }
+          }
+
+          await bot.reply(
+            msg.messageId,
+            availableFallbacks.length > 0
+              ? `当前成员处于会话额度限制中，任务已移交 Team Leader 接续调度同组备用成员处理。`
+              : `分组 "${groupName}" 成员均已达会话限额，已移交 Team Leader 向你确认后续处理。`,
+            hasThread,
+          )
+          return
+        } else {
+          await bot.reply(
+            msg.messageId,
+            `Team Leader 当前处于会话额度限制中${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，请稍后再试。`,
+            hasThread,
+          )
+          return
+        }
       }
 
       // 话题里还有未完成的澄清流程时，普通消息按「补充说明」并入该流程，不开新任务
@@ -919,6 +1000,120 @@ const startConfiguredBot = async (
             return
           }
           const message = (error as Error).message
+          const isSessionLimit = isSessionLimitError(message)
+
+          if (isSessionLimit) {
+            const resetText = extractResetTime(message)
+            sessionLimitTracker.markLimit(config.id, resetText)
+            console.warn(
+              `[限额] Bot ${config.id} 触发会话限额${resetText ? ` (重置: ${resetText})` : ''}`,
+            )
+
+            await cardUpdater.finish(
+              buildTaskCard({
+                title: taskCardTitle,
+                status: 'failed',
+                detail: `已触发会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。任务已移交 Team Leader 接续派发。`,
+                technicalDetail: message,
+                progress: progress.snapshot(),
+              }),
+            )
+
+            const leaderId = agentTeamConfig.teamLeaderId
+            const groupName = config.group ?? config.id
+
+            const availableFallbacks =
+              teamRegistry.getAvailableFallbackMembers(config.id)
+
+            if (config.id !== leaderId) {
+              const leaderRuntime = botRuntimes.get(leaderId)
+              if (leaderRuntime) {
+                const fallbackIds = availableFallbacks
+                  .map((f) => f.id)
+                  .join('、')
+
+                const instruction =
+                  availableFallbacks.length > 0
+                    ? [
+                        `【任务接续派发】`,
+                        `成员 ${config.id} 在执行任务时触发了会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}，当前会话已停止。`,
+                        `所在分组 "${groupName}" 内有可用备用成员：${fallbackIds}。`,
+                        `【原任务目标】：${collaboration?.objective ?? resolved}`,
+                        `【工作区目录】：${session.workspaceDir}`,
+                        `【请 CEO 调度】：`,
+                        `1. 请立即使用 dispatch_task 将原任务派发给同组可用备用成员（如 ${availableFallbacks[0].id}）接续推进。`,
+                        `2. 派发时请明确要求接替成员直接继承工作区 (${session.workspaceDir}) 的代码现场继续推进，并在全新独立会话中运行，严禁在原窗口纠缠，严格节省 Token。`,
+                        `3. 接替成员完成实现后，仍需按标准流程交由测试工程师验收，最终由你汇总交付。`,
+                      ].join('\n\n')
+                    : [
+                        `【团队资源受限汇报】`,
+                        `成员 ${config.id} 在执行任务时触发了会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。`,
+                        `所在分组 "${groupName}" 内所有成员均已达会话限额，暂无可用备用成员。`,
+                        `【原任务目标】：${collaboration?.objective ?? resolved}`,
+                        `【请 CEO 处理】：请直接在当前话题向用户说明团队该分组资源受限不可用，并向用户确认下一步决策。`,
+                      ].join('\n\n')
+
+                try {
+                  await collaborationService.dispatch({
+                    senderConfig: config,
+                    senderBot: bot,
+                    replyToMessageId: msg.messageId,
+                    targetBotId: leaderId,
+                    taskId,
+                    ownerOpenId,
+                    ownerUnionId,
+                    reportToBotId: leaderId,
+                    objective:
+                      availableFallbacks.length > 0
+                        ? '同组成员限额接续派发'
+                        : '团队资源受限确认',
+                    instruction,
+                    expectedOutput:
+                      availableFallbacks.length > 0
+                        ? '调度备用成员接续完成任务'
+                        : '向用户汇报并确认决策',
+                    round: collaboration ? collaboration.round + 1 : 1,
+                    maxRounds:
+                      collaboration?.maxRounds ?? config.collaborationMaxRounds,
+                    workspaceDir: session.workspaceDir,
+                  })
+                } catch (dispatchErr) {
+                  console.error(
+                    '[限额派发] 向 Team Leader 派发工单失败:',
+                    (dispatchErr as Error).message,
+                  )
+                }
+              }
+
+              await sendResultNotification({
+                bot,
+                replyToMessageId: msg.messageId,
+                target: senderRuntime?.identity ?? {
+                  openId: ownerOpenId,
+                  name: '',
+                },
+                text:
+                  availableFallbacks.length > 0
+                    ? `成员已达会话限额，任务已移交 Team Leader 接续调度备用成员处理。`
+                    : `分组 "${groupName}" 成员均已达会话限额，已移交 Team Leader 向你确认后续处理。`,
+                replyInThread: hasThread,
+              })
+              return
+            } else {
+              await sendResultNotification({
+                bot,
+                replyToMessageId: msg.messageId,
+                target: senderRuntime?.identity ?? {
+                  openId: ownerOpenId,
+                  name: '',
+                },
+                text: `Team Leader 已达到会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}，无法继续处理。请稍后重试。`,
+                replyInThread: hasThread,
+              })
+              return
+            }
+          }
+
           console.error('[CLI] 执行失败:', message)
           await cardUpdater.finish(
             buildTaskCard({
@@ -956,26 +1151,99 @@ const startConfiguredBot = async (
         .catch((error) => {
           console.error('[任务] 回传或收尾失败:', (error as Error).message)
         })
-    },
-  })
+}
 
-  const identity = await startedBot.getIdentity()
-  const botRuntime = { config, bot: startedBot, identity }
-  botRuntimes.set(config.id, botRuntime)
-  persistBotIdentities()
-  if (config.skills.includes('lark-drive')) {
-    // 订阅失败只告警，不能让整个进程在启动阶段崩掉（scheduler、其余 bot 都还没起）
-    try {
-      await startedBot.subscribeToDocumentComments()
-    } catch (error) {
-      console.warn(
-        `[Bot ${config.id}] 文档评论订阅失败，不影响消息链路:`,
-        (error as Error).message,
-      )
-    }
+const startConfiguredBots = async (
+  configs: BotConfig[],
+  collaborationService: CollaborationService,
+): Promise<void> => {
+  const configsByAppId = new Map<string, BotConfig[]>()
+  for (const config of configs) {
+    const group = configsByAppId.get(config.appId) ?? []
+    group.push(config)
+    configsByAppId.set(config.appId, group)
   }
-  console.log(
-    `[Bot ${config.id.toUpperCase()}] 已连接 name=${identity.name} open_id=${identity.openId}`,
+
+  await Promise.all(
+    [...configsByAppId.entries()].map(async ([appId, groupConfigs]) => {
+      const primaryConfig = groupConfigs[0]
+
+      const cardActionHandlers = groupConfigs.map((cfg) =>
+        createCardActionHandler({
+          runtime,
+          config: cfg,
+          collaborationService,
+          defaultProductDeliveryMode:
+            agentTeamConfig.defaultProductDeliveryMode,
+        }),
+      )
+
+      const hasDriveSkill = groupConfigs.some((cfg) =>
+        cfg.skills.includes('lark-drive'),
+      )
+
+      const startedBot = startBot({
+        appId,
+        appSecret: primaryConfig.appSecret,
+        onCardAction: async (action) => {
+          for (const handler of cardActionHandlers) {
+            const res = await handler(action)
+            if (res) return res
+          }
+          return undefined
+        },
+        onDocumentComment: hasDriveSkill
+          ? async (comment, bot) => {
+              const driveConfig = groupConfigs.find((cfg) =>
+                cfg.skills.includes('lark-drive'),
+              )!
+
+              return scheduleDocumentComment(driveConfig, bot, comment)
+            }
+          : undefined,
+        onMessage: async (msg, bot) => {
+          let targetConfig = primaryConfig
+
+          const dispatchId = msg.text.match(/任务编号：([a-f0-9]{12})/)?.[1]
+          if (dispatchId) {
+            const pendingCollab = collaborationInbox.peek(dispatchId)
+            if (pendingCollab) {
+              const matched = groupConfigs.find(
+                (c) => c.id === pendingCollab.toBotId,
+              )
+
+              if (matched) {
+                targetConfig = matched
+              }
+            }
+          }
+
+          await handleBotMessage(targetConfig, msg, bot)
+        },
+      })
+
+      const identity = await startedBot.getIdentity()
+
+      for (const config of groupConfigs) {
+        const botRuntime = { config, bot: startedBot, identity }
+        botRuntimes.set(config.id, botRuntime)
+        console.log(
+          `[Bot ${config.id.toUpperCase()}] 已连接 name=${identity.name} open_id=${identity.openId}${groupConfigs.length > 1 ? ` (共享 appId: ${config.appId})` : ''}`,
+        )
+      }
+      persistBotIdentities()
+
+      if (hasDriveSkill) {
+        try {
+          await startedBot.subscribeToDocumentComments()
+        } catch (error) {
+          console.warn(
+            `[Bot ${primaryConfig.id}] 文档评论订阅失败，不影响消息链路:`,
+            (error as Error).message,
+          )
+        }
+      }
+    }),
   )
 }
 
@@ -1077,9 +1345,7 @@ const rememberDocumentCommentEvent = (eventKey: string): void => {
   if (oldest) processedDocumentCommentEvents.delete(oldest)
 }
 
-await Promise.all(
-  botConfigs.map((config) => startConfiguredBot(config, collaborationService)),
-)
+await startConfiguredBots(botConfigs, collaborationService)
 
 await scheduler.start()
 startScheduleFileWatcher({ scheduler, filePath: scheduleFilePath })
