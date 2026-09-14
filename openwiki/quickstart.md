@@ -15,7 +15,7 @@ Agent-Team 把**飞书**变成 AI 编程 CLI（Claude Code / Codex）的**指挥
 - **Bot 互相 @ 协作**——多 agent 分工
 - **任务进度实时可视化**——通过可刷新的飞书卡片展示
 
-> **当前阶段：** 飞书消息已经可以真实驱动 Claude Code 与 Codex 执行任务：会话按话题持久化、卡片实时展示工具级进度、发起人可从卡片停止任务。可在 `config/bots.json` 注册多个 bot（需声明 `teamLeader` 与 `defaultProductDeliveryMode`），每个 bot 独立建立长连接并指定默认执行引擎，也可用 `cliEnv` 给单个 bot 覆盖 CLI 模型后端（详见 [多 bot 注册](domain/bot-registry.md)）。团队协作由 `dispatch_task` 应用层工具驱动：CLI（目前限定 Team Leader）把任务派给其他成员、结果按轮次回传（详见 [多 bot 协作](domain/collaboration.md)）。bot 配置 `grill-me` skill 后可经 `request_clarification` 逐题澄清需求（详见 [需求澄清](domain/clarification.md)）；`to-spec` / `lark-doc` 启用产品方案确认闭环（详见 [产品方案交付](domain/product-spec.md)）；开发类任务的高危操作经 `request_approval` 审批卡放行（详见 [高危操作审批](domain/approval.md)）；定时任务支持 once / interval / cron 三类规则、`/schedule` 命令与本地 HTTP 管理接口（详见 [定时任务调度](domain/scheduling.md)）。整体链路见 [消息处理流程](workflows/message-flow.md)，CLI 事件解析见 [AI CLI 输出解析](domain/ai-cli-probe.md)。
+> **当前阶段：** 飞书消息已经可以真实驱动 Claude Code 与 Codex 执行任务：会话按话题持久化、卡片实时展示工具级进度、发起人可从卡片停止任务。可在 `config/bots.json` 注册多个 bot（需声明 `teamLeader` 与 `defaultProductDeliveryMode`），每个 bot 指定默认执行引擎，凭证既可独立配置也可共用一套系统级凭证（后者共享长连接，见 [多 bot 注册](domain/bot-registry.md)）；还可用 `cliEnv` 给单个 bot 覆盖 CLI 模型后端。团队协作由 `dispatch_task` 应用层工具驱动：CLI（目前限定 Team Leader）把任务派给其他成员、结果按轮次回传（详见 [多 bot 协作](domain/collaboration.md)）；成员触发 Claude 会话限额时自动转派同组备用成员（`group`）或移交 Team Leader 调度。bot 配置 `grill-me` skill 后可经 `request_clarification` 逐题澄清需求（详见 [需求澄清](domain/clarification.md)）；`to-spec` / `lark-doc` 启用产品方案确认闭环（详见 [产品方案交付](domain/product-spec.md)）；开发类任务的高危操作经 `request_approval` 审批卡放行（详见 [高危操作审批](domain/approval.md)）；定时任务支持 once / interval / cron 三类规则、`/schedule` 命令与本地 HTTP 管理接口（详见 [定时任务调度](domain/scheduling.md)）。整体链路见 [消息处理流程](workflows/message-flow.md)，CLI 事件解析见 [AI CLI 输出解析](domain/ai-cli-probe.md)。
 
 ## 技术栈
 
@@ -51,7 +51,10 @@ cp config/bots.example.json config/bots.json
 npx skills add larksuite/cli -g -y   # lark-doc / lark-drive 等飞书云文档技能（需 lark-cli login）
 npx skills add mattpocock/skills -g -y   # to-spec / to-tickets / implement-ticket / verify / code-review-expert
 
-# 4. 启动（watch 模式，自动重载）
+# 4. （可选）浏览器端到端验收：tester bot 的 verify Skill 可用 agent-browser 驱动真实页面
+npm install -g agent-browser && agent-browser install   # 受限网络可设 AGENT_BROWSER_EXECUTABLE_PATH 指向本机 Chrome
+
+# 5. 启动（watch 模式，自动重载）
 pnpm dev
 
 # 或单次运行
@@ -72,8 +75,8 @@ pnpm format:check
 | 架构总览 | 分层架构：WS 收消息 → 核心会话/任务 → CLI 执行 → REST 回消息 | [架构总览](architecture/overview.md) |
 | 消息处理流程 | 从收到消息到卡片更新的完整链路（含 CLI 执行、取消与各类收尾分支） | [消息处理流程](workflows/message-flow.md) |
 | 会话与任务管理 | 话题级会话状态机、持久化、斜杠命令、任务中止 | [会话与任务管理](domain/session.md) |
-| 多 bot 注册 | config/bots.json 注册多个 bot（teamLeader/role/skills），各自长连接与默认引擎 | [多 bot 注册](domain/bot-registry.md) |
-| 多 bot 协作 | dispatch_task 工具派发团队任务、taskId/dispatchId/round 交接与轮次回传 | [多 bot 协作](domain/collaboration.md) |
+| 多 bot 注册 | config/bots.json 注册多个 bot（teamLeader/group/role/skills），独立或共享凭证的长连接与默认引擎 | [多 bot 注册](domain/bot-registry.md) |
+| 多 bot 协作 | dispatch_task 工具派发团队任务、taskId/dispatchId/round 交接与轮次回传，成员限额时同组代班 | [多 bot 协作](domain/collaboration.md) |
 | 需求澄清 | request_clarification 工具 → 飞书卡片逐题作答 → 答案收齐续跑 CLI | [需求澄清](domain/clarification.md) |
 | 产品方案交付 | request_spec_approval 提交 local / lark-doc 产物 → 确认卡 → 评论区修改 | [产品方案交付](domain/product-spec.md) |
 | 高危操作审批 | request_approval 审批卡 → 批准继续 / 拒绝收束 → 决定回传续跑 | [高危操作审批](domain/approval.md) |

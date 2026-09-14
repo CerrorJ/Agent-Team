@@ -14,7 +14,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 | 变量名 | 用途 | 必需 |
 |--------|------|------|
 | `BOTS_CONFIG` | bot 注册文件路径，默认 `config/bots.json` | 否 |
-| `FEISHU_*_APP_ID` / `FEISHU_*_APP_SECRET` | 各 bot 的飞书自建应用凭证；具体变量名由 `bots.json` 中每个 bot 的 `appIdEnv` / `appSecretEnv` 决定 | 是（按启用的 bot） |
+| `FEISHU_*_APP_ID` / `FEISHU_*_APP_SECRET` | 各 bot 的飞书自建应用凭证；具体变量名由 `bots.json` 中每个 bot 的 `appIdEnv` / `appSecretEnv` 决定。未配置专属凭证的 bot 回退系统级 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`（README 的「极简模式」，单套凭证跑全员、按 appId 共享一条长连接），两种模式可混用 | 是（专属或系统级二选一） |
 | `CLI_WORKDIR` | 全局默认工作目录（bot 未配 `workspace` 时使用；旧键 `CLAUDE_WORKDIR` 仍兼容作兜底） | 否 |
 | `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` | 按引擎覆盖 CLI 子进程超时（默认 2 小时）；也可用统一 `CLI_TIMEOUT_MS`，设 0 或非法值回退默认，**不支持不限时** | 否 |
 | `SCHEDULE_API_PORT` / `SCHEDULE_API_TOKEN` | 定时任务本地 HTTP 管理接口的端口（默认 3101）与 `x-api-token` 鉴权令牌；未配置 token 时接口完全不设防，只当本机接口用 | 否 |
@@ -56,13 +56,15 @@ tags: [operations, runbook, configuration, troubleshooting]
 | 现象 | 原因 | 解决 |
 |------|------|------|
 | `找不到 bot 配置文件` | 未创建 `config/bots.json` | `cp config/bots.example.json config/bots.json` 后填写 |
-| `bot xxx 缺少环境变量 XXX` | `.env` 缺少该 bot 的凭证变量 | 按 `bots.json` 里的 `appIdEnv` / `appSecretEnv` 名字补齐 |
+| `bot xxx 缺少环境变量 XXX` | `.env` 缺少该 bot 的凭证变量，且未配置系统级 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 回退 | 补齐专属变量，或改用极简模式只配系统级凭证 |
 | `bot xxx 的 CLI 环境变量 X 缺少 Y` | `cliEnv` 映射的 source 变量在 `.env` 里缺失或为空（严格校验，留空即报错） | 补上 `Y` 的值；不启用该 bot 的模型覆盖就从 `bots.json` 删掉这条映射 |
 | `bot id 不能重复` / 校验失败 | `bots.json` 结构不合法（如缺 `teamLeader`、bot 缺 `role`） | 对照 zod 校验规则，见 [多 bot 注册](../domain/bot-registry.md) |
 | `工作目录不存在` | bot `workspace` / `CLI_WORKDIR` 指向的路径无效 | 修正路径或创建目录 |
 | 连接超时 | 网络问题或凭证错误 | 确认 App ID / Secret 正确，网络可达飞书 OpenAPI |
 | 任务一直不执行 | 本机没有对应 CLI 或未登录 | `claude --version` / `codex --version` 验证安装，先在本机跑通一次 |
 | `Claude Code 执行超时` | 任务超过默认 2 小时上限（`runner.ts` 的 `DEFAULT_TIMEOUT_MS`，可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）或任务被外部中止 | 调大对应引擎的超时环境变量，或用卡片「停止任务」手动中止；环境变量设 0 或非法值会回退默认，不支持不限时 |
+| 任务失败提示「已触发会话额度限制」并移交 Team Leader | 该 bot 的 Claude 会话限额已用尽（默认标记 5 小时，状态在内存中，重启即清零） | 等待额度重置或重启进程；同组（`group`）配了备用成员的会自动代班，见 [多 bot 协作](../domain/collaboration.md) 的会话限额一节 |
+| 多个 bot 头像名称相同 | 这些 bot 复用了同一套凭证（共享 appId，只建一条长连接） | 需要独立身份就为各 bot 配独立 `appIdEnv` / `appSecretEnv`（多应用独立模式） |
 
 ## 飞书应用配置
 
