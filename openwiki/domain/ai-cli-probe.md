@@ -99,6 +99,7 @@ codex exec "实现一个函数" | pnpm probe:cli
 - **原生会话清单（native-sessions）**：`src/cli/native-sessions.ts` 的 `listNativeCliSessions()` 支撑 `/resume` 命令，同样双协议——Claude Code 直接扫 `~/.claude/projects/<cwd 转义目录>` 下的会话 JSONL（标题取 ai-title > last-prompt > 首条用户消息，并校验记录里的 cwd 防串目录）；Codex 起 `app-server` 调 `thread/list`（按 cwd 精确过滤、按更新时间倒序，上限 8 条）
 - **卡片驱动**：`CliEvent` 经 `TaskProgressTracker` 折叠成进度快照，驱动 [任务卡片系统](task-card.md) 刷新
 - **应用层工具集（agent_team）**：`src/mcp/app-tools-server.ts` 向两家 CLI 注册五个 stdio MCP 工具——`request_clarification`（[需求澄清](clarification.md)）、`request_spec_approval`（[产品方案交付](product-spec.md)）、`dispatch_task`（[多 bot 协作](collaboration.md)）、`schedule_manage`（[定时任务调度](scheduling.md)，经本地 HTTP 接口回传）、`request_approval`（[高危操作审批](approval.md)）。工具名常量与 `mcp__agent_team__` 前缀归一定义在 `src/cli/app-tools.ts`，两家适配器各维护一份截获分支
+- **入参注册的 union 陷阱**：MCP SDK 的 `normalizeObjectSchema` 识别不了顶层 `z.discriminatedUnion`，会静默降级成 `{ type: 'object', properties: {} }`，AI 拿不到字段说明就无法传参。因此 `request_spec_approval` 与 `schedule_manage` 注册时用的是专门的扁平 `ProductSpecToolInputSchema` / `ScheduleManageToolInputSchema`（带逐字段 describe），运行时仍由各自的 discriminatedUnion 做最终校验；其余三个工具是普通 `z.object`，可直接注册。改这两个工具的入参结构时，两份 schema 必须同步（见各领域页的变更指引）
 
 ## 源文件索引
 

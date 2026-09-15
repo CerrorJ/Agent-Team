@@ -105,6 +105,8 @@ sequenceDiagram
 
 工具调用本身走 MCP 子进程 → 本地 HTTP 接口的回路：`schedule_manage` 在 `src/mcp/app-tools-server.ts` 里用 `fetch` POST `http://127.0.0.1:${SCHEDULE_API_PORT}/api/schedules/manage`（默认 3101 端口），body 里带 `AGENT_TEAM_CHAT_ID` / `AGENT_TEAM_OWNER_OPEN_ID` 环境变量提供的会话上下文；接口不存在或连不上时返回 isError 文案给 CLI。
 
+入参注册有个 union 陷阱：MCP SDK 识别不了顶层 `z.discriminatedUnion`（会静默降级为空 properties，AI 无法传参），所以工具注册用的是扁平的 `ScheduleManageToolInputSchema`（`src/core/schedule.ts`，`action` 枚举 + 全可选字段带 describe），最终校验仍由 HTTP 接口侧的 `ScheduleManageRequestSchema.safeParse` 完成（`src/app/schedule-api.ts`）——AI 传错 action 分支字段时由接口返回 issues，MCP handler 原样透传给 CLI。
+
 ## 本地 HTTP 管理接口
 
 `src/app/schedule-api.ts` 在入口启动（`startScheduleApi`），给外部脚本/运维一条不经过飞书的管理通道：
@@ -134,7 +136,7 @@ sequenceDiagram
 
 ## 变更指引
 
-- **新增 action**：`ScheduleManageRequestSchema` 加分支、`executeScheduleManageRequest` 加实现、`src/mcp/app-tools-server.ts` 的工具描述同步更新
+- **新增 action**：`ScheduleManageRequestSchema` 加分支、`ScheduleManageToolInputSchema` 的 `action` 枚举同步（两份 schema 必须一致，MCP 只认后者暴露的字段）、`executeScheduleManageRequest` 加实现、`src/mcp/app-tools-server.ts` 的工具描述同步更新
 - **新增规则类型**：`ScheduleRuleSchema` 加 kind、`nextRunDelay` 加计算分支、`ScheduledTaskSchema` 的 rule 校验联动
 - **跨进程调度**：计时器纯内存、重启重建；拆多进程时 `Scheduler` 需要选主或改用共享调度存储
 - **产物模式**：`dispatchScheduledTask` 带 `defaultProductDeliveryMode`，定时任务里产品类 bot 的交付方式与交互任务一致（见 [产品方案交付](product-spec.md)）

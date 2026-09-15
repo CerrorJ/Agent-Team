@@ -29,6 +29,13 @@ tags: [domain, product-spec, lark-doc, approval]
 
 默认模式由 `bots.json` 顶层 `defaultProductDeliveryMode` 决定（默认 `lark-doc`），`buildBotPrompt` 会给配置了 `to-spec` / `to-tickets` / `lark-doc` skill 的 bot 注入交付规则：用户本次明确指定时覆盖默认值、不要为选格式单独发起澄清、方案完成后必须实际调用工具而不能只在回复里罗列字段。
 
+### MCP 入参暴露与双重校验
+
+MCP SDK 识别不了顶层 `z.discriminatedUnion`（会静默降级为空 properties，AI 无法传参），所以 `src/mcp/app-tools-server.ts` 注册 `request_spec_approval` 时用的是扁平的 `ProductSpecToolInputSchema`（`src/core/product-spec.ts`，字段全可选 + 逐字段 describe 说明各自适用哪种交付模式）；真正的 union 校验分两处兜底：
+
+- **CLI 子进程内**：MCP handler 先清洗入参（丢弃 `undefined` 与空串）再过 `ProductSpecRequestSchema.safeParse`，不合法直接回带字段路径的 isError 文案，让 AI 当场修正重交
+- **应用层截获后**：`findProductSpecRequest` 用同一套清洗逻辑从后往前只认最后一份合法提交，CLI 重试或多份提交不会污染流程
+
 ## 提交与确认时序
 
 ```mermaid
@@ -83,6 +90,6 @@ sequenceDiagram
 
 ## 变更指引
 
-- **改交付模式**：`ProductSpecRequestSchema` 的 union 分支、`src/mcp/app-tools-server.ts` 工具描述、`buildBotPrompt` 的交付规则三处联动
+- **改交付模式**：`ProductSpecRequestSchema` 的 union 分支、`ProductSpecToolInputSchema` 的扁平字段与 describe（两份 schema 语义必须一致，MCP 只认后者暴露的字段）、`src/mcp/app-tools-server.ts` 工具描述、`buildBotPrompt` 的交付规则四处联动
 - **新增文档类型**：评论区流程目前只认 Docx；支持 wiki 等形态要改 `LarkDocumentUrlSchema` 与评论 API 的 file_type 处理
 - **评论区并发**：排队键是 `flow.sessionId`，改会话模型时注意评论队列与 `activeRuns` 的一致性
