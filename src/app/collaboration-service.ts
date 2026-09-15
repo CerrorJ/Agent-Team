@@ -16,8 +16,6 @@ export interface CollaborationDispatch {
   chatId?: string
   // 只要 @ 通知、不要协作卡片时置 true（群聊与话题回复均支持）
   skipCard?: boolean
-  // 若提供已有卡片 message_id，则就地更新该卡片，避免重复弹出两张卡片
-  updateCardMessageId?: string
   // 自定义 @ 通知的文本；不传时按 round=1 或 round>1 默认生成
   mentionText?: string
   targetBotId: string
@@ -145,25 +143,16 @@ export class CollaborationService {
           maxRounds: options.maxRounds,
         })
 
-        let cardMessageId: string | undefined
-        if (options.updateCardMessageId) {
-          await options.senderBot.updateCard(
-            options.updateCardMessageId,
-            collaborationCard,
-          )
-          cardMessageId = options.updateCardMessageId
-        } else if (options.chatId) {
-          cardMessageId = await options.senderBot.sendCardToChat(
-            options.chatId,
-            collaborationCard,
-          )
-        } else {
-          cardMessageId = await options.senderBot.replyCard(
-            options.replyToMessageId!,
-            collaborationCard,
-            true,
-          )
-        }
+        const cardMessageId = options.chatId
+          ? await options.senderBot.sendCardToChat(
+              options.chatId,
+              collaborationCard,
+            )
+          : await options.senderBot.replyCard(
+              options.replyToMessageId!,
+              collaborationCard,
+              true,
+            )
 
         if (!cardMessageId) {
           throw new Error('飞书没有返回协作卡片 message_id')

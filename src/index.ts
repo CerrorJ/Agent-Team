@@ -339,8 +339,8 @@ const handleBotMessage = async (
       await bot.reply(
         msg.messageId,
         availableFallbacks.length > 0
-          ? `当前成员处于会话额度限制中，任务已移交 Team Leader 接续调度同组备用成员处理。`
-          : `分组 "${groupName}" 成员均已达会话限额，已移交 Team Leader 向你确认后续处理。`,
+          ? `当前成员处于会话额度限制中，任务移交 Team Leader 失败，请重试。`
+          : `分组 "${groupName}" 成员均已达会话限额，移交 Team Leader 失败，请重试。`,
         hasThread,
       )
       return
@@ -1031,17 +1031,7 @@ const handleBotMessage = async (
                 ].join('\n\n')
             : undefined
 
-        await cardUpdater.finish(
-          buildTaskCard({
-            title: taskCardTitle,
-            status: 'failed',
-            detail: `已触发会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。任务已移交 Team Leader 接续派发。`,
-            expectedOutput,
-            handoffDetail: handoffInstruction,
-            technicalDetail: message,
-            progress: progress.snapshot(),
-          }),
-        )
+        let handoffSuccess = false
 
         if (config.id !== leaderId) {
           const leaderRuntime = botRuntimes.get(leaderId)
@@ -1050,6 +1040,11 @@ const handleBotMessage = async (
             availableFallbacks.length > 0
               ? `成员已达会话限额，任务已移交 Team Leader 接续调度备用成员处理`
               : `分组 "${groupName}" 成员均已达会话限额，已移交 Team Leader 向你确认后续处理`
+
+          const failureText =
+            availableFallbacks.length > 0
+              ? `成员已达会话限额，任务移交 Team Leader 失败，请重试。`
+              : `分组 "${groupName}" 成员均已达会话限额，移交 Team Leader 失败，请重试。`
 
           if (leaderRuntime && handoffInstruction) {
             try {
@@ -1075,6 +1070,7 @@ const handleBotMessage = async (
                   collaboration?.maxRounds ?? config.collaborationMaxRounds,
                 workspaceDir: session.workspaceDir,
               })
+              handoffSuccess = true
             } catch (dispatchErr) {
               console.error(
                 '[限额派发] 向 Team Leader 派发工单失败:',
@@ -1087,7 +1083,7 @@ const handleBotMessage = async (
                   openId: ownerOpenId,
                   name: '',
                 },
-                text: `${mentionText}。`,
+                text: failureText,
                 replyInThread: hasThread,
               })
             }
@@ -1099,12 +1095,35 @@ const handleBotMessage = async (
                 openId: ownerOpenId,
                 name: '',
               },
-              text: `${mentionText}。`,
+              text: failureText,
               replyInThread: hasThread,
             })
           }
+
+          await cardUpdater.finish(
+            buildTaskCard({
+              title: taskCardTitle,
+              status: 'failed',
+              detail: handoffSuccess
+                ? `已触发会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。任务已移交 Team Leader 接续派发。`
+                : `已触发会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。任务移交 Team Leader 失败，请重试。`,
+              expectedOutput,
+              handoffDetail: handoffInstruction,
+              technicalDetail: message,
+              progress: progress.snapshot(),
+            }),
+          )
           return
         } else {
+          await cardUpdater.finish(
+            buildTaskCard({
+              title: taskCardTitle,
+              status: 'failed',
+              detail: `已触发会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。`,
+              technicalDetail: message,
+              progress: progress.snapshot(),
+            }),
+          )
           await sendResultNotification({
             bot,
             replyToMessageId: msg.messageId,
