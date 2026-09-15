@@ -156,7 +156,7 @@ sequenceDiagram
     participant Reg as bot-registry
     participant Team as TeamRegistry
     participant Store as JsonSessionStore
-    participant Bot as startConfiguredBot
+    participant Bot as startConfiguredBots
     participant WS as Lark.WSClient
 
     Entry->>Entry: 读取 BOTS_CONFIG 路径
@@ -168,15 +168,15 @@ sequenceDiagram
     Entry->>Entry: ensureWorkspaceDirectory 校验各 bot 工作目录
     Entry->>Store: SessionManager.open 恢复会话（旧记录补 botId 与工作目录）
     Store-->>Entry: 已恢复 N 个会话（creating/active 回落 idle）
-    Entry->>Bot: Promise.all 逐 bot 启动
-    Bot->>Bot: 创建 Lark.Client + 注册 EventDispatcher
+    Entry->>Bot: Promise.all 按 appId 分组启动
+    Bot->>Bot: 每组创建 Lark.Client + 注册 EventDispatcher（组内共享）
     Bot->>WS: new WSClient + start()
-    WS-->Entry: 各 bot 长连接建立，等待事件
+    WS-->Entry: 各组长连接建立，等待事件（组内消息按任务编号路由）
     Entry->>Entry: scheduler.start 恢复定时任务
     Entry->>Entry: startScheduleFileWatcher + startScheduleApi（本地 HTTP 3101）
 ```
 
-应用启动时的初始化序列（每个启用的 bot 一条独立连接，收尾拉起定时调度，见 [定时任务调度](../domain/scheduling.md)）。
+应用启动时的初始化序列（按 appId 分组共享长连接、组内按任务编号路由到目标 bot，收尾拉起定时调度，见 [定时任务调度](../domain/scheduling.md)）。
 
 ## 关键设计决策
 

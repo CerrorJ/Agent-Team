@@ -110,8 +110,9 @@ sequenceDiagram
 
 ## 会话守卫
 
-`onMessage` 入口最先处理**协作消息**：`senderType` 为 `app`/`bot` 的富文本消息先确认 @ 了当前 bot，再从文本提取「任务编号」取件码，向共享 `CollaborationInbox` 领取交接单（详见 [多 bot 协作](../domain/collaboration.md)）；领取不到直接忽略。人类消息则按会话级检查放行（详见 [会话与任务管理](../domain/session.md)）。此外有两个前置分支：
+`onMessage` 入口最先处理**协作消息**：`senderType` 为 `app`/`bot` 的富文本消息先确认 @ 了当前 bot，再从文本提取「任务编号」取件码，向共享 `CollaborationInbox` 领取交接单（详见 [多 bot 协作](../domain/collaboration.md)）；领取不到直接忽略。人类消息则按会话级检查放行（详见 [会话与任务管理](../domain/session.md)）。此外有三个前置分支：
 
+- **限额守卫**：当前 bot 已被标记会话限额时不再接单——非 Leader 的话把「任务接续派发」工单移交 Team Leader（有备用成员时请其 `dispatch_task` 派给同组可用成员，无备用成员时请其直接向用户确认下一步），受限的 Team Leader 则回复「请稍后再试」；机制见 [多 bot 协作](../domain/collaboration.md) 的会话限额一节
 - **引擎切换守卫**：已有话题里用 `/claude` 或 `/codex` 请求了与会话当前不同的引擎时，回复「当前话题已经在使用 X。如需切换执行引擎，请新开一个话题」
 - **空任务守卫**：`/claude` / `/codex` 后面没有任务文本时，提示补写任务示例
 
@@ -197,7 +198,7 @@ flowchart TD
 
 - **成功**：把 CLI 会话 id 补录进 Session（`setCliSessionId`），记录上下文窗口大小供下一轮进度计算，发 success 卡片；回答超过单卡上限时折叠展示并按 4000 字符拆条续发。bot 配置了 `grill-me` skill 时，先检查本轮是否有 `request_clarification` 工具调用——有则转入 [需求澄清](../domain/clarification.md) 卡片流程并提前返回。产品类 bot（`to-spec` / `lark-doc` skill）接着走 [产品方案交付](../domain/product-spec.md) 的提交校验与确认卡。再检查 `request_approval`（[高危操作审批](../domain/approval.md)，主任务执行时声明为停止型工具，CLI 调用即被终止）。最后是协作路由：`dispatch_task` 派发请求由 [多 bot 协作](../domain/collaboration.md) 处理；协作任务的回传/收尾路由也在该分支内
 - **取消**：卡片停止按钮或 `/close` 触发 `AbortController.abort()`，发 cancelled 卡片，文案按 `cancelMode`（`stop` / `close`）区分
-- **失败**：发 failed 卡片，`technicalDetail` 放进「查看错误详情」折叠面板
+- **失败**：发 failed 卡片，`technicalDetail` 放进「查看错误详情」折叠面板。其中有一类特殊失败——错误文本命中 Claude 的会话限额文案（`session limit` / `resets`）时，不走普通失败分支：标记该 bot 进入限额状态（默认 5 小时）、卡片改写为「已触发会话额度限制，任务已移交 Team Leader 接续派发」，并经 `CollaborationService` 把接续工单派给 Team Leader 去调度同组备用成员，详见 [多 bot 协作](../domain/collaboration.md) 的会话限额一节
 - **收尾**：`finally` 中注销 `activeRuns` 登记并把会话从 `active` 回落 `idle`（仅 active 状态回落，避免覆盖 `closed` 终态）
 
 ## 停止任务

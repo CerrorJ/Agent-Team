@@ -22,7 +22,8 @@ Agent-Team/
 │   │   └── card.ts           # 飞书卡片构建 + 节流更新机制
 │   ├── core/
 │   │   ├── bot-registry.ts   # bots.json 解析校验 + 凭证环境变量解析 + buildBotPrompt 提示词组装
-│   │   ├── team-registry.ts  # TeamRegistry 团队注册表：名单上下文 + Skill 缺失检查
+│   │   ├── team-registry.ts  # TeamRegistry 团队注册表：名单上下文 + Skill 缺失检查 + 同组备用成员
+│   │   ├── session-limit-tracker.ts # Claude 会话限额检测与追踪（同组代班依据）
 │   │   ├── clarification.ts  # 需求澄清：数据模型 + ClarificationFlowStore
 │   │   ├── collaboration.ts  # bot 间协作交接单 + 共享收件箱 CollaborationInbox + dispatch_task 协议
 │   │   ├── approval.ts       # 高危操作审批：数据模型 + ApprovalFlowStore
@@ -102,7 +103,7 @@ Agent-Team/
 **关键导出：** 无（入口文件，直接执行）
 
 **核心逻辑：**
-- `startConfiguredBot`：为每个 bot 调 `startBot` 建立独立长连接，注册同一套业务回调，并把 `BotRuntime`（config + bot + identity）登记进 `botRuntimes`、身份落盘 `data/bot-identities.json`；带 `lark-drive` skill 的 bot 额外订阅文档评论事件
+- `startConfiguredBots`：按 `appId` 把 bot 分组，每组一次 `startBot` 建一条长连接（多个 bot 复用同一凭证时共享连接，控制台标注 `共享 appId`）；同连接的入站消息先按「任务编号」查 `collaborationInbox.peek` 路由到真正的目标 bot，卡片回调依次询问组内各 bot 的 handler；`BotRuntime`（config + bot + identity）仍按 bot 登记进 `botRuntimes`、身份落盘 `data/bot-identities.json`；带 `lark-drive` skill 的 bot 额外订阅文档评论事件
 - `onCardAction`：由 `src/app/card-action-handler.ts` 提供，处理产品方案确认 / 澄清作答 / 审批决定 / 恢复会话 / 停止任务五类回调
 - `onMessage`：命令与引擎选择解析（`/schedule` 需求转 schedule_manage 提示）→ 澄清补充并入 → 会话守卫 → 下载资源 → 回复初始卡片 → 后台 `executeCli`（`request_approval` 为停止型工具）→ 进度心跳驱动卡片刷新 → 澄清/产品方案/审批/协作派发分支收尾
 - `scheduleDocumentComment`：文档评论入口——只处理 @本 bot 且命中待确认方案的评论，按会话排队串行执行、按 eventId 去重（上限 1000 条）
@@ -173,8 +174,9 @@ Agent-Team/
 
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
-| `bot-registry.ts` | `loadAgentTeamConfig` / `parseAgentTeamConfig` / `buildBotPrompt` / `BotConfig` / `AgentTeamConfig` | bots.json 的 zod 校验（含 teamLeader）、凭证环境变量解析、工作目录优先级、提示词组装（详见 [多 bot 注册](domain/bot-registry.md)） |
-| `team-registry.ts` | `TeamRegistry` / `MissingSkill` | 团队名单上下文、Skill 缺失检查、`/team` 数据源 |
+| `bot-registry.ts` | `loadAgentTeamConfig` / `parseAgentTeamConfig` / `buildBotPrompt` / `BotConfig` / `AgentTeamConfig` | bots.json 的 zod 校验（含 teamLeader 与 group 代班组）、凭证环境变量解析（系统级 FEISHU_APP_ID/SECRET 回退）、工作目录优先级、提示词组装（详见 [多 bot 注册](domain/bot-registry.md)） |
+| `team-registry.ts` | `TeamRegistry` / `MissingSkill` | 团队名单上下文、Skill 缺失检查、`/team` 数据源、同组备用成员查询（`getGroupMembers` / `getAvailableFallbackMembers`，限额代班用） |
+| `session-limit-tracker.ts` | `SessionLimitTracker` / `isSessionLimitError` / `extractResetTime` / `sessionLimitTracker` | Claude 会话限额检测与内存追踪（默认 5 小时），驱动同组代班与 Team Leader 移交（详见 [多 bot 协作](domain/collaboration.md)） |
 | `clarification.ts` | `ClarificationRequestSchema` / `ClarificationFlowStore` / `findClarificationRequest` / `isClarificationOwner` | 需求澄清数据模型、按任务存储的流程状态机（详见 [需求澄清](domain/clarification.md)） |
 | `approval.ts` / `approval-store.ts` | `ApprovalRequestSchema` / `ApprovalFlowStore` / `JsonApprovalFlowStore` / `findApprovalRequest` / `formatApprovalDecision` | 高危操作审批数据模型、同任务旧流程过期、JSON 持久化（详见 [高危操作审批](domain/approval.md)） |
 | `product-spec.ts` / `product-spec-store.ts` | `ProductSpecRequestSchema` / `ProductSpecFlowStore` / `JsonProductSpecFlowStore` / `isProductSpecOwner` | local/lark-doc 双模式方案请求校验（工作区内相对路径、Docx 链接）、流程存储（详见 [产品方案交付](domain/product-spec.md)） |
@@ -199,7 +201,7 @@ Agent-Team/
 | `card-action-handler.ts` | `createCardActionHandler` / `scheduleApprovalContinuation` | 卡片回调：`approve_product_spec`、`answer_clarification`、`decide_approval`、`resume_cli_session`、`abort_task` |
 | `clarification-runner.ts` | `continueClarificationFlow` | 答案收齐后拼 prompt 回原话题续跑 CLI，支持多轮澄清 |
 | `approval-runner.ts` | `continueApprovalFlow` | 审批决定（含超时自动拒绝）回传 CLI 续跑：批准继续执行、拒绝安全收束 |
-| `collaboration-service.ts` | `CollaborationService` / `CollaborationDispatch` | 协作派发三步全成：登记 inbox → 发协作卡片 → @ 目标 bot，失败回滚收件箱 |
+| `collaboration-service.ts` | `CollaborationService` / `CollaborationDispatch` | 协作派发三步全成：登记 inbox → 发协作卡片 → @ 目标 bot，失败回滚收件箱；派发前检测目标限额并自动转派同组备用成员 |
 | `scheduler.ts` | `Scheduler` | 定时调度中枢：逐任务布防 setTimeout（cron 用 croner）、防重叠、重启补账（详见 [定时任务调度](domain/scheduling.md)） |
 | `schedule-watcher.ts` | `startScheduleFileWatcher` / `reconcileScheduleFile` | schedules.json 热更新对账（watchFile 轮询 + 防抖 + 防重入） |
 | `schedule-api.ts` | `startScheduleApi` | 本地 HTTP 管理接口：REST 增删改查 + `/api/schedules/manage` 供 MCP 工具回传 |
