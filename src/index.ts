@@ -266,94 +266,6 @@ const handleBotMessage = async (
     return
   }
 
-  // 检查当前 bot 是否处于会话限额不可用状态，若受限则直接回传 CEO 调度派发
-  if (sessionLimitTracker.isLimited(config.id)) {
-    const resetInfo = sessionLimitTracker.getLimitInfo(config.id)
-    const leaderId = agentTeamConfig.teamLeaderId
-    const groupName = config.group ?? config.id
-
-    const availableFallbacks = teamRegistry.getAvailableFallbackMembers(
-      config.id,
-    )
-
-    if (config.id !== leaderId) {
-      const leaderRuntime = botRuntimes.get(leaderId)
-      if (leaderRuntime) {
-        const fallbackIds = availableFallbacks.map((f) => f.id).join('、')
-
-        const instruction =
-          availableFallbacks.length > 0
-            ? [
-                `【任务接续派发】`,
-                `成员 ${config.id} 当前处于会话额度限制中${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，无法接单。`,
-                `所在分组 "${groupName}" 内可用备用成员：${fallbackIds}。`,
-                `【原任务需求】：${collaboration?.objective ?? resolved}`,
-                `【请 CEO 调度】：请使用 dispatch_task 派发给同组可用成员（${fallbackIds}）基于工作区现场接续推进，并汇总交付。`,
-              ].join('\n\n')
-            : [
-                `【团队资源受限汇报】`,
-                `用户向成员 ${config.id} 发起任务，但所在分组 "${groupName}" 内所有成员均处于会话限额状态。`,
-                `【原任务需求】：${collaboration?.objective ?? resolved}`,
-                `【请 CEO 处理】：请直接在当前话题向用户说明团队该分组资源受限不可用，并向用户确认下一步决策。`,
-              ].join('\n\n')
-
-        const mentionText =
-          availableFallbacks.length > 0
-            ? `当前成员处于会话额度限制中，任务已移交 Team Leader 接续调度同组备用成员处理`
-            : `分组 "${groupName}" 成员均已达会话限额，已移交 Team Leader 向你确认后续处理`
-
-        try {
-          await collaborationService.dispatch({
-            senderConfig: config,
-            senderBot: bot,
-            replyToMessageId: msg.messageId,
-            mentionText,
-            targetBotId: leaderId,
-            taskId,
-            ownerOpenId,
-            ownerUnionId,
-            reportToBotId: leaderId,
-            objective:
-              availableFallbacks.length > 0
-                ? '同组成员限额接续派发'
-                : '团队资源受限确认',
-            instruction,
-            expectedOutput:
-              availableFallbacks.length > 0
-                ? '调度备用成员接续完成任务'
-                : '向用户汇报并确认决策',
-            round: collaboration ? collaboration.round + 1 : 1,
-            maxRounds:
-              collaboration?.maxRounds ?? config.collaborationMaxRounds,
-            workspaceDir: collaboration?.workspaceDir ?? config.workspaceDir,
-          })
-          return
-        } catch (dispatchErr) {
-          console.error(
-            '[限额派发] 向 Team Leader 派发工单失败:',
-            (dispatchErr as Error).message,
-          )
-        }
-      }
-
-      await bot.reply(
-        msg.messageId,
-        availableFallbacks.length > 0
-          ? `当前成员处于会话额度限制中，任务移交 Team Leader 失败，请重试。`
-          : `分组 "${groupName}" 成员均已达会话限额，移交 Team Leader 失败，请重试。`,
-        hasThread,
-      )
-      return
-    } else {
-      await bot.reply(
-        msg.messageId,
-        `Team Leader 当前处于会话额度限制中${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，请稍后再试。`,
-        hasThread,
-      )
-      return
-    }
-  }
-
   // 话题里还有未完成的澄清流程时，普通消息按「补充说明」并入该流程，不开新任务
   const pendingClarification =
     msg.senderType !== 'app' && msg.senderType !== 'bot' && !command
@@ -449,6 +361,105 @@ const handleBotMessage = async (
       hasThread,
     )
     return
+  }
+
+  // 检查当前 bot 是否处于会话限额不可用状态，若受限则直接回传 CEO 调度派发
+  if (sessionLimitTracker.isLimited(config.id)) {
+    if (isNew && session.status === 'creating') {
+      try {
+        session = await sessions.transition(session.id, 'idle')
+      } catch (error) {
+        console.error(
+          '[会话] 限额退出保存空闲状态失败:',
+          (error as Error).message,
+        )
+      }
+    }
+
+    const resetInfo = sessionLimitTracker.getLimitInfo(config.id)
+    const leaderId = agentTeamConfig.teamLeaderId
+    const groupName = config.group ?? config.id
+
+    const availableFallbacks = teamRegistry.getAvailableFallbackMembers(
+      config.id,
+    )
+
+    if (config.id !== leaderId) {
+      const leaderRuntime = botRuntimes.get(leaderId)
+      if (leaderRuntime) {
+        const fallbackIds = availableFallbacks.map((f) => f.id).join('、')
+
+        const instruction =
+          availableFallbacks.length > 0
+            ? [
+                `【任务接续派发】`,
+                `成员 ${config.id} 当前处于会话额度限制中${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，无法接单。`,
+                `所在分组 "${groupName}" 内可用备用成员：${fallbackIds}。`,
+                `【原任务需求】：${collaboration?.objective ?? taskText}`,
+                `【请 CEO 调度】：请使用 dispatch_task 派发给同组可用成员（${fallbackIds}）基于工作区现场接续推进，并汇总交付。`,
+              ].join('\n\n')
+            : [
+                `【团队资源受限汇报】`,
+                `用户向成员 ${config.id} 发起任务，但所在分组 "${groupName}" 内所有成员均处于会话限额状态。`,
+                `【原任务需求】：${collaboration?.objective ?? taskText}`,
+                `【请 CEO 处理】：请直接在当前话题向用户说明团队该分组资源受限不可用，并向用户确认下一步决策。`,
+              ].join('\n\n')
+
+        const mentionText =
+          availableFallbacks.length > 0
+            ? `当前成员处于会话额度限制中，任务已移交 Team Leader 接续调度同组备用成员处理`
+            : `分组 "${groupName}" 成员均已达会话限额，已移交 Team Leader 向你确认后续处理`
+
+        try {
+          await collaborationService.dispatch({
+            senderConfig: config,
+            senderBot: bot,
+            replyToMessageId: msg.messageId,
+            mentionText,
+            targetBotId: leaderId,
+            taskId,
+            ownerOpenId,
+            ownerUnionId,
+            reportToBotId: leaderId,
+            objective:
+              availableFallbacks.length > 0
+                ? '同组成员限额接续派发'
+                : '团队资源受限确认',
+            instruction,
+            expectedOutput:
+              availableFallbacks.length > 0
+                ? '调度备用成员接续完成任务'
+                : '向用户汇报并确认决策',
+            round: collaboration ? collaboration.round + 1 : 1,
+            maxRounds:
+              collaboration?.maxRounds ?? config.collaborationMaxRounds,
+            workspaceDir: collaboration?.workspaceDir ?? config.workspaceDir,
+          })
+          return
+        } catch (dispatchErr) {
+          console.error(
+            '[限额派发] 向 Team Leader 派发工单失败:',
+            (dispatchErr as Error).message,
+          )
+        }
+      }
+
+      await bot.reply(
+        msg.messageId,
+        availableFallbacks.length > 0
+          ? `当前成员处于会话额度限制中，任务移交 Team Leader 失败，请重试。`
+          : `分组 "${groupName}" 成员均已达会话限额，移交 Team Leader 失败，请重试。`,
+        hasThread,
+      )
+      return
+    } else {
+      await bot.reply(
+        msg.messageId,
+        `Team Leader 当前处于会话额度限制中${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，请稍后再试。`,
+        hasThread,
+      )
+      return
+    }
   }
 
   // 用户没点卡片而是发了新消息：作废旧澄清卡片，新消息会带着已确认答案重新整理
