@@ -14,8 +14,12 @@ export interface CollaborationDispatch {
   // 有原消息就回复到话题里；没有（例如定时任务触发）就填 chatId 直接发群
   replyToMessageId?: string
   chatId?: string
-  // 只要 @ 通知、不要协作卡片时置 true，必须配合 chatId
+  // 只要 @ 通知、不要协作卡片时置 true（群聊与话题回复均支持）
   skipCard?: boolean
+  // 若提供已有卡片 message_id，则就地更新该卡片，避免重复弹出两张卡片
+  updateCardMessageId?: string
+  // 自定义 @ 通知的文本；不传时按 round=1 或 round>1 默认生成
+  mentionText?: string
   targetBotId: string
   taskId: string
   ownerOpenId: string
@@ -87,22 +91,41 @@ export class CollaborationService {
     this.runtime.collaborationInbox.register(collaboration)
 
     try {
-      if (options.chatId && options.skipCard) {
-        // 不发卡片时，任务详情只能塞进这条 @ 正文里
-        const mentionText = [
-          `新的协作任务：${options.objective}`,
-          options.instruction,
-          options.expectedOutput ? `期望产出：${options.expectedOutput}` : '',
-          `任务编号：${collaboration.dispatchId}`,
-        ]
-          .filter(Boolean)
-          .join('\n')
+      if (options.skipCard) {
+        // 不发卡片时，仅发送 @ 通知（带上任务编号以便目标 bot consume）
+        let mentionText: string
+        if (options.mentionText) {
+          mentionText = options.mentionText.includes('任务编号')
+            ? options.mentionText
+            : `${options.mentionText}（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
+        } else if (options.chatId) {
+          mentionText = [
+            `新的协作任务：${options.objective}`,
+            options.instruction,
+            options.expectedOutput ? `期望产出：${options.expectedOutput}` : '',
+            `任务编号：${collaboration.dispatchId}`,
+          ]
+            .filter(Boolean)
+            .join('\n')
+        } else {
+          mentionText =
+            options.round === 1
+              ? `新的协作任务：${options.objective}（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
+              : `协作结果已经返回（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
+        }
 
-        const mentionMessageId = await options.senderBot.sendMentionToChat(
-          options.chatId,
-          target.identity,
-          mentionText,
-        )
+        const mentionMessageId = options.chatId
+          ? await options.senderBot.sendMentionToChat(
+              options.chatId,
+              target.identity,
+              mentionText,
+            )
+          : await options.senderBot.replyMention(
+              options.replyToMessageId!,
+              target.identity,
+              mentionText,
+              true,
+            )
 
         if (!mentionMessageId) {
           throw new Error('飞书没有返回协作通知 message_id')
@@ -122,23 +145,35 @@ export class CollaborationService {
           maxRounds: options.maxRounds,
         })
 
-        const cardMessageId = options.chatId
-          ? await options.senderBot.sendCardToChat(
-              options.chatId,
-              collaborationCard,
-            )
-          : await options.senderBot.replyCard(
-              options.replyToMessageId!,
-              collaborationCard,
-              true,
-            )
+        let cardMessageId: string | undefined
+        if (options.updateCardMessageId) {
+          await options.senderBot.updateCard(
+            options.updateCardMessageId,
+            collaborationCard,
+          )
+          cardMessageId = options.updateCardMessageId
+        } else if (options.chatId) {
+          cardMessageId = await options.senderBot.sendCardToChat(
+            options.chatId,
+            collaborationCard,
+          )
+        } else {
+          cardMessageId = await options.senderBot.replyCard(
+            options.replyToMessageId!,
+            collaborationCard,
+            true,
+          )
+        }
 
         if (!cardMessageId) {
           throw new Error('飞书没有返回协作卡片 message_id')
         }
 
-        const mentionText =
-          options.round === 1
+        const mentionText = options.mentionText
+          ? options.mentionText.includes('任务编号')
+            ? options.mentionText
+            : `${options.mentionText}（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
+          : options.round === 1
             ? `新的协作任务：${options.objective}（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
             : `协作结果已经返回（任务编号：${collaboration.dispatchId}），请查看上方卡片。`
 

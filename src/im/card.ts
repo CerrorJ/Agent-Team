@@ -41,6 +41,8 @@ export interface TaskCardOptions {
   stats?: CliRunStats
   technicalDetail?: string
   abortSessionId?: string
+  expectedOutput?: string
+  handoffDetail?: string
 }
 
 export interface ResumeCardOptions {
@@ -385,6 +387,29 @@ const buildFinishedElements = (
     }
   } else {
     elements.push({ tag: 'markdown', content: `**${options.detail}**` })
+    if (options.expectedOutput) {
+      elements.push({
+        tag: 'markdown',
+        content: `**期望产出**\n${escapeFeishuMarkdown(options.expectedOutput)}`,
+      })
+    }
+    if (options.handoffDetail) {
+      elements.push({
+        tag: 'collapsible_panel',
+        expanded: false,
+        header: collapsibleHeader('查看移交说明'),
+        vertical_spacing: '8px',
+        padding: '8px 8px 8px 8px',
+        elements: [
+          {
+            tag: 'markdown',
+            content: escapeFeishuMarkdown(
+              markdownPreview(options.handoffDetail, MAX_CARD_ANSWER_LENGTH),
+            ),
+          },
+        ],
+      })
+    }
     if (options.technicalDetail) {
       elements.push({
         tag: 'collapsible_panel',
