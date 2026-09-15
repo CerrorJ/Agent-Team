@@ -8,9 +8,12 @@ import 'dotenv/config'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ClarificationRequestSchema } from '../core/clarification.js'
-import { ProductSpecRequestSchema } from '../core/product-spec.js'
+import {
+  ProductSpecRequestSchema,
+  ProductSpecToolInputSchema,
+} from '../core/product-spec.js'
 import { DispatchTaskRequestSchema } from '../core/collaboration.js'
-import { ScheduleManageRequestSchema } from '../core/schedule.js'
+import { ScheduleManageToolInputSchema } from '../core/schedule.js'
 import { ApprovalRequestSchema } from '../core/approval.js'
 import {
   CLARIFICATION_TOOL_NAME,
@@ -130,16 +133,43 @@ server.registerTool(
       '提交前必须完成需求澄清，确保这份方案已经可以确认。',
       '调用后停止工作，不要实现代码或委派团队成员。',
     ].join(''),
-    inputSchema: ProductSpecRequestSchema,
+    inputSchema: ProductSpecToolInputSchema,
   },
-  async () => ({
-    content: [
-      {
-        type: 'text',
-        text: '唯一的产品方案产物已交给 Agent Team，等待用户查看。',
-      },
-    ],
-  }),
+  async (input) => {
+    const cleanInput =
+      typeof input === 'object' && input !== null
+        ? Object.fromEntries(
+            Object.entries(input).filter(
+              ([_, v]) => v !== undefined && v !== '',
+            ),
+          )
+        : input
+
+    const parsed = ProductSpecRequestSchema.safeParse(cleanInput)
+    if (!parsed.success) {
+      const reasons = parsed.error.issues
+        .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+        .join('；')
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `产品方案校验未通过：${reasons}。请修正后重新提交。`,
+          },
+        ],
+        isError: true,
+      }
+    }
+    return {
+      content: [
+        {
+          type: 'text',
+          text: '唯一的产品方案产物已交给 Agent Team，等待用户查看。',
+        },
+      ],
+    }
+  },
 )
 
 server.registerTool(
@@ -175,7 +205,7 @@ server.registerTool(
       'targetBotId 选择团队中负责执行的成员，prompt 保留完整任务要求，rule 使用一次性、固定间隔或 Cron 规则。',
       '批量删除和删除全部属于高影响操作，先 list 确认 id 再执行。',
     ].join(''),
-    inputSchema: ScheduleManageRequestSchema,
+    inputSchema: ScheduleManageToolInputSchema,
   },
   async (input) => callScheduleManage(input),
 )

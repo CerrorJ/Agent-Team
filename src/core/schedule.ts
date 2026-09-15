@@ -85,6 +85,71 @@ export const ScheduleManageRequestSchema = z.discriminatedUnion('action', [
 
 export type ScheduleManageRequest = z.infer<typeof ScheduleManageRequestSchema>
 
+// MCP SDK 的 normalizeObjectSchema 无法识别顶层 z.discriminatedUnion，
+// 会静默降级为 { type: 'object', properties: {} } 导致 AI 无法传参。
+// 此 Schema 用于向 MCP 暴露具有明确 properties 的顶层对象，运行时仍由 ScheduleManageRequestSchema 做鉴别联合校验。
+export const ScheduleManageToolInputSchema = z.object({
+  action: z
+    .enum([
+      'list',
+      'add',
+      'addMany',
+      'update',
+      'remove',
+      'removeMany',
+      'removeAll',
+      'run',
+      'pause',
+      'resume',
+      'logs',
+    ])
+    .describe(
+      '管理动作：list 列出全部计划；add 创建一个；addMany 批量创建；update 编辑；remove 删除；removeMany 批量删除；removeAll 删除全部；run 立即执行；pause 暂停；resume 恢复；logs 查看运行记录',
+    ),
+  id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .optional()
+    .describe('任务ID（用于 update, remove, run, pause, resume, logs）'),
+  targetBotId: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9_-]{0,31}$/)
+    .optional()
+    .describe('负责执行任务的团队成员 botId（用于 add, update）'),
+  prompt: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2_000)
+    .optional()
+    .describe('任务提示词与完整要求（用于 add, update）'),
+  rule: ScheduleRuleSchema.optional().describe(
+    '调度规则（用于 add, update）：支持 once（一次性，需指定 runAt ISO时间）、interval（固定间隔，everyMs 毫秒）、cron（Cron表达式）',
+  ),
+  schedules: z
+    .array(ScheduleAddSchema)
+    .min(1)
+    .max(20)
+    .optional()
+    .describe('批量创建的任务列表（用于 addMany）'),
+  ids: z
+    .array(z.string().trim().min(1))
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('批量删除的任务ID数组（用于 removeMany）'),
+  confirm: z
+    .boolean()
+    .optional()
+    .describe('删除全部确认标志，必须为 true（用于 removeAll）'),
+})
+
+export type ScheduleManageToolInput = z.infer<
+  typeof ScheduleManageToolInputSchema
+>
+
 export interface ScheduledTask {
   id: string
   creatorOpenId: string

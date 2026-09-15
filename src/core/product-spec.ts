@@ -48,6 +48,30 @@ export type LocalProductSpecRequest = z.infer<
   typeof LocalProductSpecRequestSchema
 >
 
+// MCP SDK 的 normalizeObjectSchema 无法识别顶层 z.discriminatedUnion，
+// 会静默降级为 { type: 'object', properties: {} } 导致 AI 无法传参。
+// 此 Schema 用于向 MCP 暴露具有明确 properties 的顶层对象，运行时仍由 ProductSpecRequestSchema 做鉴别联合校验。
+export const ProductSpecToolInputSchema = z.object({
+  deliveryMode: z
+    .enum(['local', 'lark-doc'])
+    .describe(
+      '交付方式：local=落盘工作区的 Spec/Tickets 文件；lark-doc=飞书云文档链接',
+    ),
+  title: z.string().trim().min(1).max(80).describe('方案标题'),
+  summary: z.string().trim().min(1).max(500).describe('方案摘要'),
+  specPath: WorkspaceDocumentPathSchema.optional().describe(
+    '本地 Spec Markdown 文件相对路径（deliveryMode=local 时必填）',
+  ),
+  ticketsPath: WorkspaceDocumentPathSchema.optional().describe(
+    '本地 Tickets Markdown 文件相对路径（deliveryMode=local 时必填）',
+  ),
+  documentUrl: LarkDocumentUrlSchema.optional().describe(
+    '飞书云文档链接（deliveryMode=lark-doc 时必填）',
+  ),
+})
+
+export type ProductSpecToolInput = z.infer<typeof ProductSpecToolInputSchema>
+
 export interface ProductSpecFlow {
   token: string
   taskId: string
@@ -78,7 +102,17 @@ export const findProductSpecRequest = (
   for (let index = (toolCalls?.length ?? 0) - 1; index >= 0; index -= 1) {
     const call = toolCalls?.[index]
     if (call?.toolName !== 'request_spec_approval') continue
-    const parsed = ProductSpecRequestSchema.safeParse(call.input)
+
+    const cleanInput =
+      typeof call.input === 'object' && call.input !== null
+        ? Object.fromEntries(
+            Object.entries(call.input).filter(
+              ([_, v]) => v !== undefined && v !== '',
+            ),
+          )
+        : call.input
+
+    const parsed = ProductSpecRequestSchema.safeParse(cleanInput)
     if (parsed.success) return parsed.data
   }
   return undefined
