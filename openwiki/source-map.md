@@ -39,8 +39,8 @@ Agent-Team/
 │   │   └── workspace.ts       # 工作目录解析与存在性校验
 │   ├── app/
 │   │   ├── runtime.ts            # AppRuntime 共享状态容器
-│   │   ├── command-handler.ts    # 斜杠命令处理（含 /schedule /schedules）
-│   │   ├── card-action-handler.ts # 卡片回调：澄清作答/方案确认/审批决定/恢复会话/停止任务
+│   │   ├── command-handler.ts    # 斜杠命令处理（含 /schedule /schedules /model）
+│   │   ├── card-action-handler.ts # 卡片回调：澄清作答/方案确认/审批决定/恢复会话/停止任务/模型配置
 │   │   ├── clarification-runner.ts # 澄清答案收齐后的 CLI 续跑
 │   │   ├── approval-runner.ts    # 审批决定回传后的 CLI 续跑
 │   │   ├── collaboration-service.ts # 协作派发服务（登记 inbox + 协作卡 + @ 目标 bot）
@@ -162,7 +162,8 @@ Agent-Team/
 | `buildTaskCard` | function | 根据 options 构建飞书卡片 JSON |
 | `buildResumeCard` | function | `/resume` 的会话选择卡片（每条会话一行，非当前会话带「恢复」按钮） |
 | `buildSessionNoticeCard` | function | `/new` 与 `/compact` 的轻量通知卡片 |
-| `buildTeamCard` | function | `/team` 的团队成员卡片 |
+| `buildTeamCard` | function | `/team` 的团队成员卡片（附「⚙️ 角色模型与端点配置」入口按钮） |
+| `buildBotModelConfigCard` / `buildClosedBotModelConfigCard` | function | `/model` 的角色模型配置卡片（角色/引擎切换、探测、保存表单、「✖ 关闭」按钮）与关闭后的轻量收起卡片（[角色模型动态配置](domain/model-config.md)） |
 | `buildCollaborationCard` | function | bot 间协作交接卡片（[多 bot 协作](domain/collaboration.md)） |
 | `buildClarificationCard` / `buildClarificationContinuingCard` / `buildClarificationSupersededCard` | function | 澄清问答、整理中、已被新消息取代三种卡片（[需求澄清](domain/clarification.md)） |
 | `answerNeedsContinuation` / `answerContinuation` / `splitLongText` | function | 超长回答的卡片截断与续发拆分 |
@@ -181,13 +182,15 @@ Agent-Team/
 | `approval.ts` / `approval-store.ts` | `ApprovalRequestSchema` / `ApprovalFlowStore` / `JsonApprovalFlowStore` / `findApprovalRequest` / `formatApprovalDecision` | 高危操作审批数据模型、同任务旧流程过期、JSON 持久化（详见 [高危操作审批](domain/approval.md)） |
 | `product-spec.ts` / `product-spec-store.ts` | `ProductSpecRequestSchema` / `ProductSpecToolInputSchema` / `ProductSpecFlowStore` / `JsonProductSpecFlowStore` / `isProductSpecOwner` | local/lark-doc 双模式方案请求校验（工作区内相对路径、Docx 链接）、MCP 注册用扁平入参 schema（顶层 union 会被 SDK 降级）、流程存储（详见 [产品方案交付](domain/product-spec.md)） |
 | `schedule.ts` / `schedule-store.ts` / `schedule-run-store.ts` | `ScheduleRuleSchema` / `ScheduleManageRequestSchema` / `ScheduleManageToolInputSchema` / `ScheduledTask` / `JsonScheduleStore` / `ScheduleRunStore` | 定时任务模型（once/interval/cron）、管理协议、MCP 注册用扁平入参 schema（顶层 union 会被 SDK 降级）、任务与运行记录的 JSON 原子持久化（详见 [定时任务调度](domain/scheduling.md)） |
+| `model-config-store.ts` | `JsonModelConfigStore` / `validateThinkingLevel` / `checkModelConfigAccess` / `maskApiKey` | `/model` 卡片的运行期模型覆盖：`data/bot-model-overrides.json` zod 校验 + 热重载 + 原子写，`applyToBotConfigs` 把覆盖合入各 bot 的 `cliEnv`，思考/推理等级白名单校验与 `OWNER_OPEN_ID` 管理员鉴权（详见 [角色模型动态配置](domain/model-config.md)） |
+| `model-fetcher.ts` | `fetchAvailableModels` | 探测端点可用模型：Claude/Codex 各自的 `/models` 候选 URL 顺序、Bearer + Claude 专有头、超时与错误聚合，返回按引擎特征排序的模型列表 |
 | `session-manager.ts` | `SessionManager` / `Session` / `SessionStatus` | 话题级会话状态机，`resolve` 按 `botId:chatId:threadId` 查找或创建，`transition` 校验合法流转，`setWorkspaceDir` 切目录时清空 `cliSessionId` |
 | `session-store.ts` | `JsonSessionStore` / `SessionStore` | zod 校验 + 临时文件重命名的原子写 + 串行写队列，重启时把 creating/active 恢复为 idle，`migrateSessionRecord` 给旧记录补 `botId` / `workspaceDir` 并把历史 UTC 时间转本地时间 |
 | `local-time.ts` | `formatLocalDateTime` / `isLocalDateTime` / `migrateToLocalDateTime` | 会话时间戳的本地时间格式（`YYYY-MM-DD HH:mm:ss`，无时区后缀，面向人工排查）；`SessionManager` 写入、`SessionSchema` 校验、旧记录迁移共用 |
 | `topic-task.ts` | `topicTaskId` / `topicIdOf` | chatId + 话题哈希成稳定短任务 id，澄清流程按它归属话题 |
 | `task-progress.ts` | `TaskProgressTracker` / `TaskProgressSnapshot` | 以 `toolUseId` 配对 tool_start/tool_end，维护最近 12 条活动与上下文 token 基线 |
 | `task-abort.ts` | `requestTaskAbort` / `ActiveRun` / `AbortTaskOutcome` | 停止任务时的存在性/发起人/重复取消校验 |
-| `command-parser.ts` | `parseCommand` / `parseCliRequest` / `SlashCommand` / `CliRequest` | 匹配 `/close /status /help /team /new /resume /cd` 命令与 `/claude` `/codex` 引擎选择 |
+| `command-parser.ts` | `parseCommand` / `parseCliRequest` / `SlashCommand` / `CliRequest` | 匹配 `/close /status /help /team /new /resume /cd` 命令、`/schedule` `/schedules` `/model`（`/config` 同义，可选角色 id）与 `/claude` `/codex` 引擎选择 |
 | `workspace.ts` | `resolveWorkspacePath` / `ensureWorkspaceDirectory` | 工作目录路径解析（相对路径基于基准目录）与存在性校验 |
 
 **参见：** [会话与任务管理](domain/session.md)

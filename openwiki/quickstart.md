@@ -81,6 +81,7 @@ pnpm format:check
 | 产品方案交付 | request_spec_approval 提交 local / lark-doc 产物 → 确认卡 → 评论区修改 | [产品方案交付](domain/product-spec.md) |
 | 高危操作审批 | request_approval 审批卡 → 批准继续 / 拒绝收束 → 决定回传续跑 | [高危操作审批](domain/approval.md) |
 | 定时任务调度 | once/interval/cron 规则、schedule_manage 工具、/schedule 命令与本地 HTTP 管理接口 | [定时任务调度](domain/scheduling.md) |
+| 角色模型动态配置 | /model 配置卡片按「角色 × 引擎」免重启覆盖模型后端：三级来源合并、热重载、端点探测 | [角色模型动态配置](domain/model-config.md) |
 | 任务卡片系统 | 飞书卡片构建 + 节流刷新机制（含澄清/方案/审批/定时卡片族） | [任务卡片系统](domain/task-card.md) |
 | AI CLI 输出解析 | Claude Code / Codex headless 输出解析与统一事件协议 | [AI CLI 输出解析](domain/ai-cli-probe.md) |
 | 运维手册 | 环境变量、运行命令、飞书配置、排查 | [运维手册](operations/runbook.md) |

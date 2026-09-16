@@ -156,7 +156,7 @@ await updater.finish(buildTaskCard({ status: "success", answer, stats, ... }));
 2. 后台执行 CLI → 每秒心跳 `renderProgress()` → `updater.push(...)` 节流更新
 3. 收尾 → `updater.finish(buildTaskCard({ status: success/failed/cancelled, ... }))` 最终刷新
 
-除任务卡外，`card.ts` 还构建 `/resume` 会话选择卡（`buildResumeCard`）、`/new` 与 `/compact` 通知卡（`buildSessionNoticeCard`）、`/team` 团队卡（`buildTeamCard`）、协作交接卡（`buildCollaborationCard`）、定时任务三卡（`buildScheduleCreatedCard` / `buildScheduleListCard` / `buildScheduleRunCard`，见 [定时任务调度](scheduling.md)）、产品方案三态卡（待确认 / 已确认 / 已失效，见 [产品方案交付](product-spec.md)）、审批三态卡（待决 / 已决 / 续跑中，见 [高危操作审批](approval.md)）与上文的澄清卡片三件套。
+除任务卡外，`card.ts` 还构建 `/resume` 会话选择卡（`buildResumeCard`）、`/new` 与 `/compact` 通知卡（`buildSessionNoticeCard`）、`/team` 团队卡（`buildTeamCard`，附模型配置入口）、角色模型配置双卡（`buildBotModelConfigCard` / `buildClosedBotModelConfigCard`，见 [角色模型动态配置](model-config.md)）、协作交接卡（`buildCollaborationCard`）、定时任务三卡（`buildScheduleCreatedCard` / `buildScheduleListCard` / `buildScheduleRunCard`，见 [定时任务调度](scheduling.md)）、产品方案三态卡（待确认 / 已确认 / 已失效，见 [产品方案交付](product-spec.md)）、审批三态卡（待决 / 已决 / 续跑中，见 [高危操作审批](approval.md)）与上文的澄清卡片三件套。
 
 ## 变更指引
 

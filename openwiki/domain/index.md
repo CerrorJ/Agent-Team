@@ -5,6 +5,7 @@
 - [多 bot 注册](bot-registry.md) - config/bots.json 注册多个飞书 bot——zod 校验（含 group 代班组）、系统级凭证回退与按 appId 共享长连接、默认执行引擎与工作目录优先级、cliEnv per-bot CLI 模型配置、systemPrompt 拼接（含命令前台执行规则）与会话隔离
 - [需求澄清](clarification.md) - request_clarification 工具闭环——CLI 经 stdio MCP 提交结构化问题、应用层截获 tool_call 转飞书卡片逐题收集答案、答案拼回 prompt 续跑、多轮追问与话题新消息作废旧卡片
 - [多 bot 协作](collaboration.md) - dispatch_task 工具与 CollaborationService 派发——taskId/dispatchId/round 交接模型、CollaborationInbox 取件码领取、飞书重推去重、轮次上限、完成后的路由分支，以及会话限额触发的同组代班与 Team Leader 移交
+- [角色模型动态配置](model-config.md) - /model 命令与飞书配置卡片按「角色 × 引擎」免重启覆盖 CLI 模型后端——JsonModelConfigStore 持久化与热重载、三级来源合并、思考等级白名单校验、端点模型探测与管理员鉴权
 - [产品方案交付](product-spec.md) - request_spec_approval 唯一产物提交——local/lark-doc 两种交付模式、落盘校验与重跑兜底、用户确认卡，以及飞书云文档评论区 @bot 触发的方案修订流
 - [定时任务调度](scheduling.md) - once/interval/cron 三类调度规则、Scheduler 内存计时器 + schedules.json 热更新对账、运行记录持久化与重启补账、schedule_manage 工具与本地 HTTP 管理接口
 - [会话与任务管理](session.md) - 话题级会话状态机（creating/active/idle/closed）、JSON 持久化与重启恢复、斜杠命令、运行中任务登记与停止任务权限校验

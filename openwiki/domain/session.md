@@ -61,7 +61,7 @@ stateDiagram-v2
 
 ## 斜杠命令
 
-`src/core/command-parser.ts` 的 `parseCommand()` 只匹配「可选 @ 提及 + 一条命令」，支持 `/close`、`/status`、`/help`、`/new`、`/resume`、`/team`、`/compact`、`/cd`、`/schedules`、`/schedule`；`parseCliRequest()` 另行识别 `/claude` / `/codex` 引擎选择。命令处理在 `src/app/command-handler.ts`，于任务执行路径之前处理，除 `/compact` 与带需求的 `/schedule` 外都不会触发 CLI。
+`src/core/command-parser.ts` 的 `parseCommand()` 只匹配「可选 @ 提及 + 一条命令」，支持 `/close`、`/status`、`/help`、`/new`、`/resume`、`/team`、`/compact`、`/cd`、`/schedules`、`/schedule`、`/model`（`/config` 同义，可选角色 id 参数，见 [角色模型动态配置](model-config.md)）；`parseCliRequest()` 另行识别 `/claude` / `/codex` 引擎选择。命令处理在 `src/app/command-handler.ts`，于任务执行路径之前处理，除 `/compact` 与带需求的 `/schedule` 外都不会触发 CLI。
 
 其中三个命令直接操作话题绑定的 CLI 会话：
 
