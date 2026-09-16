@@ -24,7 +24,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 
 首次配置需要三步：`cp .env.example .env` 填凭证，`cp config/bots.example.json config/bots.json` 注册 bot（字段含义见 [多 bot 注册](../domain/bot-registry.md)），再按根 README 的技能对照表安装 bots.json 声明的工作流 Skills（全局装到 `~/.agents/skills/`，或从 `workspace-template/` 复制定制版）。
 
-> Claude Code 与 Codex 的模型后端默认使用各自的用户级配置（如 `~/.claude/settings.json` 或 CC Switch），不经过本项目环境变量；仅当 bot 在 `bots.json` 配置了 `cliEnv` 时才按 bot 覆盖（如 CEO 走智谱直连、其他 Claude bot 继续跟随 CC Switch），机制见 [多 bot 注册](../domain/bot-registry.md) 的 per-bot CLI 模型配置一节。
+> Claude Code 与 Codex 的模型后端默认使用各自的用户级配置（如 `~/.claude/settings.json` 或 CC Switch），不经过本项目环境变量；仅当 bot 在 `bots.json` 配置了 `cliEnv` 时才按 bot 覆盖（如 CEO 走智谱直连、其他 Claude bot 继续跟随 CC Switch），机制见 [多 bot 注册](../domain/bot-registry.md) 的 per-bot CLI 模型配置一节。运行期还可用 `/model` 卡片在 `cliEnv` 之上做免重启热调，持久化在 `data/bot-model-overrides.json`（按 botId + cliId 隔离），见 [角色模型动态配置](../domain/model-config.md)。
 
 ### 安全约定
 

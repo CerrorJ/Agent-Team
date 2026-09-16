@@ -119,6 +119,8 @@ flowchart TD
 | 方案评论区修改 | `src/app/product-comment-runner.ts` |
 | 定时任务直接执行 | `src/app/scheduled-task-runner.ts`（`target.cliEnv` + `AGENT_TEAM_*`） |
 
+`cliEnv` 是启动期基线：运行期 `/model` 配置卡片会直接改写 `config.cliEnv`（原值缓存为回退基线），按「角色 × 引擎」免重启热调模型后端，见 [角色模型动态配置](model-config.md)。
+
 ## 工作目录优先级
 
 `workspaceDir` 的取值链（`parseAgentTeamConfig` 内）：

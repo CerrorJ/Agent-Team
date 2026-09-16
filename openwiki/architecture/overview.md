@@ -122,11 +122,12 @@ flowchart TD
 - `product-spec.ts` / `product-spec-store.ts` — [产品方案交付](../domain/product-spec.md) 的 local / lark-doc 请求校验与流程存储
 - `schedule.ts` / `schedule-store.ts` / `schedule-run-store.ts` — [定时任务调度](../domain/scheduling.md) 的规则模型、管理协议、任务与运行记录持久化
 - `collaboration.ts` — bot 间协作的交接单（`CollaborationMessage`）、共享收件箱 `CollaborationInbox`、`dispatch_task` 请求校验与按「任务 + 轮次 + 接收方」的去重键（详见 [多 bot 协作](../domain/collaboration.md)）
+- `model-config-store.ts` / `model-fetcher.ts` — [角色模型动态配置](../domain/model-config.md) 的持久化与热重载（`data/bot-model-overrides.json`，直接改写各 bot 的 `cliEnv`）与端点可用模型探测
 - `session-manager.ts` / `session-store.ts` — 话题级会话状态机与 JSON 持久化（zod 校验、原子写入、重启恢复、旧记录迁移）
 - `topic-task.ts` — `topicTaskId`：把 `chatId + 话题` 哈希成稳定短任务 id，澄清 / 方案 / 审批流程按它归属话题
 - `task-progress.ts` — 把 CLI 事件折叠成工具级进度快照，供卡片渲染
 - `task-abort.ts` — 「停止任务」的发起人权限校验
-- `command-parser.ts` — 斜杠命令（含 `/schedule` `/schedules`）与 `/claude` `/codex` 引擎选择解析
+- `command-parser.ts` — 斜杠命令（含 `/schedule` `/schedules` `/model`）与 `/claude` `/codex` 引擎选择解析
 - `workspace.ts` — 工作目录解析与存在性校验（`/cd` 与 bot 配置共用）
 
 详见 [会话与任务管理](../domain/session.md)。

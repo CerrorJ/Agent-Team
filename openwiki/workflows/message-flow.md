@@ -86,7 +86,7 @@ sequenceDiagram
 |------|------|
 | `/help` | 回复命令列表 |
 | `/status` | 回复机器人、会话 id、状态、执行引擎、工作目录、CLI 会话 id、话题、更新时间 |
-| `/team` | 回复团队成员卡片：名称、角色、默认引擎、Skills、Team Leader 标记与连接状态（数据来自 `TeamRegistry`，见 [多 bot 注册](../domain/bot-registry.md)） |
+| `/team` | 回复团队成员卡片：名称、角色、默认引擎、Skills、Team Leader 标记与连接状态，附带「⚙️ 角色模型与端点配置」入口按钮（数据来自 `TeamRegistry`，见 [多 bot 注册](../domain/bot-registry.md)；配置入口见 [角色模型动态配置](../domain/model-config.md)） |
 | `/schedule <需求>` | 把需求包装成「请使用 schedule_manage 工具创建任务」的提示，继续走 CLI 执行管线（bot 会代为创建定时任务）；不带需求时回复用法；`pause/resume/delete/run <id>` 子命令直接操作调度器不跑 CLI（见 [定时任务调度](../domain/scheduling.md)） |
 | `/schedules` | 回复定时任务列表卡片（`buildScheduleListCard`） |
 | `/new` | 清空话题绑定的 CLI 会话，下一条任务开新会话；旧会话保留，可用 `/resume` 找回 |
@@ -94,6 +94,7 @@ sequenceDiagram
 | `/compact [要求]` | 在当前 CLI 会话内执行原生上下文压缩（`compactCliSession`），无需整理时回「暂时无需整理」卡片 |
 | `/cd` | 无参数查看当前工作目录；带参数切换话题工作目录（active 状态下拒绝，切换成功后清空 `cliSessionId`，下一条任务新建 CLI 会话） |
 | `/close` | 中止运行中任务（`cancelMode = "close"`）并把会话置为 `closed` |
+| `/model [角色ID]` | 回复角色模型配置卡片，管理员（`OWNER_OPEN_ID`）按「角色 × 引擎」免重启覆盖模型后端（`/config` 同义，见 [角色模型动态配置](../domain/model-config.md)） |
 | `/claude` / `/codex` | 新话题显式选择执行引擎；已有话题引擎不同会被拒绝；不带任务文本时提示补写任务 |
 
 ### 资源提取与下载
