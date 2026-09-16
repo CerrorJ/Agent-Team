@@ -5,6 +5,7 @@ import {
   buildBotModelConfigCard,
   buildClarificationCard,
   buildClarificationContinuingCard,
+  buildClosedBotModelConfigCard,
   buildProductSpecApprovedCard,
   buildProductSpecExpiredCard,
   buildResumeCard,
@@ -877,6 +878,43 @@ export const createCardActionHandler = (options: {
             availableModels: probeResult.models,
             draft: { baseUrl: probeBaseUrl },
             statusNotice,
+          }),
+        },
+      }
+    }
+
+    if (action.value.action === 'close_bot_model_config') {
+      const access = checkModelConfigAccess(action.operatorOpenId)
+      if (!access.allowed) {
+        return {
+          toast: {
+            type: 'error',
+            content: access.reason ?? '只有管理员可以配置角色模型。',
+          },
+        }
+      }
+
+      const botId =
+        typeof action.value.botId === 'string' ? action.value.botId : ''
+
+      const targetBot = runtime.teamRegistry.members.find((m) => m.id === botId)
+
+      const cliId: CliId =
+        action.value.cliId === 'codex'
+          ? 'codex'
+          : action.value.cliId === 'claude'
+            ? 'claude'
+            : targetBot?.defaultCliId ?? 'claude'
+
+      const cliName = cliId === 'claude' ? 'Claude Code' : 'Codex'
+
+      return {
+        toast: { type: 'info', content: '已关闭模型配置面板。' },
+        card: {
+          type: 'raw',
+          data: buildClosedBotModelConfigCard({
+            botId: targetBot?.id ?? botId,
+            cliName,
           }),
         },
       }

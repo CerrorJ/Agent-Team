@@ -1953,6 +1953,28 @@ export const buildBotModelConfigCard = (
                 },
               ],
             },
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '✖ 关闭' },
+                  type: 'default',
+                  size: 'medium',
+                  behaviors: [
+                    {
+                      type: 'callback',
+                      value: {
+                        action: 'close_bot_model_config',
+                        botId: currentBotId,
+                        cliId: currentCliId,
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
           ],
         },
       ],
@@ -1983,6 +2005,65 @@ export const buildBotModelConfigCard = (
       direction: 'vertical',
       vertical_spacing: '12px',
       elements,
+    },
+  }
+}
+
+// 已关闭的模型配置卡片：折叠冗长表单，保留简洁状态与重新打开按钮
+export const buildClosedBotModelConfigCard = (options: {
+  botId: string
+  cliName: string
+}): CardJson => {
+  return {
+    schema: '2.0',
+    config: {
+      update_multi: true,
+      summary: { content: '模型配置面板已关闭' },
+    },
+    header: {
+      template: 'grey',
+      title: { tag: 'plain_text', content: '角色模型与端点配置（已关闭）' },
+      subtitle: {
+        tag: 'plain_text',
+        content: `已关闭 ${options.botId} · ${options.cliName} 的配置面板`,
+      },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements: [
+        {
+          tag: 'markdown',
+          content: '配置面板已收起。如需再次修改，可点击下方按钮或发送 `/model` 重新打开。',
+        },
+        {
+          tag: 'column_set',
+          flex_mode: 'none',
+          horizontal_spacing: '8px',
+          columns: [
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '⚙️ 重新打开配置' },
+                  type: 'default',
+                  size: 'small',
+                  behaviors: [
+                    {
+                      type: 'callback',
+                      value: {
+                        action: 'open_bot_model_config',
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
     },
   }
 }
