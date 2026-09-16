@@ -88,12 +88,21 @@ import { startScheduleApi } from './app/schedule-api.js'
 import { startScheduleFileWatcher } from './app/schedule-watcher.js'
 import type { AppRuntime, BotRuntime } from './app/runtime.js'
 
+import { JsonModelConfigStore } from './core/model-config-store.js'
+
 const botConfigPath = resolve(
   process.env.BOTS_CONFIG ?? join('config', 'bots.json'),
 )
 
 const agentTeamConfig = await loadAgentTeamConfig(botConfigPath)
 const botConfigs = agentTeamConfig.bots
+
+const modelConfigStore = new JsonModelConfigStore(
+  join('data', 'bot-model-overrides.json'),
+)
+
+await modelConfigStore.load(botConfigs)
+
 const teamRegistry = new TeamRegistry(agentTeamConfig.teamLeaderId, botConfigs)
 await Promise.all(
   botConfigs.map((config) => ensureWorkspaceDirectory(config.workspaceDir)),
@@ -146,6 +155,7 @@ const runtime: AppRuntime = {
   clarificationFlows,
   productSpecFlows,
   approvalFlows,
+  modelConfigStore,
 }
 
 const persistBotIdentities = (): void => {

@@ -158,9 +158,14 @@ const parseStats = (event: ClaudeEvent): CliRunStats | undefined => {
     : undefined
 }
 
-const outputArgs = (prompt: string, promptInput: CliPromptInput): string[] => {
+const outputArgs = (
+  prompt: string,
+  promptInput: CliPromptInput,
+  options?: { model?: string },
+): string[] => {
   return [
     '--dangerously-skip-permissions',
+    ...(options?.model ? ['--model', options.model] : []),
     '-p',
     ...(promptInput === 'argument' ? [prompt] : []),
     '--output-format',
@@ -175,16 +180,21 @@ export class ClaudeAdapter implements CliAdapter {
   readonly command = 'claude'
   readonly displayName = 'Claude Code'
 
-  buildArgs(prompt: string, promptInput: CliPromptInput): string[] {
-    return outputArgs(prompt, promptInput)
+  buildArgs(
+    prompt: string,
+    promptInput: CliPromptInput,
+    options?: { model?: string },
+  ): string[] {
+    return outputArgs(prompt, promptInput, options)
   }
 
   buildResumeArgs(
     prompt: string,
     sessionId: string,
     promptInput: CliPromptInput,
+    options?: { model?: string },
   ): string[] {
-    return ['--resume', sessionId, ...outputArgs(prompt, promptInput)]
+    return ['--resume', sessionId, ...outputArgs(prompt, promptInput, options)]
   }
 
   buildCompactPlan(sessionId: string, instructions?: string) {

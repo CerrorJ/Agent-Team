@@ -159,13 +159,21 @@ export class CodexAdapter implements CliAdapter {
   readonly displayName = 'Codex'
 
   // 单次任务
-  buildArgs(prompt: string, promptInput: CliPromptInput): string[] {
+  buildArgs(
+    prompt: string,
+    promptInput: CliPromptInput,
+    options?: { model?: string },
+  ): string[] {
     const args = [
       ...codexAppToolArgs(),
       'exec',
       '--json',
       '--skip-git-repo-check',
     ]
+
+    if (options?.model) {
+      args.push('-m', options.model)
+    }
 
     // Windows 上沙箱功能不支持，必须完全禁用；approvals 也一并绕过。
     if (process.platform === 'win32') {
@@ -183,6 +191,7 @@ export class CodexAdapter implements CliAdapter {
     prompt: string,
     sessionId: string,
     promptInput: CliPromptInput,
+    options?: { model?: string },
   ): string[] {
     const args = [
       ...codexAppToolArgs(),
@@ -190,8 +199,13 @@ export class CodexAdapter implements CliAdapter {
       'resume',
       '--json',
       '--skip-git-repo-check',
-      sessionId,
     ]
+
+    if (options?.model) {
+      args.push('-m', options.model)
+    }
+
+    args.push(sessionId)
 
     // Windows 上沙箱功能不支持，必须完全禁用；approvals 也一并绕过。
     if (process.platform === 'win32') {

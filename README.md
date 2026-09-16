@@ -84,10 +84,14 @@
   - 本地文件热更新对账：直接修改 `data/schedules.json`，调度器轮询秒级对账生效。
 - **防重叠与中断自愈**：同一时刻只执行一次，前一轮未跑完自动跳过防并发打架，服务重启自动补账修复中断记录。
 
-### 8. ⚡ 双 CLI 引擎 & 单 Bot 模型后端覆盖
+### 8. ⚡ 双 CLI 引擎、飞书动态模型配置与端点隔离
 
 - **无缝支持主流 CLI**：统一抽象 `CliAdapter` 事件协议，完整适配 Claude Code（`--output-format stream-json`）与 OpenAI Codex（`exec --json`）。
-- **支持 Per-bot 模型定制**：通过 `cliEnv` 映射，可为特定 Bot（如 CEO 助理）覆盖专属模型后端（如智谱 GLM、DeepSeek 等兼容接口），其余 Bot 继续使用系统全局配置或 CC Switch，灵活平衡成本与能力。
+- **飞书卡片动态配置角色模型（热更新免重启）**：
+  - 管理员发送 `/model`（或 `/config`）或点击 `/team` 卡片中的「⚙️ 角色模型与端点配置」，即可弹出可视化配置卡片，支持直接修改每个角色的 `Base URL`、`API Key` 与 `Model`。
+  - **Claude 与 Codex 端点配置严格隔离**：卡片内置 CLI 切换 Tab，同一角色的 Claude（Anthropic 兼容协议与密钥）与 Codex（OpenAI 协议与密钥）按 `(botId, cliId)` 独立持久化，互不污染。切换引擎时精准读取各自端点，彻底避免 Anthropic 端点错传给 Codex 的协议异常。
+  - **严格权限与零重启热重载**：基于 `OWNER_OPEN_ID` 严格鉴权，非管理员禁止修改；修改保存后立即落盘并刷新内存缓存，下一轮任务即刻生效，无需重启服务进程。
+- **支持静态 Per-bot 模型定制**：亦可在 `config/bots.json` 的 `cliEnv` 映射静态预设，系统优先应用飞书动态覆盖，未覆盖项回退至预设或全局配置。
 - **双模式飞书接入**：
   - **极简模式（单应用全员共享）**：仅需配置一组全局 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`，所有团队成员无缝共用。系统基于消息内 `dispatchId` 精准唤醒目标角色 Bot，无需在飞书开放平台繁琐创建多个应用。
   - **多应用独立模式**：亦可为各成员单独配置专属自建应用凭证，实现独立机器人名字与专属头像；两种模式完全兼容、支持平滑混用与自动兜底。
@@ -278,13 +282,13 @@ cp config/bots.example.json config/bots.json
 
 ##### 📦 依赖技能与官方仓库地址对照表
 
-| 技能类别           | 技能名称（`skills`）                                        | 来源仓库 / 官方地址                                                       | 推荐一键安装命令                                                        | 作用与前置依赖                                                                                           |
-| ------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **飞书云端生态**   | `lark-doc`<br>`lark-drive`<br>`lark-*`                      | [github.com/larksuite/cli](https://github.com/larksuite/cli#agent-skills) | `npx skills add larksuite/cli -g -y`<br>`npm install -g @larksuite/cli` | 驱动飞书云文档（Docx）生成与划词评论修订。<br>⚠️ 需安装 `lark-cli` 并执行 `lark-cli login` 授权          |
-| **研发工作流**     | `to-spec`<br>`to-tickets`<br>`implement-ticket`<br>`verify` | [github.com/mattpocock/skills](https://github.com/mattpocock/skills)      | `npx skills add mattpocock/skills -g -y`                                | 负责 PRD 规约提炼、功能切片 Tickets 拆解与验收验证。<br>💡 _本项目 `workspace-template/` 亦已内置优化版_ |
-| **交互式需求澄清** | `grill-me`                                                  | 本项目深度定制版                                                          | 复制本项目模板至全局（见下文）                                          | 专为飞书交互卡片（`request_clarification` 工具闭环）定制的高质量批量澄清技能                             |
-| **代码审查专家**   | `code-review-expert`                                        | 社区审查规范 / [mattpocock/skills](https://github.com/mattpocock/skills)  | `npx skills add mattpocock/skills -g -y`                                | 供 Reviewer 机器人针对 git diff 与验收标准进行独立代码审查与风险识别                                     |
-| **端到端浏览器验收** | `verify`（结合 `agent-browser`）                             | [github.com/vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) | `npm install -g agent-browser`<br>`agent-browser install`               | 供页面验收工程师使用真实浏览器操作 UI、表单交互与截图留证。<br>⚠️ 如受限网络无法下载 Chromium，可配置 `AGENT_BROWSER_EXECUTABLE_PATH` 指向本机 Chrome |
+| 技能类别             | 技能名称（`skills`）                                        | 来源仓库 / 官方地址                                                                  | 推荐一键安装命令                                                        | 作用与前置依赖                                                                                                                                        |
+| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **飞书云端生态**     | `lark-doc`<br>`lark-drive`<br>`lark-*`                      | [github.com/larksuite/cli](https://github.com/larksuite/cli#agent-skills)            | `npx skills add larksuite/cli -g -y`<br>`npm install -g @larksuite/cli` | 驱动飞书云文档（Docx）生成与划词评论修订。<br>⚠️ 需安装 `lark-cli` 并执行 `lark-cli login` 授权                                                       |
+| **研发工作流**       | `to-spec`<br>`to-tickets`<br>`implement-ticket`<br>`verify` | [github.com/mattpocock/skills](https://github.com/mattpocock/skills)                 | `npx skills add mattpocock/skills -g -y`                                | 负责 PRD 规约提炼、功能切片 Tickets 拆解与验收验证。<br>💡 _本项目 `workspace-template/` 亦已内置优化版_                                              |
+| **交互式需求澄清**   | `grill-me`                                                  | 本项目深度定制版                                                                     | 复制本项目模板至全局（见下文）                                          | 专为飞书交互卡片（`request_clarification` 工具闭环）定制的高质量批量澄清技能                                                                          |
+| **代码审查专家**     | `code-review-expert`                                        | 社区审查规范 / [mattpocock/skills](https://github.com/mattpocock/skills)             | `npx skills add mattpocock/skills -g -y`                                | 供 Reviewer 机器人针对 git diff 与验收标准进行独立代码审查与风险识别                                                                                  |
+| **端到端浏览器验收** | `verify`（结合 `agent-browser`）                            | [github.com/vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) | `npm install -g agent-browser`<br>`agent-browser install`               | 供页面验收工程师使用真实浏览器操作 UI、表单交互与截图留证。<br>⚠️ 如受限网络无法下载 Chromium，可配置 `AGENT_BROWSER_EXECUTABLE_PATH` 指向本机 Chrome |
 
 ##### 🛠️ 快速安装方式
 
@@ -358,21 +362,22 @@ Agent Team 启动，正在建立飞书长连接…
 
 在飞书话题中向 Bot 发送消息时，可搭配丰富的斜杠指令：
 
-| 命令               | 说明                                                    | 示例                                           |
-| ------------------ | ------------------------------------------------------- | ---------------------------------------------- |
-| `/<prompt>`        | 普通任务，使用当前 Bot 的默认引擎执行                   | `@Bot 实现用户注册接口`                        |
-| `/claude <任务>`   | 显式指定使用 **Claude Code** 引擎执行                   | `@Bot /claude 重构数据库连接池`                |
-| `/codex <任务>`    | 显式指定使用 **Codex** 引擎执行                         | `@Bot /codex 检查内存泄漏`                     |
-| `/team`            | 查看当前团队成员名单、各自职责与绑定技能                | `@Bot /team`                                   |
-| `/status`          | 查看当前话题会话状态、绑定工作目录与会话 ID             | `@Bot /status`                                 |
-| `/close`           | 强制关闭当前话题会话（终止运行中的任务并标记为 closed） | `@Bot /close`                                  |
-| `/new`             | 在当前话题下关闭旧会话并重开全新会话上下文              | `@Bot /new`                                    |
-| `/resume`          | 交互式查看并恢复本地已有历史 CLI 会话                   | `@Bot /resume`                                 |
-| `/compact [要求]`  | 原生压缩当前 CLI 会话的历史上下文，释放 Token 空间      | `@Bot /compact 聚焦在认证模块`                 |
-| `/cd [路径]`       | 动态查看或切换当前话题绑定的工作区目录                  | `@Bot /cd ./services/order`                    |
-| `/schedule <需求>` | 用自然语言创建定时计划任务                              | `@Bot /schedule 每天早上9点巡检服务器错误日志` |
-| `/schedules`       | 查看当前已注册的全部定时任务与状态卡片                  | `@Bot /schedules`                              |
-| `/help`            | 查看帮助说明                                            | `@Bot /help`                                   |
+| 命令               | 说明                                                                     | 示例                                           |
+| ------------------ | ------------------------------------------------------------------------ | ---------------------------------------------- |
+| `/<prompt>`        | 普通任务，使用当前 Bot 的默认引擎执行                                    | `@Bot 实现用户注册接口`                        |
+| `/claude <任务>`   | 显式指定使用 **Claude Code** 引擎执行                                    | `@Bot /claude 重构数据库连接池`                |
+| `/codex <任务>`    | 显式指定使用 **Codex** 引擎执行                                          | `@Bot /codex 检查内存泄漏`                     |
+| `/team`            | 查看当前团队成员名单、职责与绑定技能，附带模型配置入口                   | `@Bot /team`                                   |
+| `/model [角色ID]`  | 飞书卡片动态配置角色模型与端点（支持 `/config`，管理员专属，免重启生效） | `@Bot /model` 或 `@Bot /model developer`       |
+| `/status`          | 查看当前话题会话状态、绑定工作目录与会话 ID                              | `@Bot /status`                                 |
+| `/close`           | 强制关闭当前话题会话（终止运行中的任务并标记为 closed）                  | `@Bot /close`                                  |
+| `/new`             | 在当前话题下关闭旧会话并重开全新会话上下文                               | `@Bot /new`                                    |
+| `/resume`          | 交互式查看并恢复本地已有历史 CLI 会话                                    | `@Bot /resume`                                 |
+| `/compact [要求]`  | 原生压缩当前 CLI 会话的历史上下文，释放 Token 空间                       | `@Bot /compact 聚焦在认证模块`                 |
+| `/cd [路径]`       | 动态查看或切换当前话题绑定的工作区目录                                   | `@Bot /cd ./services/order`                    |
+| `/schedule <需求>` | 用自然语言创建定时计划任务                                               | `@Bot /schedule 每天早上9点巡检服务器错误日志` |
+| `/schedules`       | 查看当前已注册的全部定时任务与状态卡片                                   | `@Bot /schedules`                              |
+| `/help`            | 查看帮助说明                                                             | `@Bot /help`                                   |
 
 ---
 
@@ -424,6 +429,7 @@ pm2 save
 Agent-Team/
 ├── config/                  # 团队 Bot 配置文件 (bots.json)
 ├── data/                    # 本地数据持久化目录 (.gitignore 忽略)
+│   ├── bot-model-overrides.json # 角色模型与端点动态覆盖持久化 (按 botId + cliId 隔离)
 │   ├── sessions.json        # 话题会话状态机持久化
 │   ├── schedules.json       # 定时任务配置与热更新对账
 │   ├── schedule-runs.json   # 定时任务执行记录 (最近100条/任务)
@@ -435,7 +441,7 @@ Agent-Team/
 ├── src/
 │   ├── app/                 # 应用编排层 (命令处理、卡片动作、调度中枢、协作派发)
 │   ├── cli/                 # CLI 执行层 (Claude/Codex 适配器、进程管理、统一事件)
-│   ├── core/                # 核心领域模型 (会话状态机、交接单、审批、定时规则)
+│   ├── core/                # 核心领域模型 (会话状态机、交接单、审批、定时规则、模型动态配置)
 │   ├── im/                  # 飞书接入层 (WebSocket 长连接、消息解析、Schema 2.0 卡片构建)
 │   ├── mcp/                 # stdio MCP 服务实现 (五个 agent_team 工具注册)
 │   ├── deploy-cli.ts        # pm2 生产部署封装 CLI

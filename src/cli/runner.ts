@@ -37,9 +37,16 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
   const promptInput = promptInputForPlatform(process.platform)
   const useStdin = promptInput === 'stdin'
 
+  const model =
+    adapter.id === 'claude'
+      ? env?.ANTHROPIC_MODEL
+      : (env?.OPENAI_MODEL ?? env?.CODEX_MODEL)
+
+  const cliOptions = model ? { model } : undefined
+
   const args = sessionId
-    ? adapter.buildResumeArgs(prompt, sessionId, promptInput)
-    : adapter.buildArgs(prompt, promptInput)
+    ? adapter.buildResumeArgs(prompt, sessionId, promptInput, cliOptions)
+    : adapter.buildArgs(prompt, promptInput, cliOptions)
 
   return new Promise((resolve, reject) => {
     // 固定用 `['pipe','pipe','pipe']`，让 stdin 始终可写（spawnCli 返回类型按字面量收窄）。

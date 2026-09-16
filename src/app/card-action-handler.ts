@@ -2,6 +2,7 @@ import type { Bot, CardAction, CardActionResponse } from '../im/lark.js'
 import {
   buildApprovalContinuingCard,
   buildApprovalDecidedCard,
+  buildBotModelConfigCard,
   buildClarificationCard,
   buildClarificationContinuingCard,
   buildProductSpecApprovedCard,
@@ -9,10 +10,12 @@ import {
   buildResumeCard,
 } from '../im/card.js'
 import type { BotConfig, ProductDeliveryMode } from '../core/bot-registry.js'
+import { checkModelConfigAccess } from '../core/model-config-store.js'
 import { isClarificationOwner } from '../core/clarification.js'
 import { isProductSpecOwner } from '../core/product-spec.js'
 import type { ApprovalFlow } from '../core/approval.js'
 import { requestTaskAbort } from '../core/task-abort.js'
+import type { CliId } from '../cli/types.js'
 import { getCliAdapter } from '../cli/registry.js'
 import { listNativeCliSessions } from '../cli/native-sessions.js'
 import { continueClarificationFlow } from './clarification-runner.js'
@@ -428,6 +431,275 @@ export const createCardActionHandler = (options: {
         }
       } catch (error) {
         return { toast: { type: 'error', content: (error as Error).message } }
+      }
+    }
+
+    if (action.value.action === 'open_bot_model_config') {
+      const access = checkModelConfigAccess(action.operatorOpenId)
+      if (!access.allowed) {
+        return {
+          toast: {
+            type: 'error',
+            content: access.reason ?? '只有管理员可以配置角色模型。',
+          },
+        }
+      }
+
+      const targetBot = runtime.teamRegistry.members[0]
+      if (!targetBot) {
+        return {
+          toast: { type: 'error', content: '未找到可配置的团队成员。' },
+        }
+      }
+
+      const selectedCliId = targetBot.defaultCliId
+
+      const effectiveConfig = runtime.modelConfigStore.getEffectiveConfig(
+        targetBot,
+        selectedCliId,
+      )
+
+      return {
+        card: {
+          type: 'raw',
+          data: buildBotModelConfigCard({
+            botConfigs: runtime.teamRegistry.members,
+            selectedBotId: targetBot.id,
+            selectedCliId,
+            effectiveConfig,
+          }),
+        },
+      }
+    }
+
+    if (action.value.action === 'switch_bot_model_config') {
+      const access = checkModelConfigAccess(action.operatorOpenId)
+      if (!access.allowed) {
+        return {
+          toast: {
+            type: 'error',
+            content: access.reason ?? '只有管理员可以配置角色模型。',
+          },
+        }
+      }
+
+      const targetBotId =
+        typeof action.value.targetBotId === 'string'
+          ? action.value.targetBotId
+          : (action.option ?? '')
+
+      const targetBot = runtime.teamRegistry.members.find(
+        (m) => m.id === targetBotId,
+      )
+
+      if (!targetBot) {
+        return {
+          toast: { type: 'error', content: '找不到选中的角色。' },
+        }
+      }
+
+      const selectedCliId: CliId =
+        action.value.targetCliId === 'codex' ||
+        action.value.targetCliId === 'claude'
+          ? (action.value.targetCliId as CliId)
+          : targetBot.defaultCliId
+
+      const effectiveConfig = runtime.modelConfigStore.getEffectiveConfig(
+        targetBot,
+        selectedCliId,
+      )
+
+      return {
+        card: {
+          type: 'raw',
+          data: buildBotModelConfigCard({
+            botConfigs: runtime.teamRegistry.members,
+            selectedBotId: targetBot.id,
+            selectedCliId,
+            effectiveConfig,
+          }),
+        },
+      }
+    }
+
+    if (action.value.action === 'switch_bot_cli_tab') {
+      const access = checkModelConfigAccess(action.operatorOpenId)
+      if (!access.allowed) {
+        return {
+          toast: {
+            type: 'error',
+            content: access.reason ?? '只有管理员可以配置角色模型。',
+          },
+        }
+      }
+
+      const targetBotId =
+        typeof action.value.targetBotId === 'string'
+          ? action.value.targetBotId
+          : ''
+
+      const targetBot = runtime.teamRegistry.members.find(
+        (m) => m.id === targetBotId,
+      )
+
+      if (!targetBot) {
+        return {
+          toast: { type: 'error', content: '找不到选中的角色。' },
+        }
+      }
+
+      const selectedCliId: CliId =
+        action.value.targetCliId === 'codex' ? 'codex' : 'claude'
+
+      const effectiveConfig = runtime.modelConfigStore.getEffectiveConfig(
+        targetBot,
+        selectedCliId,
+      )
+
+      return {
+        card: {
+          type: 'raw',
+          data: buildBotModelConfigCard({
+            botConfigs: runtime.teamRegistry.members,
+            selectedBotId: targetBot.id,
+            selectedCliId,
+            effectiveConfig,
+          }),
+        },
+      }
+    }
+
+    if (action.value.action === 'save_bot_model_config') {
+      const access = checkModelConfigAccess(action.operatorOpenId)
+      if (!access.allowed) {
+        return {
+          toast: {
+            type: 'error',
+            content: access.reason ?? '只有管理员可以配置角色模型。',
+          },
+        }
+      }
+
+      const botId =
+        typeof action.value.botId === 'string' ? action.value.botId : ''
+
+      const targetBot = runtime.teamRegistry.members.find((m) => m.id === botId)
+      if (!targetBot) {
+        return {
+          toast: { type: 'error', content: '找不到目标角色。' },
+        }
+      }
+
+      const cliId: CliId =
+        action.value.cliId === 'codex'
+          ? 'codex'
+          : action.value.cliId === 'claude'
+            ? 'claude'
+            : targetBot.defaultCliId
+
+      const baseUrl =
+        typeof action.formValue.base_url === 'string'
+          ? action.formValue.base_url.trim()
+          : undefined
+
+      const apiKey =
+        typeof action.formValue.api_key === 'string'
+          ? action.formValue.api_key.trim()
+          : undefined
+
+      const model =
+        typeof action.formValue.model === 'string'
+          ? action.formValue.model.trim()
+          : undefined
+
+      await runtime.modelConfigStore.save(
+        botId,
+        cliId,
+        { baseUrl, apiKey, model },
+        runtime.teamRegistry.members,
+      )
+
+      const effectiveConfig = runtime.modelConfigStore.getEffectiveConfig(
+        targetBot,
+        cliId,
+      )
+
+      const cliName = cliId === 'claude' ? 'Claude Code' : 'Codex'
+
+      return {
+        toast: {
+          type: 'success',
+          content: `${targetBot.id} 的 ${cliName} 配置已保存并立即生效！`,
+        },
+        card: {
+          type: 'raw',
+          data: buildBotModelConfigCard({
+            botConfigs: runtime.teamRegistry.members,
+            selectedBotId: targetBot.id,
+            selectedCliId: cliId,
+            effectiveConfig,
+            statusNotice: `✅ ${targetBot.role} (${targetBot.id}) 的 ${cliName} 配置已保存并立即生效！`,
+          }),
+        },
+      }
+    }
+
+    if (action.value.action === 'reset_bot_model_config') {
+      const access = checkModelConfigAccess(action.operatorOpenId)
+      if (!access.allowed) {
+        return {
+          toast: {
+            type: 'error',
+            content: access.reason ?? '只有管理员可以配置角色模型。',
+          },
+        }
+      }
+
+      const botId =
+        typeof action.value.botId === 'string' ? action.value.botId : ''
+
+      const targetBot = runtime.teamRegistry.members.find((m) => m.id === botId)
+      if (!targetBot) {
+        return {
+          toast: { type: 'error', content: '找不到目标角色。' },
+        }
+      }
+
+      const cliId: CliId =
+        action.value.cliId === 'codex'
+          ? 'codex'
+          : action.value.cliId === 'claude'
+            ? 'claude'
+            : targetBot.defaultCliId
+
+      await runtime.modelConfigStore.reset(
+        botId,
+        cliId,
+        runtime.teamRegistry.members,
+      )
+
+      const effectiveConfig = runtime.modelConfigStore.getEffectiveConfig(
+        targetBot,
+        cliId,
+      )
+
+      const cliName = cliId === 'claude' ? 'Claude Code' : 'Codex'
+
+      return {
+        toast: {
+          type: 'info',
+          content: `已恢复 ${targetBot.id} 的 ${cliName} 默认配置`,
+        },
+        card: {
+          type: 'raw',
+          data: buildBotModelConfigCard({
+            botConfigs: runtime.teamRegistry.members,
+            selectedBotId: targetBot.id,
+            selectedCliId: cliId,
+            effectiveConfig,
+            statusNotice: `🔄 已恢复 ${targetBot.role} (${targetBot.id}) 的 ${cliName} 为默认配置`,
+          }),
+        },
       }
     }
 

@@ -1,5 +1,6 @@
 import type { Bot, IncomingMessage } from '../im/lark.js'
 import {
+  buildBotModelConfigCard,
   buildResumeCard,
   buildSessionNoticeCard,
   buildScheduleListCard,
@@ -11,6 +12,7 @@ import { listNativeCliSessions } from '../cli/native-sessions.js'
 import type { CliRequest, SlashCommand } from '../core/command-parser.js'
 import type { Session } from '../core/session-manager.js'
 import type { BotConfig } from '../core/bot-registry.js'
+import { checkModelConfigAccess } from '../core/model-config-store.js'
 import {
   ensureWorkspaceDirectory,
   resolveWorkspacePath,
@@ -65,6 +67,7 @@ export const handleSessionCommand = async (options: {
       [
         '/status 查看当前会话',
         '/team 查看当前 Agent 团队',
+        '/model [角色ID] 查看或配置各角色模型与端点',
         '/schedule <需求> 创建定时任务',
         '/schedules 查看定时任务',
         '/schedule pause <id> 暂停定时任务',
@@ -81,6 +84,49 @@ export const handleSessionCommand = async (options: {
         '/claude <任务> 新话题使用 Claude Code',
         '/codex <任务> 新话题使用 Codex',
       ].join('\n'),
+      hasThread,
+    )
+    return 'handled'
+  }
+
+  if (command?.name === 'model') {
+    const access = checkModelConfigAccess(msg.senderOpenId)
+    if (!access.allowed) {
+      await bot.reply(
+        msg.messageId,
+        access.reason ?? '只有管理员可以配置角色模型与端点。',
+        hasThread,
+      )
+      return 'handled'
+    }
+
+    const requestedBotId = command.botId?.trim()
+
+    const targetBot =
+      runtime.teamRegistry.members.find((m) => m.id === requestedBotId) ??
+      runtime.teamRegistry.members.find((m) => m.id === config.id) ??
+      runtime.teamRegistry.members[0]
+
+    if (!targetBot) {
+      await bot.reply(msg.messageId, '未找到可配置的团队成员。', hasThread)
+      return 'handled'
+    }
+
+    const selectedCliId = targetBot.defaultCliId
+
+    const effectiveConfig = runtime.modelConfigStore.getEffectiveConfig(
+      targetBot,
+      selectedCliId,
+    )
+
+    await bot.replyCard(
+      msg.messageId,
+      buildBotModelConfigCard({
+        botConfigs: runtime.teamRegistry.members,
+        selectedBotId: targetBot.id,
+        selectedCliId,
+        effectiveConfig,
+      }),
       hasThread,
     )
     return 'handled'

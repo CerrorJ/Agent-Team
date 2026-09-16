@@ -67,6 +67,8 @@ export interface CardAction {
   messageId: string
   value: Record<string, unknown>
   formValue: Record<string, unknown>
+  option?: string
+  tag?: string
 }
 
 export interface CardActionResponse {
@@ -85,6 +87,9 @@ export const parseCardAction = (data: any): CardAction => {
     messageId: data?.context?.open_message_id ?? data?.open_message_id ?? '',
     value: isRecord(value) ? value : {},
     formValue: isRecord(formValue) ? formValue : {},
+    option:
+      typeof data?.action?.option === 'string' ? data.action.option : undefined,
+    tag: typeof data?.action?.tag === 'string' ? data.action.tag : undefined,
   }
 }
 

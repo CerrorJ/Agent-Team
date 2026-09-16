@@ -1,7 +1,7 @@
 /**
  * 飞书任务卡片：把 CLI 事件整理成稳定、低噪音的任务进度。
  */
-import type { CliRunStats, CliSessionSummary } from '../cli/types.js'
+import type { CliId, CliRunStats, CliSessionSummary } from '../cli/types.js'
 import type { ClarificationFlow } from '../core/clarification.js'
 import type { ProductSpecFlow } from '../core/product-spec.js'
 import type {
@@ -86,6 +86,23 @@ export interface CollaborationCardOptions {
 
 export interface ClarificationCardOptions {
   flow: ClarificationFlow
+}
+
+export interface BotModelConfigCardOptions {
+  botConfigs: Array<{
+    id: string
+    role: string
+    defaultCliId: CliId
+  }>
+  selectedBotId: string
+  selectedCliId: CliId
+  effectiveConfig: {
+    baseUrl: string
+    hasApiKey: boolean
+    maskedApiKey: string
+    model: string
+  }
+  statusNotice?: string
 }
 
 const STATUS_STYLE = {
@@ -1112,6 +1129,22 @@ export const buildTeamCard = (options: TeamCardOptions): CardJson => {
         },
         { tag: 'hr' },
         ...memberElements,
+        { tag: 'hr' },
+        {
+          tag: 'button',
+          text: { tag: 'plain_text', content: '⚙️ 角色模型与端点配置' },
+          type: 'primary',
+          width: 'fill',
+          size: 'medium',
+          behaviors: [
+            {
+              type: 'callback',
+              value: {
+                action: 'open_bot_model_config',
+              },
+            },
+          ],
+        },
       ],
     },
   }
@@ -1534,5 +1567,308 @@ export class ThrottledCardUpdater {
         await new Promise<void>((resolve) => setTimeout(resolve, delay))
       }
     }
+  }
+}
+
+export const buildBotModelConfigCard = (
+  options: BotModelConfigCardOptions,
+): CardJson => {
+  const {
+    botConfigs,
+    selectedBotId,
+    selectedCliId,
+    effectiveConfig,
+    statusNotice,
+  } = options
+
+  const selectedBot =
+    botConfigs.find((b) => b.id === selectedBotId) ?? botConfigs[0]
+
+  const currentBotId = selectedBot?.id ?? selectedBotId
+
+  const currentCliId: CliId =
+    selectedCliId ?? selectedBot?.defaultCliId ?? 'claude'
+
+  const currentCliName = currentCliId === 'claude' ? 'Claude Code' : 'Codex'
+  const isDefaultCli = selectedBot?.defaultCliId === currentCliId
+
+  // 每行放 3 个按钮
+  const roleButtons: Record<string, unknown>[] = []
+  for (let i = 0; i < botConfigs.length; i += 3) {
+    const chunk = botConfigs.slice(i, i + 3)
+    roleButtons.push({
+      tag: 'column_set',
+      flex_mode: 'none',
+      horizontal_spacing: '8px',
+      columns: chunk.map((b) => {
+        const isSelected = b.id === currentBotId
+        return {
+          tag: 'column',
+          width: 'weighted',
+          weight: 1,
+          elements: [
+            {
+              tag: 'button',
+              text: {
+                tag: 'plain_text',
+                content: isSelected ? `● ${b.id}` : b.id,
+              },
+              type: isSelected ? 'primary' : 'default',
+              width: 'fill',
+              size: 'small',
+              behaviors: [
+                {
+                  type: 'callback',
+                  value: {
+                    action: 'switch_bot_model_config',
+                    targetBotId: b.id,
+                    targetCliId: currentCliId,
+                  },
+                },
+              ],
+            },
+          ],
+        }
+      }),
+    })
+  }
+
+  const elements: Record<string, unknown>[] = [
+    ...(statusNotice
+      ? [
+          {
+            tag: 'markdown',
+            content: `**${statusNotice}**`,
+          },
+          { tag: 'hr' },
+        ]
+      : []),
+    {
+      tag: 'markdown',
+      content: '**选择配置成员：**',
+    },
+    ...roleButtons,
+    { tag: 'hr' },
+    {
+      tag: 'markdown',
+      content: '**选择配置引擎 (CLI)：**',
+    },
+    {
+      tag: 'column_set',
+      flex_mode: 'none',
+      horizontal_spacing: '8px',
+      columns: [
+        {
+          tag: 'column',
+          width: 'weighted',
+          weight: 1,
+          elements: [
+            {
+              tag: 'button',
+              text: {
+                tag: 'plain_text',
+                content:
+                  currentCliId === 'claude'
+                    ? selectedBot?.defaultCliId === 'claude'
+                      ? '● Claude Code (默认)'
+                      : '● Claude Code'
+                    : selectedBot?.defaultCliId === 'claude'
+                      ? 'Claude Code (默认)'
+                      : 'Claude Code',
+              },
+              type: currentCliId === 'claude' ? 'primary' : 'default',
+              width: 'fill',
+              size: 'small',
+              behaviors: [
+                {
+                  type: 'callback',
+                  value: {
+                    action: 'switch_bot_cli_tab',
+                    targetBotId: currentBotId,
+                    targetCliId: 'claude',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          tag: 'column',
+          width: 'weighted',
+          weight: 1,
+          elements: [
+            {
+              tag: 'button',
+              text: {
+                tag: 'plain_text',
+                content:
+                  currentCliId === 'codex'
+                    ? selectedBot?.defaultCliId === 'codex'
+                      ? '● Codex (默认)'
+                      : '● Codex'
+                    : selectedBot?.defaultCliId === 'codex'
+                      ? 'Codex (默认)'
+                      : 'Codex',
+              },
+              type: currentCliId === 'codex' ? 'primary' : 'default',
+              width: 'fill',
+              size: 'small',
+              behaviors: [
+                {
+                  type: 'callback',
+                  value: {
+                    action: 'switch_bot_cli_tab',
+                    targetBotId: currentBotId,
+                    targetCliId: 'codex',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    { tag: 'hr' },
+    {
+      tag: 'markdown',
+      content: [
+        `**角色职能**：${escapeFeishuMarkdown(selectedBot?.role ?? '')}`,
+        `**配置目标**：\`${currentBotId}\` · \`${currentCliName}\`${isDefaultCli ? ' (角色默认引擎)' : ''}`,
+        `**当前生效模型**：\`${effectiveConfig.model || '(默认未覆盖)'}\``,
+        `**当前服务地址**：\`${effectiveConfig.baseUrl || '(默认官方端点)'}\``,
+        `**密钥状态**：${effectiveConfig.hasApiKey ? `\`已配置\` · \`${effectiveConfig.maskedApiKey}\`` : '`未配置 (使用本地全局配置)`'}`,
+      ].join('\n'),
+    },
+    { tag: 'hr' },
+    {
+      tag: 'form',
+      name: `model_cfg_${currentBotId}_${currentCliId}`,
+      vertical_spacing: '10px',
+      elements: [
+        {
+          tag: 'markdown',
+          content: `**Base URL（${currentCliName} 服务地址）**`,
+        },
+        {
+          tag: 'input',
+          name: 'base_url',
+          default_value: effectiveConfig.baseUrl,
+          placeholder: {
+            tag: 'plain_text',
+            content:
+              currentCliId === 'claude'
+                ? '例如 https://open.bigmodel.cn/api/anthropic'
+                : '例如 https://api.openai.com/v1',
+          },
+        },
+        {
+          tag: 'markdown',
+          content: `**API Key（${currentCliName} 访问密钥）**`,
+        },
+        {
+          tag: 'input',
+          name: 'api_key',
+          placeholder: {
+            tag: 'plain_text',
+            content: effectiveConfig.hasApiKey
+              ? '留空表示沿用现有密钥'
+              : currentCliId === 'claude'
+                ? '输入 Anthropic API Key / Auth Token'
+                : '输入 OpenAI API Key',
+          },
+        },
+        {
+          tag: 'markdown',
+          content: `**Model（${currentCliName} 模型名称）**`,
+        },
+        {
+          tag: 'input',
+          name: 'model',
+          default_value: effectiveConfig.model,
+          placeholder: {
+            tag: 'plain_text',
+            content:
+              currentCliId === 'claude'
+                ? '例如 glm-5.1、claude-3-7-sonnet'
+                : '例如 gpt-5.6-terra、o3',
+          },
+        },
+        {
+          tag: 'column_set',
+          flex_mode: 'none',
+          horizontal_spacing: '12px',
+          columns: [
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  name: 'submit_save',
+                  action_type: 'form_submit',
+                  text: { tag: 'plain_text', content: '💾 保存并立即生效' },
+                  type: 'primary',
+                  size: 'medium',
+                  value: {
+                    action: 'save_bot_model_config',
+                    botId: currentBotId,
+                    cliId: currentCliId,
+                  },
+                },
+              ],
+            },
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '🔄 恢复默认' },
+                  type: 'default',
+                  size: 'medium',
+                  behaviors: [
+                    {
+                      type: 'callback',
+                      value: {
+                        action: 'reset_bot_model_config',
+                        botId: currentBotId,
+                        cliId: currentCliId,
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    { tag: 'hr' },
+    {
+      tag: 'markdown',
+      content:
+        '_💡 修改后立即生效于下一轮任务，无需重启服务。密钥输入留空将保留现有值。Claude 与 Codex 的配置按角色各自独立持久化。_',
+    },
+  ]
+
+  return {
+    schema: '2.0',
+    config: {
+      update_multi: true,
+      summary: { content: `模型配置：${currentBotId} (${currentCliName})` },
+    },
+    header: {
+      template: 'blue',
+      title: { tag: 'plain_text', content: '角色模型与端点配置' },
+      subtitle: {
+        tag: 'plain_text',
+        content: `正在配置 ${currentBotId} · ${currentCliName}`,
+      },
+    },
+    body: {
+      direction: 'vertical',
+      vertical_spacing: '12px',
+      elements,
+    },
   }
 }

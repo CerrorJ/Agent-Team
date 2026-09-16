@@ -78,12 +78,17 @@ export interface CliAdapter {
   readonly command: string
   readonly displayName: string
   // 新会话组装参数
-  buildArgs(prompt: string, promptInput: CliPromptInput): string[]
+  buildArgs(
+    prompt: string,
+    promptInput: CliPromptInput,
+    options?: { model?: string },
+  ): string[]
   // 已有会话续接组装参数
   buildResumeArgs(
     prompt: string,
     sessionId: string,
     promptInput: CliPromptInput,
+    options?: { model?: string },
   ): string[]
   // 组装在已有会话内执行原生压缩的子进程计划
   buildCompactPlan(sessionId: string, instructions?: string): CliCompactPlan
