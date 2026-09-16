@@ -122,8 +122,8 @@ flowchart TD
     SWAP -->|全组受限| THROW["抛错回滚：分组内所有成员均处于会话限额"]
 ```
 
-- **执行中触发**（`src/index.ts` 失败分支）：卡片置为 failed 并注明「任务已移交 Team Leader 接续派发」，随后把「成员限额 + 同组可用备用名单 + 原任务目标 + 工作区目录 + 请 CEO 调度」组装成 instruction，经 `CollaborationService.dispatch` 派给 Leader（`round` 在协作上下文中 +1，否则从 1 起），再 @ 发起人说明已移交
-- **接单前触发**（`onMessage` 前置守卫，位于会话守卫之前）：受限 bot 收到新任务不执行，同样移交 Leader 调度；受限的是 Leader 本身则直接回复「请稍后再试」
+- **执行中触发**（`src/index.ts` 失败分支）：卡片置为 failed 并注明「任务已移交 Team Leader 接续派发」，随后把「成员限额 + 同组可用备用名单 + 原任务目标 + 工作区目录 + 请 CEO 调度」组装成 instruction，经 `CollaborationService.dispatch` 派给 Leader（`round` 在协作上下文中 +1，否则从 1 起），再 @ 发起人说明已移交；受限者就是 Leader 本身时不移交，卡片只注明已触发限额，另 @ 发起人「Team Leader 已达到会话额度限制…无法继续处理。请稍后重试。」
+- **接单前触发**（`onMessage` 前置守卫，位于会话守卫之前）：受限 bot 收到新任务不执行，同样移交 Leader 调度；受限的是 Leader 本身则直接回复「请稍后再试」。两个方向的 dispatch 移交本身失败（Leader 运行时不在或派发抛错）时都不静默：回复 / @ 发起人「任务移交 Team Leader 失败，请重试」（接单前守卫回复原消息，执行中分支改为 @ 发起人并把卡片 detail 改写为「任务移交 Team Leader 失败，请重试」）
 - **派发时兜底**（`CollaborationService.dispatch` 开头）：目标受限且有同组可用者时**自动转派**首个可用成员（instruction 前加「任务接替提示」前缀，完成后仍交回 CEO 助理）；整组均受限时抛「分组 "xxx" 内所有成员均处于会话限额状态…请直接向用户汇报」——这条错误会作为协作派发失败回滚收件箱并回复用户
 
 代班只切**执行者**：交接单携带的 `workspaceDir` 与 `taskId` 不变，备用成员在同一个工作区现场接续。
