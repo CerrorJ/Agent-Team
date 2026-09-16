@@ -10,7 +10,10 @@ import {
   buildResumeCard,
 } from '../im/card.js'
 import type { BotConfig, ProductDeliveryMode } from '../core/bot-registry.js'
-import { checkModelConfigAccess } from '../core/model-config-store.js'
+import {
+  checkModelConfigAccess,
+  validateThinkingLevel,
+} from '../core/model-config-store.js'
 import { isClarificationOwner } from '../core/clarification.js'
 import { isProductSpecOwner } from '../core/product-spec.js'
 import type { ApprovalFlow } from '../core/approval.js'
@@ -20,6 +23,7 @@ import { getCliAdapter } from '../cli/registry.js'
 import { listNativeCliSessions } from '../cli/native-sessions.js'
 import { continueClarificationFlow } from './clarification-runner.js'
 import { continueApprovalFlow } from './approval-runner.js'
+import { fetchAvailableModels } from '../core/model-fetcher.js'
 import type { CollaborationService } from './collaboration-service.js'
 import type { AppRuntime } from './runtime.js'
 
@@ -607,15 +611,39 @@ export const createCardActionHandler = (options: {
           ? action.formValue.api_key.trim()
           : undefined
 
-      const model =
+      const selectedModel =
+        typeof action.formValue.model_select === 'string'
+          ? action.formValue.model_select.trim()
+          : ''
+
+      const inputModel =
         typeof action.formValue.model === 'string'
           ? action.formValue.model.trim()
           : undefined
 
+      const model = selectedModel || inputModel || undefined
+
+      const thinkingLevel =
+        typeof action.formValue.thinking_level === 'string'
+          ? action.formValue.thinking_level.trim()
+          : undefined
+
+      if (thinkingLevel) {
+        const validation = validateThinkingLevel(cliId, thinkingLevel)
+        if (!validation.valid) {
+          return {
+            toast: {
+              type: 'error',
+              content: validation.error ?? '思考/推理等级参数非法。',
+            },
+          }
+        }
+      }
+
       await runtime.modelConfigStore.save(
         botId,
         cliId,
-        { baseUrl, apiKey, model },
+        { baseUrl, apiKey, model, thinkingLevel },
         runtime.teamRegistry.members,
       )
 
@@ -698,6 +726,157 @@ export const createCardActionHandler = (options: {
             selectedCliId: cliId,
             effectiveConfig,
             statusNotice: `🔄 已恢复 ${targetBot.role} (${targetBot.id}) 的 ${cliName} 为默认配置`,
+          }),
+        },
+      }
+    }
+
+    if (action.value.action === 'probe_bot_models') {
+      const access = checkModelConfigAccess(action.operatorOpenId)
+      if (!access.allowed) {
+        return {
+          toast: {
+            type: 'error',
+            content: access.reason ?? '只有管理员可以配置角色模型。',
+          },
+        }
+      }
+
+      const botId =
+        typeof action.value.botId === 'string' ? action.value.botId : ''
+
+      const targetBot = runtime.teamRegistry.members.find((m) => m.id === botId)
+      if (!targetBot) {
+        return {
+          toast: { type: 'error', content: '找不到目标角色。' },
+        }
+      }
+
+      const cliId: CliId =
+        action.value.cliId === 'codex'
+          ? 'codex'
+          : action.value.cliId === 'claude'
+            ? 'claude'
+            : targetBot.defaultCliId
+
+      const effectiveConfig = runtime.modelConfigStore.getEffectiveConfig(
+        targetBot,
+        cliId,
+      )
+
+      const savedCli = runtime.modelConfigStore.get(botId, cliId)
+      const currentSavedBaseUrl = savedCli?.baseUrl ?? ''
+
+      const typedBaseUrl =
+        typeof action.formValue?.base_url === 'string'
+          ? action.formValue.base_url.trim()
+          : undefined
+
+      const typedApiKey =
+        typeof action.formValue?.api_key === 'string'
+          ? action.formValue.api_key.trim()
+          : undefined
+
+      const hasUnsavedBaseUrl =
+        typedBaseUrl !== undefined &&
+        typedBaseUrl !== '' &&
+        typedBaseUrl !== currentSavedBaseUrl
+
+      const hasUnsavedApiKey = Boolean(typedApiKey)
+
+      // 决定探测使用的 Base URL 和 API Key：优先使用表单中本次填写的草稿，未填写则回退已保存配置或全局配置
+      const probeBaseUrl = typedBaseUrl || effectiveConfig.baseUrl
+
+      const probeApiKey =
+        typedApiKey ||
+        savedCli?.apiKey ||
+        (cliId === 'claude'
+          ? process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY
+          : process.env.OPENAI_API_KEY) ||
+        ''
+
+      const cliName = cliId === 'claude' ? 'Claude Code' : 'Codex'
+
+      if (!probeBaseUrl) {
+        return {
+          toast: {
+            type: 'error',
+            content: '当前未配置 Base URL 服务地址，请先填写服务地址。',
+          },
+        }
+      }
+
+      const probeResult = await fetchAvailableModels({
+        cliId,
+        baseUrl: probeBaseUrl,
+        apiKey: probeApiKey,
+      })
+
+      if (!probeResult.success || probeResult.models.length === 0) {
+        const errMsg = probeResult.error ?? '端点未返回可用模型列表。'
+
+        const failureDetail = hasUnsavedApiKey
+          ? '因安全原因未保存的密钥已被清空，重试前请在表单中重新输入 API Key。'
+          : '请检查 Base URL 与 API Key。'
+
+        return {
+          toast: {
+            type: 'error',
+            content: hasUnsavedApiKey
+              ? `探测失败: ${errMsg}（请重新输入未保存的密钥后重试）`
+              : `探测失败: ${errMsg}`,
+          },
+          card: {
+            type: 'raw',
+            data: buildBotModelConfigCard({
+              botConfigs: runtime.teamRegistry.members,
+              selectedBotId: targetBot.id,
+              selectedCliId: cliId,
+              effectiveConfig,
+              draft: { baseUrl: probeBaseUrl },
+              statusNotice: `⚠️ [${cliName}] 模型探测失败: ${errMsg}。服务地址草稿已保留，${failureDetail}`,
+            }),
+          },
+        }
+      }
+
+      const previewModels = probeResult.models.slice(0, 4).join('、')
+
+      const moreText =
+        probeResult.models.length > 4
+          ? ` 等共 ${probeResult.models.length} 个`
+          : ''
+
+      // 状态提示与 Toast：若存在未保存的敏感密钥，明确提示用户在保存前重新输入密钥；始终保留 Base URL 草稿
+      let statusNotice: string
+      let toastContent: string
+
+      if (hasUnsavedApiKey) {
+        statusNotice = `⚠️ 成功探测到模型（共 ${probeResult.models.length} 项）！服务地址草稿已保留。因安全原因密钥无法回显，请选择模型并在密钥栏重新输入密钥后点击「💾 保存并立即生效」。`
+        toastContent = `成功获取到 ${probeResult.models.length} 个可用模型！注意：请重新输入未保存的密钥后再点击保存。`
+      } else if (hasUnsavedBaseUrl) {
+        statusNotice = `✅ 成功探测到模型：${previewModels}${moreText}！服务地址草稿已保留，请选择模型后点击「💾 保存并立即生效」。`
+        toastContent = `成功获取到 ${probeResult.models.length} 个可用模型！服务地址草稿已保留。`
+      } else {
+        statusNotice = `✅ 成功探测到模型：${previewModels}${moreText}，可在下方下拉选择！`
+        toastContent = `成功获取到 ${probeResult.models.length} 个可用模型！`
+      }
+
+      return {
+        toast: {
+          type: 'success',
+          content: toastContent,
+        },
+        card: {
+          type: 'raw',
+          data: buildBotModelConfigCard({
+            botConfigs: runtime.teamRegistry.members,
+            selectedBotId: targetBot.id,
+            selectedCliId: cliId,
+            effectiveConfig,
+            availableModels: probeResult.models,
+            draft: { baseUrl: probeBaseUrl },
+            statusNotice,
           }),
         },
       }

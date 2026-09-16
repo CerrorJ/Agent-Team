@@ -39,10 +39,27 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
 
   const model =
     adapter.id === 'claude'
-      ? env?.ANTHROPIC_MODEL
-      : (env?.OPENAI_MODEL ?? env?.CODEX_MODEL)
+      ? (env?.ANTHROPIC_MODEL ?? process.env.ANTHROPIC_MODEL)
+      : (env?.OPENAI_MODEL ??
+        env?.CODEX_MODEL ??
+        process.env.OPENAI_MODEL ??
+        process.env.CODEX_MODEL)
 
-  const cliOptions = model ? { model } : undefined
+  const reasoningEffort =
+    adapter.id === 'codex'
+      ? (env?.CODEX_REASONING_EFFORT ??
+        env?.OPENAI_REASONING_EFFORT ??
+        process.env.CODEX_REASONING_EFFORT ??
+        process.env.OPENAI_REASONING_EFFORT)
+      : undefined
+
+  const cliOptions =
+    model || reasoningEffort
+      ? {
+          ...(model ? { model } : {}),
+          ...(reasoningEffort ? { reasoningEffort } : {}),
+        }
+      : undefined
 
   const args = sessionId
     ? adapter.buildResumeArgs(prompt, sessionId, promptInput, cliOptions)

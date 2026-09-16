@@ -1,9 +1,7 @@
-/**
- * 应用层工具的 stdio MCP 服务：把 request_clarification / request_spec_approval /
- * dispatch_task / request_approval / schedule_manage 注册给两家 CLI。这里的返回值
- * 只是给 CLI 的确认文案——真正的卡片渲染与答案回传发生在应用层：CLI 调用工具时
- * 产生 tool_call 事件，由上层截获后转成飞书卡片。
- */
+// 应用层工具的 stdio MCP 服务：把 request_clarification / request_spec_approval /
+// dispatch_task / request_approval / schedule_manage 注册给两家 CLI。这里的返回值
+// 只是给 CLI 的确认文案——真正的卡片渲染与答案回传发生在应用层：CLI 调用工具时
+// 产生 tool_call 事件，由上层截获后转成飞书卡片。
 import 'dotenv/config'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'

@@ -30,10 +30,8 @@ const ProductSpecFlowSchema = z.object({
   approvedAt: z.iso.datetime().optional(),
 })
 
-/**
- * ProductSpecFlowStore 的 JSON 持久化版本：流程状态落盘到 data/ 下，
- * 进程重启后旧的待确认卡片仍然可以审批。
- */
+// ProductSpecFlowStore 的 JSON 持久化版本：流程状态落盘到 data/ 下，
+// 进程重启后旧的待确认卡片仍然可以审批。
 export class JsonProductSpecFlowStore extends ProductSpecFlowStore {
   constructor(private readonly filePath: string) {
     super(loadFlows(filePath))

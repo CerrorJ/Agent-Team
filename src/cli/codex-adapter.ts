@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type {
-  CliAdapter,
-  CliPromptInput,
-  CliEvent,
-  CliRunStats,
+import {
+  type CliAdapter,
+  type CliPromptInput,
+  type CliEvent,
+  type CliRunStats,
+  CODEX_REASONING_EFFORTS,
 } from './types.js'
 import {
   CLARIFICATION_TOOL_NAME,
@@ -153,6 +154,9 @@ const errorMessage = (event: CodexEvent): string => {
   return 'Codex 执行失败'
 }
 
+const isValidCodexReasoningEffort = (value: string): boolean =>
+  (CODEX_REASONING_EFFORTS as readonly string[]).includes(value)
+
 export class CodexAdapter implements CliAdapter {
   readonly id = 'codex' as const
   readonly command = 'codex'
@@ -162,7 +166,7 @@ export class CodexAdapter implements CliAdapter {
   buildArgs(
     prompt: string,
     promptInput: CliPromptInput,
-    options?: { model?: string },
+    options?: { model?: string; reasoningEffort?: string },
   ): string[] {
     const args = [
       ...codexAppToolArgs(),
@@ -173,6 +177,11 @@ export class CodexAdapter implements CliAdapter {
 
     if (options?.model) {
       args.push('-m', options.model)
+    }
+
+    const effort = options?.reasoningEffort?.trim().toLowerCase()
+    if (effort && isValidCodexReasoningEffort(effort)) {
+      args.push('-c', `model_reasoning_effort="${effort}"`)
     }
 
     // Windows 上沙箱功能不支持，必须完全禁用；approvals 也一并绕过。
@@ -191,7 +200,7 @@ export class CodexAdapter implements CliAdapter {
     prompt: string,
     sessionId: string,
     promptInput: CliPromptInput,
-    options?: { model?: string },
+    options?: { model?: string; reasoningEffort?: string },
   ): string[] {
     const args = [
       ...codexAppToolArgs(),
@@ -203,6 +212,11 @@ export class CodexAdapter implements CliAdapter {
 
     if (options?.model) {
       args.push('-m', options.model)
+    }
+
+    const effort = options?.reasoningEffort?.trim().toLowerCase()
+    if (effort && isValidCodexReasoningEffort(effort)) {
+      args.push('-c', `model_reasoning_effort="${effort}"`)
     }
 
     args.push(sessionId)

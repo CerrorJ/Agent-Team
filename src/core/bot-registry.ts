@@ -123,8 +123,9 @@ export const parseAgentTeamConfig = (
       // 若当前 bot 的凭证环境变量在 .env 中未配置，复用系统级的，不要复用同组的
       const appId = (env[bot.appIdEnv]?.trim() || systemAppId).trim()
 
-      const appSecret =
-        (env[bot.appSecretEnv]?.trim() || systemAppSecret).trim()
+      const appSecret = (
+        env[bot.appSecretEnv]?.trim() || systemAppSecret
+      ).trim()
 
       if (!appId) {
         throw new Error(
@@ -137,17 +138,15 @@ export const parseAgentTeamConfig = (
         )
       }
 
-      const cliEnv = Object.fromEntries(
-        Object.entries(bot.cliEnv).map(([targetName, sourceName]) => {
-          const value = env[sourceName]?.trim() ?? ''
-          if (!value) {
-            throw new Error(
-              `bot ${bot.id} 的 CLI 环境变量 ${targetName} 缺少 ${sourceName}`,
-            )
-          }
-          return [targetName, value]
-        }),
-      )
+      const cliEnv = bot.cliEnv
+        ? Object.fromEntries(
+            Object.entries(bot.cliEnv).flatMap(([targetName, sourceName]) => {
+              const value = env[sourceName]?.trim() ?? ''
+              if (!value) return []
+              return [[targetName, value]]
+            }),
+          )
+        : {}
 
       return {
         id: bot.id,
@@ -243,13 +242,13 @@ export const buildBotPrompt = (
 
   const productDeliveryPolicy = ownsProductSpecs
     ? [
-      '产品方案交付规则（必须遵守）：',
-      `- 当前默认交付方式：${defaultProductDeliveryMode}。`,
-      '- 用户明确指定本地 Markdown 或飞书云文档时，以用户本次选择覆盖默认值。',
-      '- 不要为了选择交付格式单独发起澄清。',
-      '- 方案产物完成后必须实际调用 request_spec_approval，并提交最终采用的 deliveryMode 与对应产物字段。',
-      '- 不能只在普通回复中罗列 deliveryMode、documentUrl、specPath 或 ticketsPath。工具调用成功后停止本轮。',
-    ].join('\n')
+        '产品方案交付规则（必须遵守）：',
+        `- 当前默认交付方式：${defaultProductDeliveryMode}。`,
+        '- 用户明确指定本地 Markdown 或飞书云文档时，以用户本次选择覆盖默认值。',
+        '- 不要为了选择交付格式单独发起澄清。',
+        '- 方案产物完成后必须实际调用 request_spec_approval，并提交最终采用的 deliveryMode 与对应产物字段。',
+        '- 不能只在普通回复中罗列 deliveryMode、documentUrl、specPath 或 ticketsPath。工具调用成功后停止本轮。',
+      ].join('\n')
     : ''
 
   // 飞书是聊天界面：长产物进文件、决策走澄清工具，避免大段内容刷屏
@@ -275,12 +274,12 @@ export const buildBotPrompt = (
     // Skill 解析顺序写死在提示词里：工作区版本优先，防止 CLI 直接用全局同名 Skill
     config.skills.length > 0
       ? [
-        '项目 Skill 加载规则（优先级不可颠倒）：',
-        '- 对配置中声明的每个 Skill，先读取当前工作区 `.agents/skills/<skill>/SKILL.md`。',
-        '- 上述路径不存在时，再读取当前工作区 `.claude/skills/<skill>/SKILL.md`。',
-        '- 只有两个工作区路径都不存在时，才允许回退到用户级或全局同名 Skill；不得因全局 Skill 同名而跳过工作区版本。',
-        `本次任务必须执行的项目 Skill：${config.skills.map((skill) => `$${skill}`).join('、')}`,
-      ].join('\n')
+          '项目 Skill 加载规则（优先级不可颠倒）：',
+          '- 对配置中声明的每个 Skill，先读取当前工作区 `.agents/skills/<skill>/SKILL.md`。',
+          '- 上述路径不存在时，再读取当前工作区 `.claude/skills/<skill>/SKILL.md`。',
+          '- 只有两个工作区路径都不存在时，才允许回退到用户级或全局同名 Skill；不得因全局 Skill 同名而跳过工作区版本。',
+          `本次任务必须执行的项目 Skill：${config.skills.map((skill) => `$${skill}`).join('、')}`,
+        ].join('\n')
       : '',
     feishuOutputPolicy,
     commandExecutionPolicy,

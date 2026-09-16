@@ -1,6 +1,4 @@
-/**
- * 飞书任务卡片：把 CLI 事件整理成稳定、低噪音的任务进度。
- */
+// 飞书任务卡片：把 CLI 事件整理成稳定、低噪音的任务进度。
 import type { CliId, CliRunStats, CliSessionSummary } from '../cli/types.js'
 import type { ClarificationFlow } from '../core/clarification.js'
 import type { ProductSpecFlow } from '../core/product-spec.js'
@@ -12,6 +10,7 @@ import type { ScheduledTask } from '../core/schedule.js'
 import { scheduleDescription, scheduleKindLabel } from '../core/schedule.js'
 import type { ScheduledRun } from '../core/schedule-run-store.js'
 import type { ApprovalFlow } from '../core/approval.js'
+import type { EffectiveBotModelConfig } from '../core/model-config-store.js'
 
 export type CardJson = Record<string, unknown>
 export type TaskStatus = 'running' | 'success' | 'failed' | 'cancelled'
@@ -96,13 +95,12 @@ export interface BotModelConfigCardOptions {
   }>
   selectedBotId: string
   selectedCliId: CliId
-  effectiveConfig: {
-    baseUrl: string
-    hasApiKey: boolean
-    maskedApiKey: string
-    model: string
-  }
+  effectiveConfig: EffectiveBotModelConfig
   statusNotice?: string
+  availableModels?: string[]
+  draft?: {
+    baseUrl?: string
+  }
 }
 
 const STATUS_STYLE = {
@@ -1496,7 +1494,7 @@ type UpdateCard = (card: CardJson) => Promise<void>
 
 const CARD_UPDATE_RETRY_DELAYS_MS = [300, 800]
 
-/** 一秒窗口内无论 push 多少次，只提交最新的一张卡片。 */
+// 一秒窗口内无论 push 多少次，只提交最新的一张卡片。
 export class ThrottledCardUpdater {
   private pendingCard: CardJson | undefined
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -1579,6 +1577,8 @@ export const buildBotModelConfigCard = (
     selectedCliId,
     effectiveConfig,
     statusNotice,
+    availableModels,
+    draft,
   } = options
 
   const selectedBot =
@@ -1591,6 +1591,33 @@ export const buildBotModelConfigCard = (
 
   const currentCliName = currentCliId === 'claude' ? 'Claude Code' : 'Codex'
   const isDefaultCli = selectedBot?.defaultCliId === currentCliId
+
+  const formatSourceBadge = (source?: string): string => {
+    if (source === 'override') return ' `(角色独立覆盖)`'
+    if (source === 'env') return ' `(全局默认 .env)`'
+    return ''
+  }
+
+  const modelDisplay = effectiveConfig.model
+    ? `\`${effectiveConfig.model}\`${formatSourceBadge(effectiveConfig.source?.model)}`
+    : '`(未配置，使用 CLI 默认)`'
+
+  const thinkingDisplay = effectiveConfig.thinkingLevel
+    ? `\`${effectiveConfig.thinkingLevel}\`${formatSourceBadge(effectiveConfig.source?.thinkingLevel)}`
+    : '`(未设置)`'
+
+  const baseUrlDisplay = effectiveConfig.baseUrl
+    ? `\`${effectiveConfig.baseUrl}\`${formatSourceBadge(effectiveConfig.source?.baseUrl)}`
+    : '`(未配置，使用官方端点)`'
+
+  let apiKeyDisplay: string
+  if (effectiveConfig.hasApiKey) {
+    apiKeyDisplay = `\`已配置\` · \`${effectiveConfig.maskedApiKey}\`${formatSourceBadge(effectiveConfig.source?.apiKey)}`
+  } else {
+    apiKeyDisplay = '`未配置 (使用本地全局配置)`'
+  }
+
+  const custom = effectiveConfig.customOverride
 
   // 每行放 3 个按钮
   const roleButtons: Record<string, unknown>[] = []
@@ -1638,7 +1665,7 @@ export const buildBotModelConfigCard = (
       ? [
           {
             tag: 'markdown',
-            content: `**${statusNotice}**`,
+            content: `**状态提示**：${escapeFeishuMarkdown(statusNotice)}`,
           },
           { tag: 'hr' },
         ]
@@ -1734,9 +1761,10 @@ export const buildBotModelConfigCard = (
       content: [
         `**角色职能**：${escapeFeishuMarkdown(selectedBot?.role ?? '')}`,
         `**配置目标**：\`${currentBotId}\` · \`${currentCliName}\`${isDefaultCli ? ' (角色默认引擎)' : ''}`,
-        `**当前生效模型**：\`${effectiveConfig.model || '(默认未覆盖)'}\``,
-        `**当前服务地址**：\`${effectiveConfig.baseUrl || '(默认官方端点)'}\``,
-        `**密钥状态**：${effectiveConfig.hasApiKey ? `\`已配置\` · \`${effectiveConfig.maskedApiKey}\`` : '`未配置 (使用本地全局配置)`'}`,
+        `**当前生效模型**：${modelDisplay}`,
+        `**思考/推理等级**：${thinkingDisplay}`,
+        `**当前服务地址**：${baseUrlDisplay}`,
+        `**密钥状态**：${apiKeyDisplay}`,
       ].join('\n'),
     },
     { tag: 'hr' },
@@ -1752,13 +1780,19 @@ export const buildBotModelConfigCard = (
         {
           tag: 'input',
           name: 'base_url',
-          default_value: effectiveConfig.baseUrl,
+          default_value:
+            draft?.baseUrl !== undefined
+              ? draft.baseUrl
+              : (custom?.baseUrl ?? ''),
           placeholder: {
             tag: 'plain_text',
             content:
-              currentCliId === 'claude'
-                ? '例如 https://open.bigmodel.cn/api/anthropic'
-                : '例如 https://api.openai.com/v1',
+              effectiveConfig.source?.baseUrl === 'env' &&
+              effectiveConfig.baseUrl
+                ? `留空沿用全局端点: ${effectiveConfig.baseUrl}`
+                : currentCliId === 'claude'
+                  ? '例如 https://open.bigmodel.cn/api/anthropic'
+                  : '例如 https://api.openai.com/v1',
           },
         },
         {
@@ -1770,27 +1804,107 @@ export const buildBotModelConfigCard = (
           name: 'api_key',
           placeholder: {
             tag: 'plain_text',
-            content: effectiveConfig.hasApiKey
-              ? '留空表示沿用现有密钥'
-              : currentCliId === 'claude'
-                ? '输入 Anthropic API Key / Auth Token'
-                : '输入 OpenAI API Key',
+            content: custom?.hasApiKey
+              ? '留空保留现有角色独立密钥'
+              : effectiveConfig.hasApiKey
+                ? `留空沿用全局默认密钥 (${effectiveConfig.maskedApiKey})`
+                : currentCliId === 'claude'
+                  ? '输入 Anthropic API Key / Auth Token'
+                  : '输入 OpenAI API Key',
+          },
+        },
+        {
+          tag: 'column_set',
+          flex_mode: 'none',
+          horizontal_spacing: '8px',
+          columns: [
+            {
+              tag: 'column',
+              width: 'auto',
+              elements: [
+                {
+                  tag: 'button',
+                  name: 'btn_probe_models',
+                  action_type: 'form_submit',
+                  text: {
+                    tag: 'plain_text',
+                    content: '🔍 检测端点并获取可用模型',
+                  },
+                  type: 'default',
+                  size: 'medium',
+                  value: {
+                    action: 'probe_bot_models',
+                    botId: currentBotId,
+                    cliId: currentCliId,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        ...(availableModels && availableModels.length > 0
+          ? [
+              {
+                tag: 'markdown',
+                content: `**快速选择模型（已发现 ${availableModels.length} 个可用模型）**`,
+              },
+              {
+                tag: 'select_static',
+                name: 'model_select',
+                placeholder: {
+                  tag: 'plain_text',
+                  content: `点击下拉选择模型（共 ${availableModels.length} 项）`,
+                },
+                options: availableModels.slice(0, 100).map((m) => ({
+                  text: { tag: 'plain_text', content: m },
+                  value: m,
+                })),
+              },
+              {
+                tag: 'markdown',
+                content: '**或手动输入模型名称**',
+              },
+            ]
+          : [
+              {
+                tag: 'markdown',
+                content: `**Model（${currentCliName} 模型名称）**`,
+              },
+            ]),
+        {
+          tag: 'input',
+          name: 'model',
+          default_value: custom?.model ?? '',
+          placeholder: {
+            tag: 'plain_text',
+            content:
+              effectiveConfig.source?.model === 'env' && effectiveConfig.model
+                ? `留空沿用全局模型: ${effectiveConfig.model}`
+                : currentCliId === 'claude'
+                  ? '例如 glm-5.1、claude-3-7-sonnet'
+                  : '例如 gpt-5.6-terra、o3',
           },
         },
         {
           tag: 'markdown',
-          content: `**Model（${currentCliName} 模型名称）**`,
+          content:
+            currentCliId === 'claude'
+              ? '**Thinking Level（思考等级 / Token 预算）**'
+              : '**Reasoning Effort（推理等级）**',
         },
         {
           tag: 'input',
-          name: 'model',
-          default_value: effectiveConfig.model,
+          name: 'thinking_level',
+          default_value: custom?.thinkingLevel ?? '',
           placeholder: {
             tag: 'plain_text',
             content:
-              currentCliId === 'claude'
-                ? '例如 glm-5.1、claude-3-7-sonnet'
-                : '例如 gpt-5.6-terra、o3',
+              effectiveConfig.source?.thinkingLevel === 'env' &&
+              effectiveConfig.thinkingLevel
+                ? `留空沿用全局等级: ${effectiveConfig.thinkingLevel}`
+                : currentCliId === 'claude'
+                  ? '可选 low、high、max 或 Token 预算数（如 16000）'
+                  : '可选 low、medium、high (默认 medium)',
           },
         },
         {
@@ -1847,7 +1961,7 @@ export const buildBotModelConfigCard = (
     {
       tag: 'markdown',
       content:
-        '_💡 修改后立即生效于下一轮任务，无需重启服务。密钥输入留空将保留现有值。Claude 与 Codex 的配置按角色各自独立持久化。_',
+        '_💡 修改后立即生效于下一轮任务，无需重启服务。输入留空将沿用全局默认值，密钥留空保留现有密钥。检测端点将保留服务地址草稿，未保存的密钥在保存前需重新输入。Claude 与 Codex 的配置按角色各自独立持久化。_',
     },
   ]
 

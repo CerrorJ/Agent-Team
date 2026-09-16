@@ -1,8 +1,6 @@
-/**
- * 需求澄清流程：CLI 调用 request_clarification 工具 -> 应用层截获 tool_call
- * -> 渲染飞书卡片逐题收集答案 -> 答案拼进下一轮 prompt 继续任务。
- * 本文件只放数据模型、校验与流程存储，卡片交互在 im/ 与 app/ 层。
- */
+// 需求澄清流程：CLI 调用 request_clarification 工具 -> 应用层截获 tool_call
+// -> 渲染飞书卡片逐题收集答案 -> 答案拼进下一轮 prompt 继续任务。
+// 本文件只放数据模型、校验与流程存储，卡片交互在 im/ 与 app/ 层。
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { CollaborationOrigin } from './collaboration.js'

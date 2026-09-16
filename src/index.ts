@@ -1,7 +1,5 @@
-/**
- * Agent Team 入口。
- * 当前阶段：飞书消息驱动 Claude Code / Codex 完成任务。
- */
+// Agent Team 入口。
+// 当前阶段：飞书消息驱动 Claude Code / Codex 完成任务。
 import 'dotenv/config'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'

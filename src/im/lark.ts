@@ -1,6 +1,4 @@
-/**
- * 飞书接入：WS 长连接收消息 + REST 回消息。
- */
+// 飞书接入：WS 长连接收消息 + REST 回消息。
 import * as Lark from '@larksuiteoapi/node-sdk'
 import { mkdir } from 'node:fs/promises'
 import { extname, join } from 'node:path'

@@ -35,7 +35,7 @@ export class TeamRegistry {
     return this.configs.get(botId)
   }
 
-  /** 获取指定 bot 所在分组的所有成员（未指定 group 则自身单独成组） */
+  // 获取指定 bot 所在分组的所有成员（未指定 group 则自身单独成组）
   getGroupMembers(botId: string): BotConfig[] {
     const current = this.configs.get(botId)
     if (!current) return []
@@ -43,7 +43,7 @@ export class TeamRegistry {
     return this.members.filter((m) => (m.group ?? m.id) === groupName)
   }
 
-  /** 获取指定 bot 所在分组中当前可用的备用成员列表（排除自身及已受限成员） */
+  // 获取指定 bot 所在分组中当前可用的备用成员列表（排除自身及已受限成员）
   getAvailableFallbackMembers(botId: string): BotConfig[] {
     const groupMembers = this.getGroupMembers(botId)
     return groupMembers.filter(

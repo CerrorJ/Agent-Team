@@ -91,7 +91,6 @@
   - 管理员发送 `/model`（或 `/config`）或点击 `/team` 卡片中的「⚙️ 角色模型与端点配置」，即可弹出可视化配置卡片，支持直接修改每个角色的 `Base URL`、`API Key` 与 `Model`。
   - **Claude 与 Codex 端点配置严格隔离**：卡片内置 CLI 切换 Tab，同一角色的 Claude（Anthropic 兼容协议与密钥）与 Codex（OpenAI 协议与密钥）按 `(botId, cliId)` 独立持久化，互不污染。切换引擎时精准读取各自端点，彻底避免 Anthropic 端点错传给 Codex 的协议异常。
   - **严格权限与零重启热重载**：基于 `OWNER_OPEN_ID` 严格鉴权，非管理员禁止修改；修改保存后立即落盘并刷新内存缓存，下一轮任务即刻生效，无需重启服务进程。
-- **支持静态 Per-bot 模型定制**：亦可在 `config/bots.json` 的 `cliEnv` 映射静态预设，系统优先应用飞书动态覆盖，未覆盖项回退至预设或全局配置。
 - **双模式飞书接入**：
   - **极简模式（单应用全员共享）**：仅需配置一组全局 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`，所有团队成员无缝共用。系统基于消息内 `dispatchId` 精准唤醒目标角色 Bot，无需在飞书开放平台繁琐创建多个应用。
   - **多应用独立模式**：亦可为各成员单独配置专属自建应用凭证，实现独立机器人名字与专属头像；两种模式完全兼容、支持平滑混用与自动兜底。
@@ -258,10 +257,6 @@ cp config/bots.example.json config/bots.json
       "workspace": "../my-project",
       "role": "开发工程师（备用），负责在同组开发限流时代班完成实现和基础验证",
       "collaborationMaxRounds": 16,
-      "cliEnv": {
-        "ANTHROPIC_BASE_URL": "CEO_ZHIPU_ANTHROPIC_BASE_URL",
-        "ANTHROPIC_AUTH_TOKEN": "CEO_ZHIPU_ANTHROPIC_AUTH_TOKEN"
-      },
       "systemPrompt": "保持实现直接、清楚，并在交付前运行与改动相关的验证。"
     }
   ]
@@ -378,6 +373,22 @@ Agent Team 启动，正在建立飞书长连接…
 | `/schedule <需求>` | 用自然语言创建定时计划任务                                               | `@Bot /schedule 每天早上9点巡检服务器错误日志` |
 | `/schedules`       | 查看当前已注册的全部定时任务与状态卡片                                   | `@Bot /schedules`                              |
 | `/help`            | 查看帮助说明                                                             | `@Bot /help`                                   |
+
+#### 🎯 角色模型与思考等级配置机制 (`/model`)
+
+团队支持为每个 Bot 成员针对 **Claude Code** 与 **OpenAI Codex** 两套引擎独立配置端点、密钥、模型与思考/推理等级：
+
+1. **三级继承与优先级**：
+   - **最高优先级**：飞书卡片角色独立覆盖配置（持久化于 `data/bot-model-overrides.json`，免重启热生效）；
+   - **次优先级**：宿主系统环境变量（`.env` 中的 `ANTHROPIC_*`、`OPENAI_*`、`MAX_THINKING_TOKENS` 等）；
+   - **默认回退**：各 CLI 本地用户级配置（或 CC Switch 切换的服务/官方端点）。
+2. **思考 / 推理等级白名单校验**：
+   - **Codex**：严格限制为 `low`、`medium`、`high`，对应启动参数 `-c model_reasoning_effort="..."`；
+   - **Claude**：严格限制为 `low`、`medium`、`high`、`max` 或正整数 Token 预算，映射至 `MAX_THINKING_TOKENS`；
+   - **稳态保护**：热重载在遭遇损坏或非法 JSON 时自动保留最后一次有效内存配置，彻底防止意外回退。
+3. **端点检测与可用模型探测**：
+   - 配置卡片支持一键探测自定义端点可用模型，并动态渲染下拉列表以供快速选择；
+   - 探测过程完整保留 Base URL 草稿；因安全规范未保存密钥不予回显，探测后（无论成功或失败）均明确引导重新输入密钥，确保模型与端点上下文一致落盘。
 
 ---
 

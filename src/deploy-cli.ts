@@ -1,7 +1,5 @@
-/**
- * agent-team 部署 CLI：pm2 常驻封装（doctor / start / stop / restart / status / logs）。
- * 用法见 SETUP.md；生产部署执行 pnpm agent-team <命令>。
- */
+// agent-team 部署 CLI：pm2 常驻封装（doctor / start / stop / restart / status / logs）。
+// 用法见 SETUP.md；生产部署执行 pnpm agent-team <命令>。
 import { cac } from 'cac'
 import { existsSync } from 'node:fs'
 import { spawnSync, type SpawnSyncOptions } from 'node:child_process'

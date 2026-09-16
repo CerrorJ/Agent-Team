@@ -1,8 +1,6 @@
-/**
- * 手动探测脚本：验证两家 CLI 都能注册应用层 MCP 工具，且 request_clarification
- * 的入参能以统一的工具名通过 Zod Schema 校验。
- * 用法：pnpm probe:tool <claude|codex> [工作目录]
- */
+// 手动探测脚本：验证两家 CLI 都能注册应用层 MCP 工具，且 request_clarification
+// 的入参能以统一的工具名通过 Zod Schema 校验。
+// 用法：pnpm probe:tool <claude|codex> [工作目录]
 import { resolve } from 'node:path'
 import { getCliAdapter } from './cli/registry.js'
 import { runCli } from './cli/runner.js'

@@ -1,7 +1,5 @@
-/**
- * 评论区 @bot 触发的产品文档修改：CLI 读取评论与文档、改完原文档后，
- * 把最终回答回写到原评论。不产生新的确认卡，原待确认状态继续有效。
- */
+// 评论区 @bot 触发的产品文档修改：CLI 读取评论与文档、改完原文档后，
+// 把最终回答回写到原评论。不产生新的确认卡，原待确认状态继续有效。
 import { getCliAdapter } from '../cli/registry.js'
 import type { BotConfig } from '../core/bot-registry.js'
 import type { ProductSpecFlow } from '../core/product-spec.js'

@@ -10,10 +10,8 @@ export interface ProductSpecSubmission {
   request: ProductSpecRequest
 }
 
-/**
- * CLI 偶尔会「方案写完了却没调工具」：没截获到 request_spec_approval 时，
- * 带着纠正提示沿原会话重跑一次；重跑后仍没有提交才算失败。
- */
+// CLI 偶尔会「方案写完了却没调工具」：没截获到 request_spec_approval 时，
+// 带着纠正提示沿原会话重跑一次；重跑后仍没有提交才算失败。
 export const ensureProductSpecSubmission = async (options: {
   result: CliRunResult
   defaultDeliveryMode: ProductDeliveryMode

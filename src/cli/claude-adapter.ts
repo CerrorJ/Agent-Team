@@ -161,7 +161,7 @@ const parseStats = (event: ClaudeEvent): CliRunStats | undefined => {
 const outputArgs = (
   prompt: string,
   promptInput: CliPromptInput,
-  options?: { model?: string },
+  options?: { model?: string; reasoningEffort?: string },
 ): string[] => {
   return [
     '--dangerously-skip-permissions',
@@ -183,7 +183,7 @@ export class ClaudeAdapter implements CliAdapter {
   buildArgs(
     prompt: string,
     promptInput: CliPromptInput,
-    options?: { model?: string },
+    options?: { model?: string; reasoningEffort?: string },
   ): string[] {
     return outputArgs(prompt, promptInput, options)
   }
@@ -192,7 +192,7 @@ export class ClaudeAdapter implements CliAdapter {
     prompt: string,
     sessionId: string,
     promptInput: CliPromptInput,
-    options?: { model?: string },
+    options?: { model?: string; reasoningEffort?: string },
   ): string[] {
     return ['--resume', sessionId, ...outputArgs(prompt, promptInput, options)]
   }

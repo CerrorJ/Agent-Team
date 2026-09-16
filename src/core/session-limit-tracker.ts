@@ -1,8 +1,6 @@
-/**
- * Anthropic 会话限流检测与追踪器。
- * 当 Claude Code 遇到订阅或会话限额时（如 "You've hit your session limit · resets"），
- * 记录受限状态，用于自动切换备用 Bot（如 developer -> developer2）。
- */
+// Anthropic 会话限流检测与追踪器。
+// 当 Claude Code 遇到订阅或会话限额时（如 "You've hit your session limit · resets"），
+// 记录受限状态，用于自动切换备用 Bot（如 developer -> developer2）。
 
 export const isSessionLimitError = (text: string | undefined): boolean => {
   if (!text) return false
@@ -117,7 +115,7 @@ export class SessionLimitTracker {
     { expireAt: number; resetsText?: string }
   >()
 
-  /** 标记 bot 进入限流状态，根据 reset 时间或默认 5 小时计算过期时间 */
+  // 标记 bot 进入限流状态，根据 reset 时间或默认 5 小时计算过期时间
   markLimit(
     botId: string,
     resetsText?: string,
@@ -133,7 +131,7 @@ export class SessionLimitTracker {
     })
   }
 
-  /** 判断 bot 当前是否处于限流不可用状态 */
+  // 判断 bot 当前是否处于限流不可用状态
   isLimited(botId: string): boolean {
     const info = this.limits.get(botId)
     if (!info) return false
@@ -144,7 +142,7 @@ export class SessionLimitTracker {
     return true
   }
 
-  /** 获取限流详细信息 */
+  // 获取限流详细信息
   getLimitInfo(botId: string): LimitInfo {
     const info = this.limits.get(botId)
     if (!info) return { isLimited: false }
@@ -159,7 +157,7 @@ export class SessionLimitTracker {
     }
   }
 
-  /** 手动清除限流状态 */
+  // 手动清除限流状态
   clearLimit(botId: string): void {
     this.limits.delete(botId)
   }

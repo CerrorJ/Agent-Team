@@ -1,5 +1,8 @@
 export type CliId = 'claude' | 'codex'
 
+export const CODEX_REASONING_EFFORTS = ['low', 'medium', 'high'] as const
+export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORTS)[number]
+
 // 原生压缩的执行计划：两家 CLI 能力不同，只能各走各的协议——
 // Claude Code 用 `-p --resume <id>` 执行 /compact 指令并解析 stream-json 输出；
 // Codex 的 exec 模式不支持压缩指令，必须起 app-server 走 JSON-RPC（thread/resume + thread/compact/start）。
@@ -20,7 +23,7 @@ export type CliCompactPlan =
 
 export type CliPromptInput = 'argument' | 'stdin'
 
-/** Windows 上 prompt 必须走 stdin（避免 cmd 对命令行参数转义/乱码），其他平台直接走参数。 */
+// Windows 上 prompt 必须走 stdin（避免 cmd 对命令行参数转义/乱码），其他平台直接走参数。
 export const promptInputForPlatform = (
   platform: NodeJS.Platform,
 ): CliPromptInput => (platform === 'win32' ? 'stdin' : 'argument')
@@ -81,14 +84,14 @@ export interface CliAdapter {
   buildArgs(
     prompt: string,
     promptInput: CliPromptInput,
-    options?: { model?: string },
+    options?: { model?: string; reasoningEffort?: string },
   ): string[]
   // 已有会话续接组装参数
   buildResumeArgs(
     prompt: string,
     sessionId: string,
     promptInput: CliPromptInput,
-    options?: { model?: string },
+    options?: { model?: string; reasoningEffort?: string },
   ): string[]
   // 组装在已有会话内执行原生压缩的子进程计划
   buildCompactPlan(sessionId: string, instructions?: string): CliCompactPlan
