@@ -63,7 +63,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 | 连接超时 | 网络问题或凭证错误 | 确认 App ID / Secret 正确，网络可达飞书 OpenAPI |
 | 任务一直不执行 | 本机没有对应 CLI 或未登录 | `claude --version` / `codex --version` 验证安装，先在本机跑通一次 |
 | `Claude Code 执行超时` | 任务超过默认 2 小时上限（`runner.ts` 的 `DEFAULT_TIMEOUT_MS`，可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）或任务被外部中止 | 调大对应引擎的超时环境变量，或用卡片「停止任务」手动中止；环境变量设 0 或非法值会回退默认，不支持不限时 |
-| 任务失败提示「已触发会话额度限制」并移交 Team Leader | 该 bot 的 Claude 会话限额已用尽（默认标记 5 小时，状态在内存中，重启即清零） | 等待额度重置或重启进程；同组（`group`）配了备用成员的会自动代班，见 [多 bot 协作](../domain/collaboration.md) 的会话限额一节 |
+| 任务失败提示「已触发会话额度限制」并移交 Team Leader | 该 bot 的 Claude 会话限额已用尽（受限时长按报错文案里的重置时钟点解析，解析失败兜底 5 小时；状态在内存中，重启即清零） | 等待额度重置或重启进程；同组（`group`）配了备用成员的会自动代班，见 [多 bot 协作](../domain/collaboration.md) 的会话限额一节 |
 | 多个 bot 头像名称相同 | 这些 bot 复用了同一套凭证（共享 appId，只建一条长连接） | 需要独立身份就为各 bot 配独立 `appIdEnv` / `appSecretEnv`（多应用独立模式） |
 
 ## 飞书应用配置

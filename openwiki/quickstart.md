@@ -110,6 +110,6 @@ flowchart LR
 
 | 领域 | 锚点 | 延后原因 |
 |------|------|----------|
-| 任意 @ 触发协作 | [多 bot 协作](domain/collaboration.md) 的取件分支 | bot 消息 @ 当前 bot 但领取不到交接单时仅记日志按外部派活处理，通用路由未实现 |
+| 任意 @ 触发协作 | [多 bot 协作](domain/collaboration.md) 的取件分支 | 外部 bot 消息 @ 当前 bot 但领取不到交接单时仅记日志按外部派活处理（内部团队 bot 的非派发消息已被直接过滤），通用路由未实现 |
 | 测试体系 | 无测试文件 | 当前无测试目录和测试框架 |
 | 部署 CI | `SETUP.md`、`src/deploy-cli.ts`、`.github/workflows/` | 部署常驻已有 pm2 封装（`pnpm agent-team`，见 [运维手册](operations/runbook.md)），但仍无应用部署的 CI 流水线，仅有 OpenWiki 文档自动更新工作流 |
