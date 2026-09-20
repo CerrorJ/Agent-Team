@@ -177,7 +177,7 @@ Agent-Team/
 |------|----------|------|
 | `bot-registry.ts` | `loadAgentTeamConfig` / `parseAgentTeamConfig` / `buildBotPrompt` / `BotConfig` / `AgentTeamConfig` | bots.json 的 zod 校验（含 teamLeader 与 group 代班组）、凭证环境变量解析（系统级 FEISHU_APP_ID/SECRET 回退）、工作目录优先级、提示词组装（详见 [多 bot 注册](domain/bot-registry.md)） |
 | `team-registry.ts` | `TeamRegistry` / `MissingSkill` | 团队名单上下文、Skill 缺失检查、`/team` 数据源、同组备用成员查询（`getGroupMembers` / `getAvailableFallbackMembers`，限额代班用） |
-| `session-limit-tracker.ts` | `SessionLimitTracker` / `isSessionLimitError` / `extractResetTime` / `sessionLimitTracker` | Claude 会话限额检测与内存追踪（默认 5 小时），驱动同组代班与 Team Leader 移交（详见 [多 bot 协作](domain/collaboration.md)） |
+| `session-limit-tracker.ts` | `SessionLimitTracker` / `isSessionLimitError` / `extractResetTime` / `parseResetDurationMs` / `sessionLimitTracker` | Claude 会话限额检测与内存追踪（受限时长按重置时钟点解析，兜底 5 小时），驱动同组代班与 Team Leader 移交（详见 [多 bot 协作](domain/collaboration.md)） |
 | `clarification.ts` | `ClarificationRequestSchema` / `ClarificationFlowStore` / `findClarificationRequest` / `isClarificationOwner` | 需求澄清数据模型、按任务存储的流程状态机（详见 [需求澄清](domain/clarification.md)） |
 | `approval.ts` / `approval-store.ts` | `ApprovalRequestSchema` / `ApprovalFlowStore` / `JsonApprovalFlowStore` / `findApprovalRequest` / `formatApprovalDecision` | 高危操作审批数据模型、同任务旧流程过期、JSON 持久化（详见 [高危操作审批](domain/approval.md)） |
 | `product-spec.ts` / `product-spec-store.ts` | `ProductSpecRequestSchema` / `ProductSpecToolInputSchema` / `ProductSpecFlowStore` / `JsonProductSpecFlowStore` / `isProductSpecOwner` | local/lark-doc 双模式方案请求校验（工作区内相对路径、Docx 链接）、MCP 注册用扁平入参 schema（顶层 union 会被 SDK 降级）、流程存储（详见 [产品方案交付](domain/product-spec.md)） |
