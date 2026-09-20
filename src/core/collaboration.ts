@@ -67,7 +67,8 @@ export const buildCollaborationPrompt = (
     `协作目标：${message.objective}`,
     `执行要求：${message.instruction}`,
     message.expectedOutput ? `期望产出：${message.expectedOutput}` : '',
-    `完成后，把结果交回 ${message.reportToBotId} 继续组织后续工作；已经可以交付时，明确给出最终结论。`,
+    // 明确要求在当前回复直接给出结论，禁止自行调用 SendMessage 等内部工具，由宿主系统自动回传
+    `完成后，在当前回复中直接给出最终结论。Agent Team 宿主系统会自动将你的回复交回 ${message.reportToBotId} 组织后续工作；无需且不要调用 SendMessage 等工具。`,
   ]
     .filter(Boolean)
     .join('\n\n')

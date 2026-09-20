@@ -207,7 +207,6 @@ const handleBotMessage = async (
 ): Promise<void> => {
   const resolved = resolveMentions(msg.text, msg.mentions)
   const taskId = topicTaskId(msg)
-  let senderRuntime: BotRuntime | undefined
   let collaboration: CollaborationMessage | undefined
   if (msg.senderType === 'app' || msg.senderType === 'bot') {
     const currentRuntime = botRuntimes.get(config.id)
@@ -226,6 +225,18 @@ const handleBotMessage = async (
         : undefined
 
     if (!pending) {
+      // 内部团队机器人之间严禁通过非协作派发通道互发消息，直接忽略以避免死循环与逻辑异常
+      const isInternalBot = [...botRuntimes.values()].some(
+        (r) => r.identity.openId === msg.senderOpenId,
+      )
+
+      if (isInternalBot) {
+        console.log(
+          `[协作] 忽略来自内部团队 bot 的非派发消息 sender=${msg.senderOpenId} target=${config.id}`,
+        )
+        return
+      }
+
       if (mentionedCurrentBot) {
         console.log(
           `[协作] bot 消息 @ 当前 bot，按外部派活处理 sender=${msg.senderOpenId} target=${config.id}`,
@@ -237,8 +248,7 @@ const handleBotMessage = async (
         return
       }
     } else {
-      senderRuntime = botRuntimes.get(pending.fromBotId)
-      if (!senderRuntime) {
+      if (!botRuntimes.has(pending.fromBotId)) {
         console.log(`[协作] 找不到来源 bot: ${pending.fromBotId}`)
         return
       }
@@ -997,7 +1007,7 @@ const handleBotMessage = async (
         await sendResultNotification({
           bot,
           replyToMessageId: msg.messageId,
-          target: senderRuntime?.identity ?? {
+          target: {
             openId: ownerOpenId,
             name: '',
           },
@@ -1098,7 +1108,7 @@ const handleBotMessage = async (
               await sendResultNotification({
                 bot,
                 replyToMessageId: msg.messageId,
-                target: senderRuntime?.identity ?? {
+                target: {
                   openId: ownerOpenId,
                   name: '',
                 },
@@ -1110,7 +1120,7 @@ const handleBotMessage = async (
             await sendResultNotification({
               bot,
               replyToMessageId: msg.messageId,
-              target: senderRuntime?.identity ?? {
+              target: {
                 openId: ownerOpenId,
                 name: '',
               },
@@ -1146,7 +1156,7 @@ const handleBotMessage = async (
           await sendResultNotification({
             bot,
             replyToMessageId: msg.messageId,
-            target: senderRuntime?.identity ?? {
+            target: {
               openId: ownerOpenId,
               name: '',
             },
@@ -1172,7 +1182,7 @@ const handleBotMessage = async (
       await sendResultNotification({
         bot,
         replyToMessageId: msg.messageId,
-        target: senderRuntime?.identity ?? {
+        target: {
           openId: ownerOpenId,
           name: '',
         },
