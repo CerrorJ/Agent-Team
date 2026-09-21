@@ -69,7 +69,7 @@ const BotSchema = z.object({
     .min(1)
     .max(32)
     .optional()
-    .default(16),
+    .default(24),
   cliEnv: z
     .record(
       z.string().regex(/^[A-Z_][A-Z0-9_]*$/),

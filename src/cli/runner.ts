@@ -66,6 +66,11 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     : adapter.buildArgs(prompt, promptInput, cliOptions)
 
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error(`${adapter.displayName} 执行已取消`))
+      return
+    }
+
     // 固定用 `['pipe','pipe','pipe']`，让 stdin 始终可写（spawnCli 返回类型按字面量收窄）。
     const child = spawnCli(adapter.command, args, {
       cwd,
@@ -81,7 +86,8 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     }
     // spawn 的 signal 选项只杀直接子进程（cmd 外壳），Windows 下 claude.exe/codex.exe 会变孤儿；
     // 额外监听 abort 用 killCli 连进程树一起清。
-    signal?.addEventListener('abort', () => killCli(child), { once: true })
+    const abort = () => killCli(child)
+    signal?.addEventListener('abort', abort, { once: true })
     const lines = createInterface({ input: child.stdout })
     //记住最近一次出现的会话标识
     let observedSessionId = sessionId
@@ -106,7 +112,10 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
       killCli(child)
     }, timeoutMs)
 
-    const finish = () => clearTimeout(timer)
+    const finish = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
+    }
 
     const fail = (error: Error) => {
       if (settled) return
