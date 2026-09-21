@@ -142,8 +142,34 @@ flowchart TD
 - `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、默认 2 小时超时（可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）、支持 `AbortSignal` 取消；`env` 选项以 `{...process.env, ...env}` 合并注入 per-bot `cliEnv` 模型覆盖与 `AGENT_TEAM_*` 会话上下文（见 [多 bot 注册](../domain/bot-registry.md)）；`stopToolNames` 命中应用层工具调用时立即终止子进程并把该次调用随结果返回；`tool_call` 按 `toolUseId` 去重收集，失败的调用在 `tool_end` 剔除，只把成功的随结果返回
 - `native-compact.ts` — `/compact` 的原生上下文压缩：Claude 走 stream-json，Codex 走 app-server JSON-RPC
 - `native-sessions.ts` — `/resume` 的会话清单：Claude 扫本地 JSONL，Codex 走 app-server `thread/list`
-- `spawn-cli.ts` — Windows 下以 shell 启动 `.cmd` 包装的 CLI，并用 `taskkill /t /f` 连进程树清理
+- `spawn-cli.ts` — 跨平台 spawn 封装：Windows 下以 shell 启动 `.cmd` 包装的 CLI 并剔除 `options.signal`，`killCli` 用 `taskkill /pid <pid> /t /f` 异步整树清理（见下节）
 - `timeout.ts` — `armTimeout` 钳制 setTimeout 延迟上限（2^31-1ms），防溢出立即触发
+
+### Windows 中止与进程树清理（spawn-cli）
+
+Windows 下 `claude` / `codex` 多以 `.cmd` 批处理存在，`spawnCli` 必须 `shell: true` 启动，实际进程树是 `cmd.exe → claude.exe / codex.exe → …`。两个关键约定决定了 `src/cli/spawn-cli.ts` 的形态：
+
+- **AbortSignal 不透传给 spawn**：若把 `signal` 交给 Node 的 spawn，abort 时 Node 会直接 `TerminateProcess` 杀掉最外层 `cmd.exe` 外壳，其子进程瞬间脱壳变成孤儿进程继续在后台运行；且随后 `killCli` 调 `taskkill /pid` 也会因 cmd.exe 已死而无法顺树清杀。因此 Windows 下 `spawnCli` 显式剔除 `options.signal`，中止完全交给上层监听器。
+- **killCli 异步降级**：`killCli` 在 Windows 异步 spawn `taskkill /pid <pid> /t /f`（`stdio: 'ignore'`）；`taskkill` 启动失败（`error` 事件）或非 0 退出（`close`）时降级回 `child.kill(signal)` 兜底，spawn 抛异常同样兜底。非 Windows 或无 pid 时直接 `child.kill`。`runner.ts` 的 abort 监听器、超时回调与 `stopToolNames` 命中都走这一个入口。
+
+```mermaid
+sequenceDiagram
+    participant R as runner.ts
+    participant S as spawnCli
+    participant C as cmd 外壳与 CLI 子孙进程
+    participant K as taskkill
+    R->>S: spawn command args（Windows 剔除 signal）
+    S->>C: shell 启动整棵进程树
+    R->>R: abort / 超时 / 停止型工具命中
+    R->>K: killCli 调 taskkill /pid /t /f 异步执行
+    alt taskkill 启动失败或非 0 退出
+        R->>C: 降级 child.kill 兜底
+    else taskkill 成功
+        K->>C: 连进程树一并终止
+    end
+```
+
+Windows 中止链路：为何不把 AbortSignal 交给 spawn、以及 `killCli` 的 `taskkill` 异步降级（`src/cli/spawn-cli.ts`、`src/cli/runner.ts`）。
 
 详见 [消息处理流程](../workflows/message-flow.md)。
 
