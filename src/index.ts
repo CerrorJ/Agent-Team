@@ -207,6 +207,7 @@ const handleBotMessage = async (
 ): Promise<void> => {
   const resolved = resolveMentions(msg.text, msg.mentions)
   const taskId = topicTaskId(msg)
+  let senderRuntime: BotRuntime | undefined
   let collaboration: CollaborationMessage | undefined
   if (msg.senderType === 'app' || msg.senderType === 'bot') {
     const currentRuntime = botRuntimes.get(config.id)
@@ -248,7 +249,8 @@ const handleBotMessage = async (
         return
       }
     } else {
-      if (!botRuntimes.has(pending.fromBotId)) {
+      senderRuntime = botRuntimes.get(pending.fromBotId)
+      if (!senderRuntime) {
         console.log(`[协作] 找不到来源 bot: ${pending.fromBotId}`)
         return
       }
@@ -1007,7 +1009,7 @@ const handleBotMessage = async (
         await sendResultNotification({
           bot,
           replyToMessageId: msg.messageId,
-          target: {
+          target: senderRuntime?.identity ?? {
             openId: ownerOpenId,
             name: '',
           },
@@ -1108,7 +1110,7 @@ const handleBotMessage = async (
               await sendResultNotification({
                 bot,
                 replyToMessageId: msg.messageId,
-                target: {
+                target: senderRuntime?.identity ?? {
                   openId: ownerOpenId,
                   name: '',
                 },
@@ -1120,7 +1122,7 @@ const handleBotMessage = async (
             await sendResultNotification({
               bot,
               replyToMessageId: msg.messageId,
-              target: {
+              target: senderRuntime?.identity ?? {
                 openId: ownerOpenId,
                 name: '',
               },
@@ -1156,7 +1158,7 @@ const handleBotMessage = async (
           await sendResultNotification({
             bot,
             replyToMessageId: msg.messageId,
-            target: {
+            target: senderRuntime?.identity ?? {
               openId: ownerOpenId,
               name: '',
             },
@@ -1182,7 +1184,7 @@ const handleBotMessage = async (
       await sendResultNotification({
         bot,
         replyToMessageId: msg.messageId,
-        target: {
+        target: senderRuntime?.identity ?? {
           openId: ownerOpenId,
           name: '',
         },
