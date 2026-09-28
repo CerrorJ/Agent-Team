@@ -90,6 +90,7 @@ sequenceDiagram
 | `/schedule <需求>` | 把需求包装成「请使用 schedule_manage 工具创建任务」的提示，继续走 CLI 执行管线（bot 会代为创建定时任务）；不带需求时回复用法；`pause/resume/delete/run <id>` 子命令直接操作调度器不跑 CLI（见 [定时任务调度](../domain/scheduling.md)） |
 | `/schedules` | 回复定时任务列表卡片（`buildScheduleListCard`） |
 | `/new` | 清空话题绑定的 CLI 会话，下一条任务开新会话；旧会话保留，可用 `/resume` 找回 |
+| `/newall` | 批量重置当前话题中所有 `idle` 成员（含其他 bot）的 CLI 会话绑定，`active` 会话自动跳过；用于协作结束后统一换新上下文（机制见 [会话与任务管理](../domain/session.md)） |
 | `/resume` | 列出当前工作目录的 CLI 会话（`listNativeCliSessions`，上限 8 条），卡片「恢复」按钮完成实际切换 |
 | `/compact [要求]` | 在当前 CLI 会话内执行原生上下文压缩（`compactCliSession`），无需整理时回「暂时无需整理」卡片 |
 | `/cd` | 无参数查看当前工作目录；带参数切换话题工作目录（active 状态下拒绝，切换成功后清空 `cliSessionId`，下一条任务新建 CLI 会话） |
@@ -217,7 +218,7 @@ flowchart TD
 |------|------|
 | `src/index.ts` | 入口，组装 `AppRuntime`、多 bot 启动、定时调度启动、`onMessage` 任务编排、文档评论入口与收尾路由 |
 | `src/app/runtime.ts` | `AppRuntime` 共享状态容器（会话、任务、协作队列、澄清 / 产品方案 / 审批流程），入口组装一次传给 `app/` 各处理模块 |
-| `src/app/command-handler.ts` | 斜杠命令处理（`/help` `/team` `/schedule` `/schedules` `/new` `/resume` `/compact` `/cd` `/close` `/status` 与引擎切换守卫） |
+| `src/app/command-handler.ts` | 斜杠命令处理（`/help` `/team` `/schedule` `/schedules` `/new` `/newall` `/resume` `/compact` `/cd` `/close` `/status` 与引擎切换守卫） |
 | `src/app/card-action-handler.ts` | 卡片回调：`approve_product_spec` / `answer_clarification` / `decide_approval` / `resume_cli_session` / `abort_task` 五类动作 |
 | `src/app/clarification-runner.ts` | 澄清答案收齐后的 CLI 续跑（详见 [需求澄清](../domain/clarification.md)） |
 | `src/app/approval-runner.ts` | 审批决定回传 CLI 续跑（详见 [高危操作审批](../domain/approval.md)） |

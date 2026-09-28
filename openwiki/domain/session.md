@@ -61,15 +61,18 @@ stateDiagram-v2
 
 ## 斜杠命令
 
-`src/core/command-parser.ts` 的 `parseCommand()` 只匹配「可选 @ 提及 + 一条命令」，支持 `/close`、`/status`、`/help`、`/new`、`/resume`、`/team`、`/compact`、`/cd`、`/schedules`、`/schedule`、`/model`（`/config` 同义，可选角色 id 参数，见 [角色模型动态配置](model-config.md)）；`parseCliRequest()` 另行识别 `/claude` / `/codex` 引擎选择。命令处理在 `src/app/command-handler.ts`，于任务执行路径之前处理，除 `/compact` 与带需求的 `/schedule` 外都不会触发 CLI。
+`src/core/command-parser.ts` 的 `parseCommand()` 只匹配「可选 @ 提及 + 一条命令」，支持 `/close`、`/status`、`/help`、`/new`、`/newall`、`/resume`、`/team`、`/compact`、`/cd`、`/schedules`、`/schedule`、`/model`（`/config` 同义，可选角色 id 参数，见 [角色模型动态配置](model-config.md)）；`parseCliRequest()` 另行识别 `/claude` / `/codex` 引擎选择。命令处理在 `src/app/command-handler.ts`，于任务执行路径之前处理，除 `/compact` 与带需求的 `/schedule` 外都不会触发 CLI。
 
-其中三个命令直接操作话题绑定的 CLI 会话：
+其中四个命令直接操作话题绑定的 CLI 会话：
 
 | 命令 | 行为 |
 |------|------|
 | `/new` | 清空 `cliSessionId`（`clearCliSessionId`），下一条任务开全新 CLI 会话；旧会话保留在磁盘上，`/resume` 可找回。`active` / `closed` 状态下拒绝 |
+| `/newall` | 批量版 `/new`：`clearTopicIdleCliSessions()` 一次性清空**当前话题中所有 `idle` 会话**（含其他 bot 成员）的 `cliSessionId`，回复绿色通知卡列出重置成员与各自引擎；`active` 会话自动跳过（卡片附「N 个任务正在执行中，已自动跳过」提示），没有空闲会话时按是否有任务在执行回复不同原因。旧会话同样保留，`/resume` 可找回 |
 | `/resume` | 经 `src/cli/native-sessions.ts` 的 `listNativeCliSessions()` 列出当前工作目录下最近 8 条 CLI 会话，回复选择卡片；实际切换由卡片「恢复」按钮回调（`resume_cli_session`）完成，回调会校验会话归属、状态与目标会话仍然存在 |
 | `/compact [要求]` | 在已绑定的 CLI 会话内做原生上下文压缩（`src/cli/native-compact.ts`），必须有 `cliSessionId`（即至少完成过一次任务）；复用普通任务的登记、卡片与取消管线，但不产生新会话 id 与 token 统计 |
+
+`/newall` 是多成员话题下的批量操作，实现里做了三层并发防护：`clearTopicIdleCliSessions()` 清空时会**就地清空旧对象引用上的 `cliSessionId`**，防止并发任务持有旧引用继续续跑旧 CLI 会话；`/compact` 校验通过后立即 `occupyForCompact()` 原子占用会话（转 `active`），避免校验与执行之间被 `/newall` 重置；`src/index.ts` 在真正拉起 CLI 子进程前重新 `sessions.get()` 拉取最新记录并复查 `closed` 状态。
 
 ## 运行中任务与停止（task-abort）
 
