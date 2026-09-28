@@ -66,7 +66,7 @@ flowchart TD
 入口文件 `src/index.ts` 中、每个 bot 各自注册的业务逻辑。当前实现：
 
 1. 机器消息（`senderType` 为 `app`/`bot`）先走 [多 bot 协作](../domain/collaboration.md) 的取件逻辑：确认 @ 了当前 bot、提取任务编号、领取交接单，领取不到即忽略
-2. 调用 [消息解析](../workflows/message-flow.md) 还原 @ 提及，识别 `/help`、`/status`、`/team`、`/close`、`/new`、`/resume`、`/compact`、`/cd` 斜杠命令与 `/claude` `/codex` 引擎选择；话题里存在未完成的 [需求澄清](../domain/clarification.md) 流程时，人类消息按补充说明并入而非新任务
+2. 调用 [消息解析](../workflows/message-flow.md) 还原 @ 提及，识别 `/help`、`/status`、`/team`、`/close`、`/new`、`/newall`、`/resume`、`/compact`、`/cd` 斜杠命令与 `/claude` `/codex` 引擎选择；话题里存在未完成的 [需求澄清](../domain/clarification.md) 流程时，人类消息按补充说明并入而非新任务
 3. 通过 [会话管理](../domain/session.md) 按话题解析或创建会话（会话键含 `botId`），并按会话状态守卫（closed/creating/active 拒绝追问）
 4. 提取并下载图片/文件附件，回复一张带「停止任务」按钮的初始任务卡片
 5. 后台异步执行所选引擎（`runCli` + `ClaudeAdapter` / `CodexAdapter`，或 `/compact` 走 `compactCliSession`），用工具级进度事件驱动卡片节流刷新；任务完成后按 [多 bot 协作](../domain/collaboration.md) 的路由回传或发起审查

@@ -161,7 +161,7 @@ Agent-Team/
 | `TaskCardOptions` | interface | 构建卡片的输入参数 |
 | `buildTaskCard` | function | 根据 options 构建飞书卡片 JSON |
 | `buildResumeCard` | function | `/resume` 的会话选择卡片（每条会话一行，非当前会话带「恢复」按钮） |
-| `buildSessionNoticeCard` | function | `/new` 与 `/compact` 的轻量通知卡片 |
+| `buildSessionNoticeCard` | function | `/new`、`/newall` 与 `/compact` 的轻量通知卡片 |
 | `buildTeamCard` | function | `/team` 的团队成员卡片（附「⚙️ 角色模型与端点配置」入口按钮） |
 | `buildBotModelConfigCard` / `buildClosedBotModelConfigCard` | function | `/model` 的角色模型配置卡片（角色/引擎切换、探测、保存表单、「✖ 关闭」按钮）与关闭后的轻量收起卡片（[角色模型动态配置](domain/model-config.md)） |
 | `buildCollaborationCard` | function | bot 间协作交接卡片（[多 bot 协作](domain/collaboration.md)） |
@@ -184,7 +184,7 @@ Agent-Team/
 | `schedule.ts` / `schedule-store.ts` / `schedule-run-store.ts` | `ScheduleRuleSchema` / `ScheduleManageRequestSchema` / `ScheduleManageToolInputSchema` / `ScheduledTask` / `JsonScheduleStore` / `ScheduleRunStore` | 定时任务模型（once/interval/cron）、管理协议、MCP 注册用扁平入参 schema（顶层 union 会被 SDK 降级）、任务与运行记录的 JSON 原子持久化（详见 [定时任务调度](domain/scheduling.md)） |
 | `model-config-store.ts` | `JsonModelConfigStore` / `validateThinkingLevel` / `checkModelConfigAccess` / `maskApiKey` | `/model` 卡片的运行期模型覆盖：`data/bot-model-overrides.json` zod 校验 + 热重载 + 原子写，`applyToBotConfigs` 把覆盖合入各 bot 的 `cliEnv`，思考/推理等级白名单校验与 `OWNER_OPEN_ID` 管理员鉴权（详见 [角色模型动态配置](domain/model-config.md)） |
 | `model-fetcher.ts` | `fetchAvailableModels` | 探测端点可用模型：Claude/Codex 各自的 `/models` 候选 URL 顺序、Bearer + Claude 专有头、超时与错误聚合，返回按引擎特征排序的模型列表 |
-| `session-manager.ts` | `SessionManager` / `Session` / `SessionStatus` | 话题级会话状态机，`resolve` 按 `botId:chatId:threadId` 查找或创建，`transition` 校验合法流转，`setWorkspaceDir` 切目录时清空 `cliSessionId` |
+| `session-manager.ts` | `SessionManager` / `Session` / `SessionStatus` | 话题级会话状态机，`resolve` 按 `botId:chatId:threadId` 查找或创建，`transition` 校验合法流转，`setWorkspaceDir` 切目录时清空 `cliSessionId`，`clearTopicIdleCliSessions` 供 `/newall` 批量清空话题内 `idle` 会话（整体持久化、失败回滚并就地清空旧引用防并发续跑） |
 | `session-store.ts` | `JsonSessionStore` / `SessionStore` | zod 校验 + 临时文件重命名的原子写 + 串行写队列，重启时把 creating/active 恢复为 idle，`migrateSessionRecord` 给旧记录补 `botId` / `workspaceDir` 并把历史 UTC 时间转本地时间 |
 | `local-time.ts` | `formatLocalDateTime` / `isLocalDateTime` / `migrateToLocalDateTime` | 会话时间戳的本地时间格式（`YYYY-MM-DD HH:mm:ss`，无时区后缀，面向人工排查）；`SessionManager` 写入、`SessionSchema` 校验、旧记录迁移共用 |
 | `topic-task.ts` | `topicTaskId` / `topicIdOf` | chatId + 话题哈希成稳定短任务 id，澄清流程按它归属话题 |
