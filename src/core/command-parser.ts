@@ -1,7 +1,7 @@
 import type { CliId } from '../cli/types.js'
 
 export type SlashCommand =
-  | { name: 'close' | 'status' | 'help' | 'new' | 'resume' | 'team' }
+  | { name: 'close' | 'status' | 'help' | 'new' | 'newall' | 'resume' | 'team' }
   | { name: 'compact'; instructions?: string }
   | { name: 'cd'; path?: string }
   | { name: 'schedules' }
@@ -9,7 +9,9 @@ export type SlashCommand =
   | { name: 'model'; botId?: string }
 
 // 匹配 at 机器人+指令 的情况，如 “@AT-Test /close”，也支持没有 @ 的纯指令
-const COMMAND_RE = /^(?:@.+?\s+)?\/(close|status|help|new|resume|team)\s*$/
+const COMMAND_RE =
+  /^(?:@.+?\s+)?\/(close|status|help|newall|new|resume|team)\s*$/
+
 const CD_RE = /^(?:@.+?\s+)?\/cd(?:\s+([\s\S]+?))?\s*$/
 const COMPACT_RE = /^(?:@.+?\s+)?\/compact(?:\s+([\s\S]+?))?\s*$/
 const SCHEDULE_RE = /^(?:@.+?\s+)?\/schedule(?:\s+([\s\S]+?))?\s*$/
@@ -41,7 +43,8 @@ export const parseCommand = (text: string): SlashCommand | undefined => {
   const match = COMMAND_RE.exec(value)
   if (!match) return undefined
   return {
-    name: match[1] as 'close' | 'status' | 'help' | 'new' | 'resume' | 'team',
+    name: match[1] as
+      'close' | 'status' | 'help' | 'new' | 'newall' | 'resume' | 'team',
   }
 }
 

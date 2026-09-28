@@ -849,7 +849,7 @@ export const buildResumeCard = (options: ResumeCardOptions): CardJson => {
   }
 }
 
-// 轻量通知卡片：/new 与 /compact 的结果反馈，不需要任务进度与工具列表
+// 轻量通知卡片：/new、/newall 与 /compact 的结果反馈，不需要任务进度与工具列表
 export const buildSessionNoticeCard = (
   options: SessionNoticeCardOptions,
 ): CardJson => {
@@ -2034,7 +2034,8 @@ export const buildClosedBotModelConfigCard = (options: {
       elements: [
         {
           tag: 'markdown',
-          content: '配置面板已收起。如需再次修改，可点击下方按钮或发送 `/model` 重新打开。',
+          content:
+            '配置面板已收起。如需再次修改，可点击下方按钮或发送 `/model` 重新打开。',
         },
         {
           tag: 'column_set',

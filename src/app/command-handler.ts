@@ -75,6 +75,7 @@ export const handleSessionCommand = async (options: {
         '/schedule delete <id> 删除定时任务',
         '/schedule run <id> 立即执行定时任务',
         '/new 开启一个全新的 CLI 会话',
+        '/newall 让当前话题中所有空闲成员开启新 CLI 会话',
         '/resume 选择当前工作目录中的 CLI 会话',
         '/compact [要求] 使用当前引擎原生整理上下文',
         '/cd 查看当前工作目录',
@@ -243,6 +244,65 @@ export const handleSessionCommand = async (options: {
     return 'handled'
   }
 
+  if (command?.name === 'newall') {
+    const topicSessions = runtime.sessions
+      .list()
+      .filter(
+        (s) => s.chatId === session.chatId && s.threadId === session.threadId,
+      )
+
+    const activeCount = topicSessions.filter(
+      (s) => s.status === 'active',
+    ).length
+
+    const updated = await runtime.sessions.clearTopicIdleCliSessions({
+      chatId: session.chatId,
+      threadId: session.threadId,
+    })
+
+    if (updated.length === 0) {
+      await bot.reply(
+        msg.messageId,
+        activeCount > 0
+          ? '当前话题中有任务正在执行，请等结束后再使用 /newall。'
+          : '当前话题中没有处于空闲状态的会话。',
+        hasThread,
+      )
+      return 'handled'
+    }
+
+    const currentUpdated = updated.find((s) => s.id === session.id)
+    if (currentUpdated) {
+      session.cliSessionId = undefined
+      session.updatedAt = currentUpdated.updatedAt
+    }
+
+    const memberList = updated
+      .map((s) => {
+        const memberRuntime = runtime.botRuntimes.get(s.botId)
+        const name = memberRuntime?.identity.name ?? s.botId
+        const adapter = getCliAdapter(s.cliId)
+        return `• **${name}**（${adapter.displayName}）`
+      })
+      .join('\n')
+
+    const activeNotice =
+      activeCount > 0
+        ? `\n\n> 提示：当前话题有 ${activeCount} 个任务正在执行中，已自动跳过。`
+        : ''
+
+    await bot.replyCard(
+      msg.messageId,
+      buildSessionNoticeCard({
+        title: '所有空闲会话已就绪',
+        template: 'green',
+        detail: `已将当前话题中的 ${updated.length} 个空闲会话重置为新 CLI 会话。\n\n涉及成员：\n${memberList}${activeNotice}\n\n下一条任务会开启全新的 CLI 会话。旧会话仍然保留，可以随时用 \`/resume\` 找回来。`,
+      }),
+      hasThread,
+    )
+    return 'handled'
+  }
+
   if (command?.name === 'resume') {
     if (session.status === 'active') {
       await bot.reply(msg.messageId, '当前任务结束后才能切换会话。', hasThread)
@@ -279,27 +339,15 @@ export const handleSessionCommand = async (options: {
   }
 
   if (command?.name === 'compact') {
-    if (session.status === 'active') {
-      await bot.reply(
-        msg.messageId,
-        '当前任务结束后才能整理上下文。',
-        hasThread,
-      )
+    try {
+      const activeSession = await runtime.sessions.occupyForCompact(session.id)
+      session.status = 'active'
+      session.updatedAt = activeSession.updatedAt
+    } catch (error) {
+      await bot.reply(msg.messageId, (error as Error).message, hasThread)
       return 'handled'
     }
-    if (session.status === 'closed') {
-      await bot.reply(msg.messageId, '当前话题的会话已经关闭。', hasThread)
-      return 'handled'
-    }
-    if (!session.cliSessionId) {
-      await bot.reply(
-        msg.messageId,
-        '当前还没有可整理的 CLI 会话。先完成一次任务，再使用 /compact。',
-        hasThread,
-      )
-      return 'handled'
-    }
-    // 校验通过后交给入口的执行流程，按 isCompacting 分支调原生压缩
+    // 校验通过并原子转为 active 占用会话后，交给入口的执行流程，按 isCompacting 分支调原生压缩
     return 'continue'
   }
 

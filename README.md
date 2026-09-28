@@ -367,6 +367,7 @@ Agent Team 启动，正在建立飞书长连接…
 | `/status`          | 查看当前话题会话状态、绑定工作目录与会话 ID                              | `@Bot /status`                                 |
 | `/close`           | 强制关闭当前话题会话（终止运行中的任务并标记为 closed）                  | `@Bot /close`                                  |
 | `/new`             | 在当前话题下关闭旧会话并重开全新会话上下文                               | `@Bot /new`                                    |
+| `/newall`          | 重置当前话题下所有空闲成员的 CLI 会话（下次交互均开启全新 CLI 会话）     | `@Bot /newall`                                 |
 | `/resume`          | 交互式查看并恢复本地已有历史 CLI 会话                                    | `@Bot /resume`                                 |
 | `/compact [要求]`  | 原生压缩当前 CLI 会话的历史上下文，释放 Token 空间                       | `@Bot /compact 聚焦在认证模块`                 |
 | `/cd [路径]`       | 动态查看或切换当前话题绑定的工作区目录                                   | `@Bot /cd ./services/order`                    |

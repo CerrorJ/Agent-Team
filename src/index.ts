@@ -374,7 +374,7 @@ const handleBotMessage = async (
     )
     return
   }
-  if (session.status === 'active') {
+  if (!isCompacting && session.status === 'active') {
     await bot.reply(
       msg.messageId,
       '当前会话还在执行，请等任务结束后再追问。',
@@ -385,7 +385,10 @@ const handleBotMessage = async (
 
   // 检查当前 bot 是否处于会话限额不可用状态，若受限则直接回传 CEO 调度派发
   if (sessionLimitTracker.isLimited(config.id)) {
-    if (isNew && session.status === 'creating') {
+    if (
+      (isNew && session.status === 'creating') ||
+      (isCompacting && session.status === 'active')
+    ) {
       try {
         session = await sessions.transition(session.id, 'idle')
       } catch (error) {
@@ -508,7 +511,32 @@ const handleBotMessage = async (
     )
   }
 
-  await sessions.transition(session.id, 'active')
+  if (session.status !== 'active') {
+    session = await sessions.transition(session.id, 'active')
+  }
+
+  // 启动前校验会话状态与 ID（在创建任务卡片与定时器前完成，避免留下孤立卡片与心跳）
+  const sessionBeforeRun = sessions.get(session.id)
+  if (sessionBeforeRun) session = sessionBeforeRun
+
+  if (session.status === 'closed') {
+    await bot.reply(
+      msg.messageId,
+      '这个话题的会话已经关闭，请新开一个话题继续。',
+      hasThread,
+    )
+    return
+  }
+
+  if (isCompacting && !session.cliSessionId) {
+    try {
+      await bot.reply(msg.messageId, '当前还没有可整理的 CLI 会话。', hasThread)
+    } finally {
+      await markSessionIdle(sessions, session.id)
+    }
+    return
+  }
+
   const run = new AbortController()
 
   const activeRun: ActiveRun = {
@@ -601,6 +629,61 @@ const handleBotMessage = async (
     ...config.cliEnv,
     AGENT_TEAM_CHAT_ID: msg.chatId,
     AGENT_TEAM_OWNER_OPEN_ID: collaboration?.ownerOpenId ?? msg.senderOpenId,
+  }
+
+  // 启动 CLI 前拉取会话管理器中的最新记录，防止并发消息在 /newall 后继续跑旧 CLI 会话
+  const latestSession = sessions.get(session.id)
+  if (latestSession) session = latestSession
+
+  if (session.status === 'closed') {
+    clearInterval(progressHeartbeat)
+    const cancelMode = activeRuns.get(session.id)?.cancelMode
+    if (activeRuns.get(session.id)?.controller === run) {
+      activeRuns.delete(session.id)
+    }
+    try {
+      await cardUpdater.finish(
+        buildTaskCard({
+          title: taskCardTitle,
+          status: 'cancelled',
+          detail:
+            cancelMode === 'close'
+              ? '本次任务已停止，当前会话已经关闭。'
+              : '当前话题的会话已经关闭。',
+          progress: progress.snapshot(),
+        }),
+      )
+      await bot.reply(
+        msg.messageId,
+        '这个话题的会话已经关闭，请新开一个话题继续。',
+        hasThread,
+      )
+    } catch (e) {
+      console.error('[卡片] 关闭会话卡片更新失败:', (e as Error).message)
+    }
+    return
+  }
+
+  if (isCompacting && !session.cliSessionId) {
+    clearInterval(progressHeartbeat)
+    if (activeRuns.get(session.id)?.controller === run) {
+      activeRuns.delete(session.id)
+    }
+    try {
+      await cardUpdater.finish(
+        buildTaskCard({
+          title: taskCardTitle,
+          status: 'failed',
+          detail: '当前还没有可整理的 CLI 会话',
+        }),
+      )
+      await bot.reply(msg.messageId, '当前还没有可整理的 CLI 会话。', hasThread)
+    } catch (e) {
+      console.error('[卡片] 整理卡片更新失败:', (e as Error).message)
+    } finally {
+      await markSessionIdle(sessions, session.id)
+    }
+    return
   }
 
   // 让事件回调尽快返回，CLI 在后台继续执行。

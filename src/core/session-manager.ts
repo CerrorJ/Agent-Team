@@ -85,6 +85,10 @@ export class SessionManager {
     )
   }
 
+  list(): Session[] {
+    return [...this.sessions.values()]
+  }
+
   // 静态方法：从持久化存储恢复 SessionManager
   // 只加载非 closed 状态的会话，没有在进程重启时被杀掉
   static async open(
@@ -173,6 +177,9 @@ export class SessionManager {
   ): Promise<Session> {
     const current = this.get(sessionId)
     if (!current) throw new Error(`会话不存在: ${sessionId}`)
+    if (current.status === 'active') {
+      throw new Error('当前任务仍在执行，结束后再切换工作目录')
+    }
     if (!workspaceDir) throw new Error('工作目录不能为空')
     if (current.workspaceDir === workspaceDir) return current
 
@@ -210,12 +217,95 @@ export class SessionManager {
     return this.updateCliSelection(sessionId, undefined)
   }
 
+  // 校验并原子占用会话（转为 active），用于 /compact 校验通过后立即锁定会话，避免与 /newall 并发时被重置
+  async occupyForCompact(sessionId: string): Promise<Session> {
+    const current = this.get(sessionId)
+    if (!current) throw new Error(`会话不存在: ${sessionId}`)
+    if (current.status === 'active') {
+      throw new Error('当前任务结束后才能整理上下文。')
+    }
+    if (current.status === 'closed') {
+      throw new Error('当前话题的会话已经关闭。')
+    }
+    if (!current.cliSessionId) {
+      throw new Error(
+        '当前还没有可整理的 CLI 会话。先完成一次任务，再使用 /compact。',
+      )
+    }
+    return this.transition(sessionId, 'active')
+  }
+
+  // clearTopicIdleCliSessions() 用于 /newall，清空指定话题中所有处于空闲状态会话的 cliSessionId
+  async clearTopicIdleCliSessions(options: {
+    chatId: string
+    threadId: string
+  }): Promise<Session[]> {
+    const { chatId, threadId } = options
+
+    const targetSessions = [...this.sessions.values()].filter(
+      (s) =>
+        s.chatId === chatId && s.threadId === threadId && s.status === 'idle',
+    )
+
+    if (targetSessions.length === 0) return []
+
+    const now = formatLocalDateTime(this.now())
+
+    const updates = new Map<
+      string,
+      {
+        previous: Session
+        previousCliSessionId: string | undefined
+        updated: Session
+      }
+    >()
+
+    const updatedSessions: Session[] = []
+
+    for (const current of targetSessions) {
+      const key = sessionKey(current.botId, current.chatId, current.threadId)
+      const previousCliSessionId = current.cliSessionId
+
+      // 同时就地清空旧对象引用上的 cliSessionId，防止并发任务持有旧引用时继续使用旧 CLI 会话
+      current.cliSessionId = undefined
+
+      const updated: Session = {
+        ...current,
+        cliSessionId: undefined,
+        updatedAt: now,
+      }
+
+      updates.set(key, { previous: current, previousCliSessionId, updated })
+      this.sessions.set(key, updated)
+      updatedSessions.push(updated)
+    }
+
+    try {
+      await this.persist()
+    } catch (error) {
+      for (const [
+        key,
+        { previous, previousCliSessionId, updated },
+      ] of updates.entries()) {
+        if (this.sessions.get(key) === updated) {
+          previous.cliSessionId = previousCliSessionId
+          this.sessions.set(key, previous)
+        }
+      }
+      throw error
+    }
+
+    return updatedSessions
+  }
+
   private async updateCliSelection(
     sessionId: string,
     cliSessionId: string | undefined,
   ): Promise<Session> {
     const current = this.get(sessionId)
     if (!current) throw new Error(`会话不存在: ${sessionId}`)
+
+    const previousCliSessionId = current.cliSessionId
 
     const updated: Session = {
       ...current,
@@ -225,10 +315,15 @@ export class SessionManager {
 
     const key = sessionKey(updated.botId, updated.chatId, updated.threadId)
     this.sessions.set(key, updated)
+    current.cliSessionId = cliSessionId
+
     try {
       await this.persist()
     } catch (error) {
-      if (this.sessions.get(key) === updated) this.sessions.set(key, current)
+      if (this.sessions.get(key) === updated) {
+        current.cliSessionId = previousCliSessionId
+        this.sessions.set(key, current)
+      }
       throw error
     }
     return updated
