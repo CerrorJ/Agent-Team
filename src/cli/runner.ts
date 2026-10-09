@@ -2,9 +2,22 @@ import { killCli, spawnCli } from './spawn-cli.js'
 import { armTimeout, envTimeoutMs } from './timeout.js'
 import { promptInputForPlatform } from './types.js'
 import { createInterface } from 'node:readline'
-import type { CliAdapter, CliEvent, CliRunResult } from './types.js'
+import type {
+  CliAdapter,
+  CliEvent,
+  CliRunResult,
+  CliToolCall,
+} from './types.js'
 
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 60 * 1000
+
+// 只返回调用标识与入参，去掉事件上的其他字段
+const toToolCalls = (calls: Map<string, CliToolCall>): CliToolCall[] =>
+  [...calls.values()].map((call) => ({
+    toolUseId: call.toolUseId,
+    toolName: call.toolName,
+    input: call.input,
+  }))
 
 export interface RunCliOptions {
   adapter: CliAdapter
@@ -94,14 +107,11 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
     let observedAnswer: string | undefined
     let observedStats: CliRunResult['stats']
 
-    const observedToolCalls = new Map<
-      string,
-      NonNullable<CliRunResult['toolCalls']>[number]
-    >()
+    const observedToolCalls = new Map<string, CliToolCall>()
+    const rejectedToolCalls = new Map<string, CliToolCall>()
 
     let finalResult: CliRunResult | undefined
-    let stoppedByToolCall:
-      NonNullable<CliRunResult['toolCalls']>[number] | undefined
+    let stoppedByToolCall: CliToolCall | undefined
     let resultError: Error | undefined
     let stderr = ''
     let settled = false
@@ -135,8 +145,8 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
           resultError = new Error(event.message)
           continue
         }
-        // 应用层工具调用按 toolUseId 去重收集；调用失败时在 tool_end 剔除，
-        // 最终只把成功的调用随结果返回（见下方 finalResult.toolCalls）
+        // 应用层工具调用按 toolUseId 去重收集；调用失败时在 tool_end 移入 rejected，
+        // 成功与被拒的调用分别随结果返回（见下方 finalResult.toolCalls）
         if (event.type === 'tool_call') {
           observedToolCalls.set(event.toolUseId, event)
           if (!stoppedByToolCall && stopToolNames.includes(event.toolName)) {
@@ -150,7 +160,11 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
           continue
         }
         if (event.type === 'tool_end' && event.failed) {
-          observedToolCalls.delete(event.toolUseId)
+          const rejected = observedToolCalls.get(event.toolUseId)
+          if (rejected) {
+            observedToolCalls.delete(event.toolUseId)
+            rejectedToolCalls.set(event.toolUseId, rejected)
+          }
           continue
         }
         if (event.type === 'stats') {
@@ -220,11 +234,10 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
         finalResult.stats = observedStats
       }
       if (observedToolCalls.size > 0) {
-        finalResult.toolCalls = [...observedToolCalls.values()].map((call) => ({
-          toolUseId: call.toolUseId,
-          toolName: call.toolName,
-          input: call.input,
-        }))
+        finalResult.toolCalls = toToolCalls(observedToolCalls)
+      }
+      if (rejectedToolCalls.size > 0) {
+        finalResult.rejectedToolCalls = toToolCalls(rejectedToolCalls)
       }
       settled = true
       finish()

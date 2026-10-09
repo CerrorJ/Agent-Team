@@ -30,11 +30,17 @@ export const assertProductSpecDocuments = async (
       (entry) => entry.isFile() && entry.name.endsWith('.md'),
     )
 
-    if (!info.isDirectory() || !hasTicket) {
-      missing.push(`Tickets: ${request.ticketsPath}`)
+    if (!info.isDirectory()) {
+      missing.push(
+        `Tickets: ${request.ticketsPath}（必须提交目录路径，不能提交单个文件；请将实现任务拆成独立 .md 文件放入目录）`,
+      )
+    } else if (!hasTicket) {
+      missing.push(
+        `Tickets: ${request.ticketsPath}（目录内至少需要一个独立 ticket 的 .md 文件）`,
+      )
     }
   } catch {
-    missing.push(`Tickets: ${request.ticketsPath}`)
+    missing.push(`Tickets: ${request.ticketsPath}（目录不存在或无法读取）`)
   }
 
   if (missing.length) {

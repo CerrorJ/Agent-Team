@@ -7,12 +7,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ClarificationRequestSchema } from '../core/clarification.js'
 import {
-  ProductSpecRequestSchema,
+  parseProductSpecInput,
   ProductSpecToolInputSchema,
 } from '../core/product-spec.js'
 import { DispatchTaskRequestSchema } from '../core/collaboration.js'
 import { ScheduleManageToolInputSchema } from '../core/schedule.js'
 import { ApprovalRequestSchema } from '../core/approval.js'
+import { assertProductSpecDocuments } from '../app/product-spec-documents.js'
 import {
   CLARIFICATION_TOOL_NAME,
   PRODUCT_SPEC_TOOL_NAME,
@@ -124,7 +125,7 @@ server.registerTool(
     title: '提交产品文档',
     description: [
       '产品方案已经生成后，调用此工具提交唯一的待确认产物。',
-      'deliveryMode=local 时提交 specPath 与 ticketsPath，并确保文件真实存在。',
+      'deliveryMode=local 时，specPath 提交已存在的 Spec 文件相对路径，ticketsPath 提交至少包含一个独立 ticket .md 文件的目录相对路径，不能提交单个 Markdown 文件路径。工具会检查当前工作区产物，失败时请修正后重新提交。',
       'deliveryMode=lark-doc 时只提交 documentUrl，且必须使用 lark-doc 创建或更新成功结果中的 document.url；该文档必须同时包含产品说明与「实现任务（Tickets）」章节。',
       '同一份方案不要同时维护本地 Markdown 和飞书云文档，避免两个来源互相覆盖。',
       'summary 只写便于快速了解方案的摘要，完整内容保留在所选产物中。',
@@ -134,29 +135,33 @@ server.registerTool(
     inputSchema: ProductSpecToolInputSchema,
   },
   async (input) => {
-    const cleanInput =
-      typeof input === 'object' && input !== null
-        ? Object.fromEntries(
-            Object.entries(input).filter(
-              ([_, v]) => v !== undefined && v !== '',
-            ),
-          )
-        : input
-
-    const parsed = ProductSpecRequestSchema.safeParse(cleanInput)
+    const parsed = parseProductSpecInput(input)
     if (!parsed.success) {
-      const reasons = parsed.error.issues
-        .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
-        .join('；')
-
       return {
         content: [
           {
             type: 'text',
-            text: `产品方案校验未通过：${reasons}。请修正后重新提交。`,
+            text: `产品方案校验未通过：${parsed.reason}。请修正后重新提交。`,
           },
         ],
         isError: true,
+      }
+    }
+    if (parsed.data.deliveryMode === 'local') {
+      try {
+        // MCP 配置未设 cwd：Claude Code / Codex 以自身 cwd（Runner 传入的会话工作区）
+        // 启动 stdio 服务，所以这里的 cwd 就是工作区。应用层仍会按 session.workspaceDir 复核。
+        await assertProductSpecDocuments(process.cwd(), parsed.data)
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `${(error as Error).message}\n请修正产物或路径后重新调用 request_spec_approval。`,
+            },
+          ],
+          isError: true,
+        }
       }
     }
     return {

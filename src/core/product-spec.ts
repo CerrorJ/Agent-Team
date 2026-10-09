@@ -2,14 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { CollaborationOrigin } from './collaboration.js'
 
-// 路径只允许是工作区内的相对路径：拒绝绝对路径与 .. 穿越，防止 CLI 提交工作区外的文件
+// 路径只允许是工作区内的相对路径：拒绝绝对路径（含 Windows 盘符与 UNC）与 .. 穿越，
+// 防止 CLI 提交工作区外的文件
 const WorkspaceDocumentPathSchema = z
   .string()
   .trim()
   .min(1)
   .max(240)
   .refine(
-    (value) => !value.startsWith('/') && !value.split(/[\\/]/).includes('..'),
+    (value) =>
+      !/^([\\/]|[A-Za-z]:)/.test(value) && !value.split(/[\\/]/).includes('..'),
     '文档路径必须位于当前工作目录内',
   )
 
@@ -63,7 +65,7 @@ export const ProductSpecToolInputSchema = z.object({
     '本地 Spec Markdown 文件相对路径（deliveryMode=local 时必填）',
   ),
   ticketsPath: WorkspaceDocumentPathSchema.optional().describe(
-    '本地 Tickets Markdown 文件相对路径（deliveryMode=local 时必填）',
+    '本地 Tickets 目录相对路径，目录内至少有一个独立 ticket 的 .md 文件，不能填写单个文件路径（deliveryMode=local 时必填）',
   ),
   documentUrl: LarkDocumentUrlSchema.optional().describe(
     '飞书云文档链接（deliveryMode=lark-doc 时必填）',
@@ -95,6 +97,29 @@ export interface CreateProductSpecFlowOptions {
   request: ProductSpecRequest
 }
 
+// 工具入参统一清洗后再校验：CLI 常把未用到的可选字段传成空串
+export const parseProductSpecInput = (
+  input: unknown,
+):
+  | { success: true; data: ProductSpecRequest }
+  | { success: false; reason: string } => {
+  const cleanInput =
+    typeof input === 'object' && input !== null
+      ? Object.fromEntries(
+          Object.entries(input).filter(([_, v]) => v !== undefined && v !== ''),
+        )
+      : input
+
+  const parsed = ProductSpecRequestSchema.safeParse(cleanInput)
+  if (parsed.success) return { success: true, data: parsed.data }
+  return {
+    success: false,
+    reason: parsed.error.issues
+      .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+      .join('；'),
+  }
+}
+
 // 从后往前找最近一次通过校验的调用（CLI 可能重试或提交多份，只认最后一份）
 export const findProductSpecRequest = (
   toolCalls: Array<{ toolName: string; input: unknown }> | undefined,
@@ -103,16 +128,7 @@ export const findProductSpecRequest = (
     const call = toolCalls?.[index]
     if (call?.toolName !== 'request_spec_approval') continue
 
-    const cleanInput =
-      typeof call.input === 'object' && call.input !== null
-        ? Object.fromEntries(
-            Object.entries(call.input).filter(
-              ([_, v]) => v !== undefined && v !== '',
-            ),
-          )
-        : call.input
-
-    const parsed = ProductSpecRequestSchema.safeParse(cleanInput)
+    const parsed = parseProductSpecInput(call.input)
     if (parsed.success) return parsed.data
   }
   return undefined

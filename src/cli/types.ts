@@ -104,9 +104,13 @@ export interface CliRunResult {
   sessionId?: string
   stats?: CliRunStats
   // 本次运行里调用成功的应用层工具（失败的在 tool_end 时剔除）
-  toolCalls?: Array<{
-    toolUseId: string
-    toolName: string
-    input: unknown
-  }>
+  toolCalls?: CliToolCall[]
+  // 被工具拒绝（tool_end failed）的应用层调用，供上层说明失败原因、引导重试
+  rejectedToolCalls?: CliToolCall[]
+}
+
+export interface CliToolCall {
+  toolUseId: string
+  toolName: string
+  input: unknown
 }

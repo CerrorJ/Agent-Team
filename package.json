@@ -13,6 +13,7 @@
     "demo:traffic": "pnpm --filter agent-team-demo-server traffic",
     "probe:cli": "tsx src/probe-cli.ts",
     "probe:tool": "tsx src/probe-app-tool.ts",
+    "test": "tsc -p tsconfig.test.json && node --import tsx --test \"tests/*.test.ts\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

@@ -20,7 +20,6 @@ import { executeCli } from './cli-execution.js'
 import { sendResultNotification } from './notification-service.js'
 import { markSessionIdle } from './session-view.js'
 import type { AppRuntime } from './runtime.js'
-import { assertProductSpecDocuments } from './product-spec-documents.js'
 import { ensureProductSpecSubmission } from './product-spec-submission.js'
 
 export const continueClarificationFlow = async (options: {
@@ -146,6 +145,7 @@ export const continueClarificationFlow = async (options: {
     if (managesProductSpec) {
       const submission = await ensureProductSpecSubmission({
         result,
+        workspaceDir: session.workspaceDir,
         defaultDeliveryMode,
         retry: (retryPrompt, resultSessionId) =>
           executeCli(
@@ -181,13 +181,6 @@ export const continueClarificationFlow = async (options: {
         runtime.contextWindows.set(
           session.id,
           submission.result.stats.contextWindowTokens,
-        )
-      }
-      // 只有 local 交付需要落盘校验；lark-doc 的产物在飞书侧，本地无文件可查
-      if (productSpecRequest.deliveryMode === 'local') {
-        await assertProductSpecDocuments(
-          session.workspaceDir,
-          productSpecRequest,
         )
       }
 

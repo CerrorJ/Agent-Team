@@ -73,7 +73,6 @@ import {
   createCardActionHandler,
   scheduleApprovalContinuation,
 } from './app/card-action-handler.js'
-import { assertProductSpecDocuments } from './app/product-spec-documents.js'
 import { executeCli } from './app/cli-execution.js'
 import { handleSessionCommand } from './app/command-handler.js'
 import { sendResultNotification } from './app/notification-service.js'
@@ -783,6 +782,7 @@ const handleBotMessage = async (
       if (managesProductSpec) {
         const submission = await ensureProductSpecSubmission({
           result,
+          workspaceDir: session.workspaceDir,
           defaultDeliveryMode: agentTeamConfig.defaultProductDeliveryMode,
           retry: (retryPrompt, resultSessionId) =>
             executeCli(
@@ -844,13 +844,6 @@ const handleBotMessage = async (
         throw new Error('不能同时提交产品方案和派发团队任务')
       }
       if (productSpecRequest) {
-        // 只有 local 交付需要落盘校验；lark-doc 的产物在飞书侧，本地无文件可查
-        if (productSpecRequest.deliveryMode === 'local') {
-          await assertProductSpecDocuments(
-            session.workspaceDir,
-            productSpecRequest,
-          )
-        }
         if (activeRuns.get(session.id)?.controller === run) {
           activeRuns.delete(session.id)
         }
