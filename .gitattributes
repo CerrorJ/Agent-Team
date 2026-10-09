@@ -1,0 +1,2 @@
+# 统一 LF：与 .prettierrc 的 endOfLine 一致，避免 core.autocrlf=true 检出成 CRLF 后 format:check 失败
+* text=auto eol=lf

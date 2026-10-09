@@ -904,7 +904,7 @@ export const createCardActionHandler = (options: {
           ? 'codex'
           : action.value.cliId === 'claude'
             ? 'claude'
-            : targetBot?.defaultCliId ?? 'claude'
+            : (targetBot?.defaultCliId ?? 'claude')
 
       const cliName = cliId === 'claude' ? 'Claude Code' : 'Codex'
 
