@@ -45,6 +45,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 | `pnpm probe:cli` | `tsx src/probe-cli.ts` | 运行 AI CLI 输出解析工具 |
 | `pnpm probe:tool` | `tsx src/probe-app-tool.ts` | 验证两家 CLI 能注册 `agent_team` MCP 服务且 `request_clarification` 入参通过校验（详见 [需求澄清](../domain/clarification.md)） |
 | `pnpm lint` / `pnpm lint:fix` | `eslint . [--fix]` | 检查/修复箭头函数与声明间空行规则（`eslint.config.js`） |
+| `pnpm test` | `tsc -p tsconfig.test.json && node --import tsx --test "tests/*.test.ts"` | 回归测试（node:test runner，详见下方测试一节） |
 | `pnpm format` / `pnpm format:check` | `prettier --write/--check .` | 格式化/检查格式（`.prettierrc`） |
 
 ### 启动检查
@@ -91,13 +92,21 @@ tags: [operations, runbook, configuration, troubleshooting]
 
 应用需创建版本并发布，或至少在测试企业中启用。
 
+## 测试
+
+测试用 Node 内置的 `node:test` runner（无第三方测试框架），入口 `pnpm test`：先 `tsc -p tsconfig.test.json` 做类型检查（`tsconfig.test.json` 在主配置基础上 `noEmit` 且把 `tests/` 纳入 `include`），再用 `node --import tsx --test "tests/*.test.ts"` 直接跑 TS 源文件。
+
+- **现有覆盖：** `tests/product-spec-submission.test.ts` 针对 [产品方案交付](../domain/product-spec.md) 的提交链路——local 落盘校验（拒绝把汇总 Markdown 当 `ticketsPath`、缺 Spec/缺 Tickets/空目录）、`ensureProductSpecSubmission` 的兜底重跑（合法提交不重跑、被拒提交带真实原因重跑一次且不得改交付方式）、`request_spec_approval` 的 MCP 入参 schema 与工作区预检（真实拉起 stdio MCP 服务端验证 isError 回传）、以及 `runCli` 把失败的应用层工具调用单独收集进 `rejectedToolCalls`
+- **写新测试时注意两个已知坑**（`CLAUDE.md` 错题本）：TypeScript 7 原生编译器不自动引入 `node_modules/@types`，需要时 tsconfig 显式写 `"types": ["node"]`；Node 22+ 把 `--test` 的位置参数当 glob，目录会被当模块加载，应使用 `"tests/*.test.ts"` 这类文件 glob
+- **风格：** 与源码一致（ESM、箭头函数、Prettier），测试文件同样受 `pnpm lint` / `pnpm format:check` 约束
+
 ## 项目约定
 
 来自 `CLAUDE.md` 的约定（适用于开发者和 AI Agent）：
 
 - **ESM only**，Node 22+，pnpm
 - **凭证安全**：绝不硬编码、绝不提交；bot 凭证变量名写在 `bots.json`，值只放 `.env`
-- **代码风格**：格式以 `.prettierrc` 为准；箭头函数（不用 `function` 声明）与声明间空行由 ESLint 强制；提交前跑 `pnpm lint` 与 `pnpm format:check`
+- **代码风格**：格式以 `.prettierrc` 为准；箭头函数（不用 `function` 声明）与声明间空行由 ESLint 强制；提交前跑 `pnpm lint` 与 `pnpm format:check`。`.gitattributes`（`* text=auto eol=lf`）把检出统一为 LF，与 `.prettierrc` 的 `endOfLine: "lf"` 对齐，避免 Windows `core.autocrlf=true` 检出 CRLF 后 `format:check` 失败
 - **错题本**：`CLAUDE.md` 中有错题本区域，踩坑后追加一行：现象 → 原因 → 正确做法（如 pnpm v11 需在 `pnpm-workspace.yaml` 放行 `esbuild` 构建脚本）
 
 ## 数据目录

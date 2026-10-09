@@ -60,13 +60,16 @@ pnpm dev
 # 或单次运行
 pnpm start:once
 
-# 类型检查 + 编译；提交前跑 lint / format:check
+# 类型检查 + 编译；提交前跑 lint / format:check / test
 pnpm build
 pnpm lint
 pnpm format:check
+pnpm test
 ```
 
 启动后控制台输出 `Agent Team 启动，正在建立飞书长连接…` 与 `[配置] 已注册 N 个 bot，Team Leader=...，已恢复 M 个会话`，随后监听飞书消息并拉起定时调度。本机需要安装并登录 `claude`（用 Claude Code 时）或 `codex`（用 Codex 时）CLI，任务会通过子进程在 bot 配置的工作目录中执行。新话题可用 `/claude <任务>` 或 `/codex <任务>` 显式选择引擎；`/team` 可查看当前团队，`/schedule <需求>` 与 `/schedules` 管理定时任务。
+
+仓库目前有一组 node:test 回归测试（`tests/product-spec-submission.test.ts`，覆盖 [产品方案交付](domain/product-spec.md) 的提交兜底重跑与 MCP 入参校验），运行方式与踩坑见 [运维手册](operations/runbook.md) 的测试一节。
 
 ## 核心概念导航
 
@@ -84,7 +87,7 @@ pnpm format:check
 | 角色模型动态配置 | /model 配置卡片按「角色 × 引擎」免重启覆盖模型后端：三级来源合并、热重载、端点探测 | [角色模型动态配置](domain/model-config.md) |
 | 任务卡片系统 | 飞书卡片构建 + 节流刷新机制（含澄清/方案/审批/定时卡片族） | [任务卡片系统](domain/task-card.md) |
 | AI CLI 输出解析 | Claude Code / Codex headless 输出解析与统一事件协议 | [AI CLI 输出解析](domain/ai-cli-probe.md) |
-| 运维手册 | 环境变量、运行命令、飞书配置、排查 | [运维手册](operations/runbook.md) |
+| 运维手册 | 环境变量、运行命令、飞书配置、排查、测试 | [运维手册](operations/runbook.md) |
 | 源码地图 | 文件树与职责索引 | [源码地图](source-map.md) |
 
 ## 消息生命周期概览
@@ -111,5 +114,5 @@ flowchart LR
 | 领域 | 锚点 | 延后原因 |
 |------|------|----------|
 | 任意 @ 触发协作 | [多 bot 协作](domain/collaboration.md) 的取件分支 | 外部 bot 消息 @ 当前 bot 但领取不到交接单时仅记日志按外部派活处理（内部团队 bot 的非派发消息已被直接过滤），通用路由未实现 |
-| 测试体系 | 无测试文件 | 当前无测试目录和测试框架 |
+| 测试覆盖面 | `tests/`（目前仅产品方案提交一组） | 现有 node:test 回归只覆盖 [产品方案交付](domain/product-spec.md) 的提交兜底与 MCP 校验，其余领域（会话、协作、调度等）尚无测试 |
 | 部署 CI | `SETUP.md`、`src/deploy-cli.ts`、`.github/workflows/` | 部署常驻已有 pm2 封装（`pnpm agent-team`，见 [运维手册](operations/runbook.md)），但仍无应用部署的 CI 流水线，仅有 OpenWiki 文档自动更新工作流 |
