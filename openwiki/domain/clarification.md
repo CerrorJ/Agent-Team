@@ -58,7 +58,7 @@ MCP 返回给 CLI 的只是一句确认文案——**真正的卡片渲染与答
 | Claude Code | `tool_use` 块，工具名为 `mcp__agent_team__request_clarification` | 归一成 `request_clarification` 再吐 `tool_call`（`src/cli/claude-adapter.ts`） |
 | Codex | `item.started` + `mcp_tool_call` 且 `server === 'agent_team'` | 直接用统一名吐 `tool_call`（`src/cli/codex-adapter.ts`） |
 
-`tool_call` 是 `CliEvent` 里专为应用层工具新增的事件类型（见 [AI CLI 输出解析](ai-cli-probe.md)）：`tool_start` 面向进度展示（带中文标签），`tool_call` 携带原始入参供应用层重建状态。`src/cli/runner.ts` 按 `toolUseId` 去重收集、失败的调用在 `tool_end` 剔除，最终随 `CliRunResult.toolCalls` 返回——所以 CLI 重试或提交多份时，`findClarificationRequest()` **从后往前**只认最后一份通过校验的请求。
+`tool_call` 是 `CliEvent` 里专为应用层工具新增的事件类型（见 [AI CLI 输出解析](ai-cli-probe.md)）：`tool_start` 面向进度展示（带中文标签），`tool_call` 携带原始入参供应用层重建状态。`src/cli/runner.ts` 按 `toolUseId` 去重收集、失败的调用在 `tool_end` 移出成功集合（单独收进 `rejectedToolCalls`，供产品方案等流程带真实原因重试，见 [产品方案交付](product-spec.md)），最终随 `CliRunResult.toolCalls` 返回——所以 CLI 重试或提交多份时，`findClarificationRequest()` **从后往前**只认最后一份通过校验的请求。
 
 ## 数据模型（core/clarification.ts）
 

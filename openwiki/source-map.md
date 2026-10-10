@@ -70,6 +70,8 @@ Agent-Team/
 │       └── timeout.ts         # armTimeout 钳制 setTimeout 上限
 ├── config/
 │   └── bots.example.json      # bot 注册文件模板（teamLeader + defaultProductDeliveryMode + bots 数组）
+├── tests/
+│   └── product-spec-submission.test.ts  # 产品方案提交链路回归（node:test：落盘校验、兜底重跑、MCP 入参、rejectedToolCalls）
 ├── docs/
 │   ├── ClaudeCode和Codex在headless输出结构.md  # 两种 CLI 输出对照表
 │   └── 完整的内部交接单.md    # bot 间协作设计文档
@@ -82,6 +84,7 @@ Agent-Team/
 │   └── workflows/
 │       └── openwiki-update.yml    # OpenWiki 文档自动更新工作流
 ├── .env.example              # 环境变量模板（BOTS_CONFIG、FEISHU_* 凭证、CLI_WORKDIR、*_TIMEOUT_MS、PATROL_WEBHOOK_URL）
+├── .gitattributes            # 统一 LF 检出（* text=auto eol=lf），与 .prettierrc 的 endOfLine 对齐
 ├── .gitignore                # 忽略 node_modules/ dist/ .env data/ *.log
 ├── .prettierrc / .prettierignore  # Prettier 格式化配置
 ├── eslint.config.js          # ESLint：箭头函数 + 声明间空行规则
@@ -91,7 +94,8 @@ Agent-Team/
 ├── package.json              # 项目配置与脚本
 ├── pnpm-lock.yaml            # 锁定依赖版本
 ├── pnpm-workspace.yaml       # pnpm 工作区配置（允许构建的原生依赖）
-└── tsconfig.json             # TypeScript 编译配置
+├── tsconfig.json             # TypeScript 编译配置
+└── tsconfig.test.json        # 测试类型检查配置（noEmit + include tests/，pnpm test 第一步）
 ```
 
 ## 源文件职责详解
@@ -210,7 +214,7 @@ Agent-Team/
 | `schedule-api.ts` | `startScheduleApi` | 本地 HTTP 管理接口：REST 增删改查 + `/api/schedules/manage` 供 MCP 工具回传 |
 | `schedule-manage-service.ts` | `executeScheduleManageRequest` | `schedule_manage` 十一种 action 的业务实现，产出 notice 回执 |
 | `scheduled-task-dispatcher.ts` / `scheduled-task-runner.ts` | `dispatchScheduledTask` / `runScheduledTaskDirectly` | 到期分发入口（预留队列/并发策略）与直接执行：稳定话题地址续接 CLI 会话 |
-| `product-spec-submission.ts` | `ensureProductSpecSubmission` | 方案写完却没调工具时，带纠正提示沿原会话重跑一次 |
+| `product-spec-submission.ts` | `ensureProductSpecSubmission` | 方案提交兜底：没调工具或提交被拒（`rejectedToolCalls`）时带具体原因沿原会话重跑一次，重跑不得改交付方式；回归测试见 `tests/product-spec-submission.test.ts` |
 | `product-spec-documents.ts` | `assertProductSpecDocuments` | local 交付的落盘校验：Spec 是文件、Tickets 是含 .md 的目录 |
 | `product-comment-runner.ts` | `runProductDocumentComment` | 文档评论驱动的方案修改：改原文档并把最终回答回写原评论 |
 | `cli-execution.ts` | `executeCli` | `runCli` 薄封装（多出 `stopToolNames` 参数） |
@@ -227,12 +231,12 @@ Agent-Team/
 
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
-| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `CliCompactPlan` / `CliSessionSummary` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / stats / tool_call / result / error；Windows 下 prompt 走 stdin；压缩计划与会话摘要类型 |
+| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `CliCompactPlan` / `CliSessionSummary` / `CliToolCall` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / stats / tool_call / result / error；`CliRunResult.toolCalls` 只含成功的应用层调用，被拒的进 `rejectedToolCalls`（供上层带真实原因重试）；Windows 下 prompt 走 stdin；压缩计划与会话摘要类型 |
 | `app-tools.ts` | 五个工具名常量 / `claudeAppToolArgs` / `codexAppToolArgs` | 应用层 MCP 工具注册：Claude 用 `--mcp-config` JSON，Codex 用 `-c` 配置覆盖；开发态借 tsx 跑 .ts 服务，编译产物用 node 跑 .js |
 | `registry.ts` | `getCliAdapter` / `listCliAdapters` / `parseCliId` | 按 `CliId` 取适配器（claude / codex）并列出引擎清单 |
 | `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译；`mcp__agent_team__*` 五个工具名归一为统一名后吐 `tool_call` |
 | `codex-adapter.ts` | `CodexAdapter` | `codex exec --json --skip-git-repo-check --yolo` 的参数组装与事件翻译（Windows 用 stdin prompt 与 `--dangerously-bypass-approvals-and-sandbox`）；`agent_team` 的 `mcp_tool_call` 吐 `tool_call`，`turn.completed` 额外吐 `stats` |
-| `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、默认 2 小时超时（`CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖，0 或非法值回退默认）、AbortSignal 取消、`stopToolNames` 命中即杀进程；`tool_call` 按 toolUseId 去重收集，失败调用剔除 |
+| `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、默认 2 小时超时（`CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖，0 或非法值回退默认）、AbortSignal 取消、`stopToolNames` 命中即杀进程；`tool_call` 按 toolUseId 去重收集，成功的进 `toolCalls`，失败调用移入 `rejectedToolCalls` 随结果返回 |
 | `native-compact.ts` | `compactCliSession` / `CompactCliSessionResult` | `/compact` 的原生上下文压缩：Claude 走 `-p - --resume` + stream-json，Codex 走 app-server JSON-RPC |
 | `native-sessions.ts` | `listNativeCliSessions` / `CliSessionSummary` | `/resume` 的会话清单：Claude 扫 `~/.claude/projects` JSONL，Codex 走 app-server `thread/list` |
 | `spawn-cli.ts` | `spawnCli` / `killCli` | Windows 下 shell 启动 `.cmd` 包装的 CLI；`killCli` 用 `taskkill /t /f` 连进程树清理避免孤儿进程 |
@@ -276,6 +280,10 @@ Agent-Team/
 - `moduleResolution`: bundler
 - `strict`: true
 - `rootDir`: src / `outDir`: dist
+
+### tsconfig.test.json
+
+`pnpm test` 的第一步类型检查用：继承 `tsconfig.json`，加 `noEmit` 与 `rootDir: "."`，`include` 扩为 `["src", "tests"]`（主配置只含 `src`，`rootDir: src` 编不进 tests）。
 
 ### pnpm-workspace.yaml
 

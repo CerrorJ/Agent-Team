@@ -13,10 +13,11 @@ tags: [domain, product-spec, lark-doc, approval]
 
 - `src/core/product-spec.ts` — `ProductSpecRequestSchema`（交付模式二选一）、`ProductSpecFlow` 与 `ProductSpecFlowStore`
 - `src/core/product-spec-store.ts` — JSON 持久化（`data/product-spec-flows.json`）
-- `src/app/product-spec-submission.ts` — 「没调工具就重跑一次」的兜底
+- `src/app/product-spec-submission.ts` — 「没调工具 / 提交被拒就带原因重跑一次」的兜底
 - `src/app/product-spec-documents.ts` — local 模式的落盘校验
 - `src/app/product-comment-runner.ts` — 云文档评论区的修订执行
 - `src/app/card-action-handler.ts` — `approve_product_spec` 确认回调
+- `tests/product-spec-submission.test.ts` — 以上链路的 node:test 回归（`pnpm test`）
 
 ## 交付模式
 
@@ -33,8 +34,8 @@ tags: [domain, product-spec, lark-doc, approval]
 
 MCP SDK 识别不了顶层 `z.discriminatedUnion`（会静默降级为空 properties，AI 无法传参），所以 `src/mcp/app-tools-server.ts` 注册 `request_spec_approval` 时用的是扁平的 `ProductSpecToolInputSchema`（`src/core/product-spec.ts`，字段全可选 + 逐字段 describe 说明各自适用哪种交付模式）；真正的 union 校验分两处兜底：
 
-- **CLI 子进程内**：MCP handler 先清洗入参（丢弃 `undefined` 与空串）再过 `ProductSpecRequestSchema.safeParse`，不合法直接回带字段路径的 isError 文案，让 AI 当场修正重交
-- **应用层截获后**：`findProductSpecRequest` 用同一套清洗逻辑从后往前只认最后一份合法提交，CLI 重试或多份提交不会污染流程
+- **CLI 子进程内**：MCP handler 先清洗入参（丢弃 `undefined` 与空串）再过 `ProductSpecRequestSchema.safeParse`，不合法直接回带字段路径的 isError 文案，让 AI 当场修正重交；**local 模式还会在子进程内先做一次落盘预检**（`assertProductSpecDocuments(process.cwd(), …)`——MCP 配置未设 cwd，CLI 以会话工作区启动 stdio 服务，`process.cwd()` 即工作区），产物缺失同样回 isError，AI 不必等应用层就能收到失败原因
+- **应用层截获后**：`findProductSpecRequest` 用同一套清洗逻辑从后往前只认最后一份合法提交，CLI 重试或多份提交不会污染流程；子进程内校验失败但 Codex 没把 MCP isError 标成失败时，被拒调用留在 `CliRunResult.rejectedToolCalls` 里，应用层按当前工作区复算拒绝原因
 
 ## 提交与确认时序
 
@@ -49,9 +50,9 @@ sequenceDiagram
 
     CLI->>App: request_spec_approval 工具调用（tool_call）
     App->>Sub: ensureProductSpecSubmission
-    alt 没截获到工具调用
-        Sub->>CLI: 带纠正提示沿原会话重跑一次
-        Note over Sub: 重跑后仍没有提交才算失败
+    alt 提交缺失或未通过校验
+        Sub->>CLI: 带具体原因沿原会话重跑一次
+        Note over Sub: 没调工具给「实际调用工具」提示，被拒提交给真实校验失败原因。重跑后仍不过才算失败，且不得改交付方式
     end
     App->>Doc: local 模式校验 Spec 是文件、Tickets 目录含 .md
     App->>Store: create flow（同任务单流程，旧 pending 置 expired）
@@ -69,6 +70,7 @@ sequenceDiagram
 几个关键点：
 
 - **落盘校验只做 local**：`assertProductSpecDocuments` 要求 Spec 是文件、Tickets 是目录且至少含一个 `.md` 的独立 ticket；CLI 声称写完但文件缺失时不允许进入确认环节。lark-doc 的产物在飞书侧，本地无文件可查
+- **兜底重跑区分两种失败**：`ensureProductSpecSubmission` 先看成功的 `toolCalls`，没有才看 `rejectedToolCalls` 里最后一份被拒提交并按当前工作区复算拒绝原因——「没调工具」给要求实际调用工具的提示，「提交被拒」把真实校验失败原因（如「Tickets 必须提交目录路径」）带回重跑 prompt，并明确要求沿用上一轮交付方式、不得改用飞书云文档绕过校验；重跑仍失败才报错，重跑成功但改了交付方式（local↔lark-doc）同样报错
 - **确认后不自动派发**：只有 flow 带 `collaboration` 来源（方案是在协作任务中产出的）时，确认回调才经 [协作派发](collaboration.md) 把已确认方案交回 `reportToBotId`，指示「需要开发者实现时用 dispatch_task 交给 developer」；普通任务确认即结束。这份协作上下文随 flow 落盘在 `data/product-spec-flows.json`，重启后审批回报链路保持完整
 - **owner 校验**：`isProductSpecOwner` 优先比对 `unionId`（跨应用稳定身份），缺失才退回 `openId`；只有任务发起人可以确认
 - **同任务单流程**：`create()` 先把同 `taskId + botId` 的 pending 流程置 `expired`，重新提交即让旧卡片上的 token 失效
@@ -91,5 +93,6 @@ sequenceDiagram
 ## 变更指引
 
 - **改交付模式**：`ProductSpecRequestSchema` 的 union 分支、`ProductSpecToolInputSchema` 的扁平字段与 describe（两份 schema 语义必须一致，MCP 只认后者暴露的字段）、`src/mcp/app-tools-server.ts` 工具描述、`buildBotPrompt` 的交付规则四处联动
+- **改提交/兜底逻辑**：`ensureProductSpecSubmission` 与 `assertProductSpecDocuments` 的行为有 `tests/product-spec-submission.test.ts` 全量回归（含真实拉起 MCP 服务端的用例），改完先跑 `pnpm test`；新增拒绝分支时同步补用例（运行方式与踩坑见 [运维手册](../operations/runbook.md) 的测试一节）
 - **新增文档类型**：评论区流程目前只认 Docx；支持 wiki 等形态要改 `LarkDocumentUrlSchema` 与评论 API 的 file_type 处理
 - **评论区并发**：排队键是 `flow.sessionId`，改会话模型时注意评论队列与 `activeRuns` 的一致性
