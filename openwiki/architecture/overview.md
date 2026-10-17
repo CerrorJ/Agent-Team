@@ -116,7 +116,7 @@ flowchart TD
 ### 核心域（src/core/）
 
 - `bot-registry.ts` — 读取并校验 `config/bots.json`（含 `teamLeader` 与 `defaultProductDeliveryMode`），解析凭证环境变量、默认引擎与工作目录，`buildBotPrompt` 组装任务提示词（详见 [多 bot 注册](../domain/bot-registry.md)）
-- `team-registry.ts` — `TeamRegistry` 团队注册表：团队名单上下文、Skill 缺失检查、`/team` 数据源
+- `team-registry.ts` — `TeamRegistry` 团队注册表：团队名单上下文、Skill 缺失检查、`/team` 数据源、按后端冷却查同组可用备用成员（见 [后端故障恢复](../domain/provider-recovery.md)）
 - `clarification.ts` — [需求澄清](../domain/clarification.md) 的数据模型（zod 校验）、流程存储 `ClarificationFlowStore` 与身份/文案工具函数
 - `approval.ts` / `approval-store.ts` — [高危操作审批](../domain/approval.md) 的请求校验、`ApprovalFlowStore` 与 JSON 持久化
 - `product-spec.ts` / `product-spec-store.ts` — [产品方案交付](../domain/product-spec.md) 的 local / lark-doc 请求校验与流程存储
@@ -139,7 +139,7 @@ flowchart TD
 - `registry.ts` — 按 `CliId` 取适配器（`claude` / `codex`），并列出启动日志中打印的引擎清单
 - `claude-adapter.ts` — 把 Claude Code `--output-format stream-json` 的一行输出翻译为 `CliEvent`
 - `codex-adapter.ts` — 把 Codex `exec --json` 的事件流翻译为同一套 `CliEvent`
-- `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、默认 2 小时超时（可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）、支持 `AbortSignal` 取消；`env` 选项以 `{...process.env, ...env}` 合并注入 per-bot `cliEnv` 模型覆盖与 `AGENT_TEAM_*` 会话上下文（见 [多 bot 注册](../domain/bot-registry.md)）；`stopToolNames` 命中应用层工具调用时立即终止子进程并把该次调用随结果返回；`tool_call` 按 `toolUseId` 去重收集，成功的进 `toolCalls`，`tool_end` 标记失败的移入 `rejectedToolCalls` 随结果一并返回（供上层带真实拒绝原因重试，见 [产品方案交付](../domain/product-spec.md)）
+- `runner.ts` — `spawn` CLI 子进程，逐行读取 stdout、默认 2 小时超时（可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）、支持 `AbortSignal` 取消；错误先按多厂家规则分类，retryable 且未执行工作的轮次在共享超时预算内自动重试、放弃后按后端域登记冷却（见 [后端故障恢复](../domain/provider-recovery.md)）；`env` 选项以 `{...process.env, ...env}` 合并注入 per-bot `cliEnv` 模型覆盖与 `AGENT_TEAM_*` 会话上下文（见 [多 bot 注册](../domain/bot-registry.md)）；`stopToolNames` 命中应用层工具调用时立即终止子进程并把该次调用随结果返回；`tool_call` 按 `toolUseId` 去重收集，成功的进 `toolCalls`，`tool_end` 标记失败的移入 `rejectedToolCalls` 随结果一并返回（供上层带真实拒绝原因重试，见 [产品方案交付](../domain/product-spec.md)）
 - `native-compact.ts` — `/compact` 的原生上下文压缩：Claude 走 stream-json，Codex 走 app-server JSON-RPC
 - `native-sessions.ts` — `/resume` 的会话清单：Claude 扫本地 JSONL，Codex 走 app-server `thread/list`
 - `spawn-cli.ts` — 跨平台 spawn 封装：Windows 下以 shell 启动 `.cmd` 包装的 CLI 并剔除 `options.signal`，`killCli` 用 `taskkill /pid <pid> /t /f` 异步整树清理（见下节）

@@ -20,6 +20,8 @@ tags: [operations, runbook, configuration, troubleshooting]
 | `SCHEDULE_API_PORT` / `SCHEDULE_API_TOKEN` | 定时任务本地 HTTP 管理接口的端口（默认 3101）与 `x-api-token` 鉴权令牌；未配置 token 时接口完全不设防，只当本机接口用 | 否 |
 | `TEST_CHAT_ID` / `OWNER_OPEN_ID` | 测试群与所有者 open_id；bot 消息（外部派活）场景下 `OWNER_OPEN_ID` 兜底作为发起人 | 否 |
 | `CEO_ZHIPU_ANTHROPIC_*` 等被 `cliEnv` 引用的变量 | per-bot CLI 模型后端覆盖：`bots.json` 里 `cliEnv` 映射的 source 变量（模板把 ceo-assistant 的 11 个 `ANTHROPIC_*` 键指向 `CEO_ZHIPU_*`），值留空会启动报错；变量名自定义，见 [多 bot 注册](../domain/bot-registry.md) | 否（配置了 cliEnv 才必需） |
+| `PROVIDER_ERROR_CONFIG` | 多厂家后端错误分类的扩展规则文件路径，默认 `config/provider-errors.json`（仓库自带空规则模板，可用 `endpointPattern` / `codePattern` / `messagePattern` / `status` 匹配自定义厂商错误码，修改后重启生效）；冷却默认值也在此文件调整，见 [后端故障恢复](../domain/provider-recovery.md) | 否 |
+| `AGENT_TEAM_QUOTA_GROUP` | 可选的额度组合并键：CLI 内部 profile 或代理网关背后的共享额度无法凭环境变量推断时，把该键加进 bot 的 `cliEnv` 映射（值放 `.env`），让不同端点/引擎共享账号级冷却，见 [后端故障恢复](../domain/provider-recovery.md) | 否 |
 | `PATROL_WEBHOOK_URL` | 运维群自定义机器人 webhook，demo-server 巡检推送用；只被 `demo-server/scripts/notify.mjs` 读取，主进程不消费，留空时巡检跳过推送 | 否 |
 
 首次配置需要三步：`cp .env.example .env` 填凭证，`cp config/bots.example.json config/bots.json` 注册 bot（字段含义见 [多 bot 注册](../domain/bot-registry.md)），再按根 README 的技能对照表安装 bots.json 声明的工作流 Skills（全局装到 `~/.agents/skills/`，或从 `workspace-template/` 复制定制版）。
@@ -64,7 +66,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 | 连接超时 | 网络问题或凭证错误 | 确认 App ID / Secret 正确，网络可达飞书 OpenAPI |
 | 任务一直不执行 | 本机没有对应 CLI 或未登录 | `claude --version` / `codex --version` 验证安装，先在本机跑通一次 |
 | `Claude Code 执行超时` | 任务超过默认 2 小时上限（`runner.ts` 的 `DEFAULT_TIMEOUT_MS`，可用 `CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖）或任务被外部中止 | 调大对应引擎的超时环境变量，或用卡片「停止任务」手动中止；环境变量设 0 或非法值会回退默认，不支持不限时 |
-| 任务失败提示「已触发会话额度限制」并移交 Team Leader | 该 bot 的 Claude 会话限额已用尽（受限时长按报错文案里的重置时钟点解析，解析失败兜底 5 小时；状态在内存中，重启即清零） | 等待额度重置或重启进程；同组（`group`）配了备用成员的会自动代班，见 [多 bot 协作](../domain/collaboration.md) 的会话限额一节 |
+| 任务失败提示「已移交 Team Leader 接续派发」 | 该 bot 的模型后端被判定为故障（限流重试耗尽 / 额度耗尽 / 计费 / 认证 / 配置 / 服务不可用），已按后端域登记冷却；冷却时长优先取服务端提示（`Retry-After` / `retry_after` 等），否则用各类别默认值（限流 60 秒、额度 5 分钟等），状态在内存中重启即清零 | 等待冷却结束或重启进程；分类与自定义厂家规则见 [后端故障恢复](../domain/provider-recovery.md)，同组（`group`）配了独立后端备用成员的会自动代班，见 [多 bot 协作](../domain/collaboration.md) 的后端故障一节 |
 | 多个 bot 头像名称相同 | 这些 bot 复用了同一套凭证（共享 appId，只建一条长连接） | 需要独立身份就为各 bot 配独立 `appIdEnv` / `appSecretEnv`（多应用独立模式） |
 
 ## 飞书应用配置
@@ -96,7 +98,7 @@ tags: [operations, runbook, configuration, troubleshooting]
 
 测试用 Node 内置的 `node:test` runner（无第三方测试框架），入口 `pnpm test`：先 `tsc -p tsconfig.test.json` 做类型检查（`tsconfig.test.json` 在主配置基础上 `noEmit` 且把 `tests/` 纳入 `include`），再用 `node --import tsx --test "tests/*.test.ts"` 直接跑 TS 源文件。
 
-- **现有覆盖：** `tests/product-spec-submission.test.ts` 针对 [产品方案交付](../domain/product-spec.md) 的提交链路——local 落盘校验（拒绝把汇总 Markdown 当 `ticketsPath`、缺 Spec/缺 Tickets/空目录）、`ensureProductSpecSubmission` 的兜底重跑（合法提交不重跑、被拒提交带真实原因重跑一次且不得改交付方式）、`request_spec_approval` 的 MCP 入参 schema 与工作区预检（真实拉起 stdio MCP 服务端验证 isError 回传）、以及 `runCli` 把失败的应用层工具调用单独收集进 `rejectedToolCalls`
+- **现有覆盖：** 三组 node:test 回归——`tests/product-spec-submission.test.ts` 针对 [产品方案交付](../domain/product-spec.md) 的提交链路（local 落盘校验（拒绝把汇总 Markdown 当 `ticketsPath`、缺 Spec/缺 Tickets/空目录）、`ensureProductSpecSubmission` 的兜底重跑（合法提交不重跑、被拒提交带真实原因重跑一次且不得改交付方式）、`request_spec_approval` 的 MCP 入参 schema 与工作区预检（真实拉起 stdio MCP 服务端验证 isError 回传）、以及 `runCli` 把失败的应用层工具调用单独收集进 `rejectedToolCalls`）；`tests/provider-error.test.ts` 针对 [后端故障恢复](../domain/provider-recovery.md) 的分类（多厂家文案/状态码/错误码、包装层结构化字段提取、重试提示解析、自定义规则优先于内置 429）与冷却作用域（账号/模型隔离、到期清除、quota group 合并、备用成员排除共享后端、两家适配器保留结构化错误）；`tests/cli-recovery.test.ts` 用真实子进程 fixture 验证 runner 的重试策略（限流先重试后冷却、最多两次、不重复已执行工作的副作用、保留会话 ID、长重试窗口不截短、取消不登记故障、停止型工具不触发重试、CLI 自行恢复时不重放成功任务）
 - **写新测试时注意两个已知坑**（`CLAUDE.md` 错题本）：TypeScript 7 原生编译器不自动引入 `node_modules/@types`，需要时 tsconfig 显式写 `"types": ["node"]`；Node 22+ 把 `--test` 的位置参数当 glob，目录会被当模块加载，应使用 `"tests/*.test.ts"` 这类文件 glob
 - **风格：** 与源码一致（ESM、箭头函数、Prettier），测试文件同样受 `pnpm lint` / `pnpm format:check` 约束
 

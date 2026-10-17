@@ -1,7 +1,7 @@
 ---
 type: Domain
 title: 多 bot 协作
-description: dispatch_task 工具与 CollaborationService 派发——taskId/dispatchId/round 交接模型、CollaborationInbox 取件码领取、飞书重推去重、轮次上限、完成后的路由分支，以及会话限额触发的同组代班与 Team Leader 移交
+description: dispatch_task 工具与 CollaborationService 派发——taskId/dispatchId/round 交接模型、CollaborationInbox 取件码领取、飞书重推去重、轮次上限、完成后的路由分支，以及模型后端故障触发的同组代班与 Team Leader 移交
 tags: [domain, collaboration, multi-bot, dispatch]
 ---
 
@@ -36,7 +36,7 @@ bot 之间通过交接单（`CollaborationMessage`）传递任务：Team Leader�
 
 `dispatch()` 的三步全成语义，任一步失败都会撤销 inbox 登记并抛错（否则这条协作永远等不到目标 bot 回话）。投递目标有两种形态：
 
-- **有原消息**（`replyToMessageId`）：回复到话题里——协作卡片 + 卡片下 @ 目标 bot 的通知，round=1 用「新的协作任务」话术，其余用「协作结果已经返回」；也可配合 `skipCard: true` + 自定义 `mentionText` 只发 @ 不发卡（见会话限额一节的移交用法）
+- **有原消息**（`replyToMessageId`）：回复到话题里——协作卡片 + 卡片下 @ 目标 bot 的通知，round=1 用「新的协作任务」话术，其余用「协作结果已经返回」；也可配合 `skipCard: true` + 自定义 `mentionText` 只发 @ 不发卡（见后端故障一节的移交用法）
 - **无原消息**（只有 `chatId`）：`sendCardToChat` / `sendMentionToChat` 按 chatId 直接发群，@ 挂在群里保证与卡片相邻；置 `skipCard: true` 时完全省掉卡片，把任务详情（objective / instruction / expectedOutput / 任务编号）全部塞进这条 @ 正文里。这是预留的派发形态，当前仓库内没有调用方（定时任务已改为直接执行 CLI，见 [定时任务调度](scheduling.md)）
 
 三步全成：1. `collaborationInbox.register(collaboration)` 登记 → 2. 发协作卡片（带 workspace 名、目标、要求、轮次）或直发文本 → 3. `replyMention` / `sendMentionToChat` @ 目标 bot，文本带任务编号。
@@ -103,36 +103,36 @@ dispatch_task 派发、结果按 reportToBotId 回传直至收尾的完整链路
 
 派发任何一步失败（找不到目标 bot、飞书未返回 message_id）都会回滚收件箱登记并回复「协作派发失败：原因」。协作任务完成后结果通知由回传分支接管；任务失败或被取消时不触发协作路由。另外 [产品方案交付](product-spec.md) 的确认卡也可以触发派发：带协作来源的方案被用户确认后，同样经 `CollaborationService` 交回 `reportToBotId`。
 
-## 会话限额与同组代班
+## 后端故障与同组代班
 
-Claude Code 触发订阅会话限额（报错文本含 `session limit` / `resets`）时不会让任务直接失败，而是进入一条「受限登记 → 同组代班 / 移交 Leader」的保障链。三个协作组件：
+CLI 执行失败时，错误先经 `classifyProviderError` 分类（限流 / 额度耗尽 / 计费 / 认证 / 配置 / 服务不可用 / 未知，完整机制见 [后端故障恢复](provider-recovery.md)）。命中可分类故障（`failure.type !== 'unknown'`）时任务不直接按普通失败收尾，而是进入一条「冷却登记 → 同组代班 / 移交 Leader」的保障链。三个协作组件：
 
-- **`SessionLimitTracker`**（`src/core/session-limit-tracker.ts`，导出单例 `sessionLimitTracker`）：`isSessionLimitError()` 从错误文本识别限额、`extractResetTime()` 提取重置时间；`markLimit(botId, resetsText)` 会先用 `parseResetDurationMs()` 解析重置文案里的**纯时钟点**（12/24 小时制、可选时区后缀、支持跨夜推算，最后加 30 秒缓冲防止服务端尚未刷新），解析不出或时钟点已过去才兜底 **5 小时**；`isLimited()` 到期自动清除，`getLimitInfo()` 额外暴露 `resetsText` / `expireAt` 供接单守卫与派发兜底文案引用，状态只在进程内存
+- **`SessionLimitTracker`**（`src/core/session-limit-tracker.ts`，导出单例 `sessionLimitTracker`）：按**后端域**（账号/模型，`backendScopeKey` 哈希）登记冷却，键含端点与凭证而非 botId——同一后端账号的多个 bot 共享账号级冷却；冷却时长来自错误分类（服务端给了 `retry_after` 等提示则优先采纳，兜底各类别默认值，不再有「5 小时」兜底）；`getLimitInfo()` 到期自动清除，并暴露 `reason`（中文故障名）/ `guidance`（处理建议）/ `resetsText`（剩余秒数）供守卫与移交文案引用，状态只在进程内存
 - **`group` 字段**（`BotSchema`，可选）：同组即互为代班候选。模板里 `developer` 与 `developer2` 同属 `"developer"` 组，`developer2` 的角色说明就是「同组开发限流时代班」
-- **`TeamRegistry.getGroupMembers` / `getAvailableFallbackMembers`**：前者取同组全部成员（未配 group 的 bot 自身单独成组），后者在组内排除自己与**当前受限**的成员
+- **`TeamRegistry.getAvailability(botId, cliId?)` / `getGroupMembers` / `getAvailableFallbackMembers`**：前者按该 bot 实际后端（defaultCliId + cliEnv）查询可用性；代班候选在组内排除自己与**后端仍处于冷却**的成员（含共享同一受限账号的其他 bot，见 [后端故障恢复](provider-recovery.md) 的冷却域一节）
 
-限额在两个时机被拦截处理，派发时还有第三层兜底：
+故障在两个时机被拦截处理，派发时还有第三层兜底：
 
 ```mermaid
 flowchart TD
-    ERR["执行中报错含 session limit"] --> MARK["markLimit 登记受限<br/>解析重置时钟点，失败兜底 5 小时"]
-    INCOMING["新消息到达受限 bot"] --> GUARD["onMessage 限额守卫拦截"]
+    ERR["执行失败且可分类"] --> MARK["runner 放弃重试后 markFailure<br/>按分类冷却该后端域"]
+    INCOMING["新消息到达受限 bot"] --> GUARD["onMessage 可用性守卫拦截"]
     MARK --> WHO{"受限者是谁?"}
     GUARD --> WHO
     WHO -->|"普通成员"| HAS{"组内有可用备用?"}
     HAS -->|"有"| DISPATCH["dispatch 移交 Team Leader<br/>请其派给同组备用成员"]
     HAS -->|"无"| REPORT["dispatch 移交 Leader<br/>请其向用户确认下一步"]
-    WHO -->|"Team Leader"| DECLINE["回复 / @ 发起人：请稍后再试"]
+    WHO -->|"Team Leader"| DECLINE["@ 发起人：后端不可用原因与处理建议"]
     DISPATCH --> CEO["CEO 用 dispatch_task 派给备用成员"]
     REPORT --> CEO
     CEO --> SWAP{"dispatch 时目标又受限?"}
     SWAP -->|有同组可用| AUTO["CollaborationService 自动转派首个可用成员<br/>instruction 加任务接替提示"]
-    SWAP -->|全组受限| THROW["抛错回滚：分组内所有成员均处于会话限额"]
+    SWAP -->|全组受限| THROW["抛错回滚：分组内所有成员均处于后端不可用状态"]
 ```
 
-- **执行中触发**（`src/index.ts` 失败分支）：卡片置为 failed 并注明「任务已移交 Team Leader 接续派发」，随后把「成员限额 + 同组可用备用名单 + 原任务目标 + 工作区目录 + 请 CEO 调度」组装成 instruction，经 `CollaborationService.dispatch` 派给 Leader（`round` 在协作上下文中 +1，否则从 1 起），再 @ 发起人说明已移交；受限者就是 Leader 本身时不移交，卡片只注明已触发限额，另 @ 发起人「Team Leader 已达到会话额度限制…无法继续处理。请稍后重试。」
-- **接单前触发**（`onMessage` 前置守卫，位于会话守卫之前）：受限 bot 收到新任务不执行，同样移交 Leader 调度；受限的是 Leader 本身则直接回复「请稍后再试」。两个方向的 dispatch 移交本身失败（Leader 运行时不在或派发抛错）时都不静默：回复 / @ 发起人「任务移交 Team Leader 失败，请重试」（接单前守卫回复原消息，执行中分支改为 @ 发起人并把卡片 detail 改写为「任务移交 Team Leader 失败，请重试」）
-- **派发时兜底**（`CollaborationService.dispatch` 开头）：目标受限且有同组可用者时**自动转派**首个可用成员（instruction 前加「任务接替提示」前缀，完成后仍交回 CEO 助理）；整组均受限时抛「分组 "xxx" 内所有成员均处于会话限额状态…请直接向用户汇报」——这条错误会作为协作派发失败回滚收件箱并回复用户
+- **执行中触发**（`src/index.ts` 失败分支）：Runner 路径已登记冷却，非 Runner 路径（如原生 `/compact`）在这里补记；随后卡片置为 failed 并注明故障原因与「任务已移交 Team Leader 接续派发」，把「成员故障 + 同组可用备用名单 + 原任务目标 + 处理建议 + 工作区目录 + 请 CEO 调度」组装成 instruction，经 `CollaborationService.dispatch`（`skipCard` + 自定义 `mentionText`）派给 Leader（`round` 在协作上下文中 +1，否则从 1 起），再 @ 发起人说明已移交；失败中已获取的 CLI 会话 ID 也会先持久化（`ProviderCliError.sessionId`）不丢上下文。受限者就是 Leader 本身时不移交，卡片只注明故障，另 @ 发起人「Team Leader 后端不可用：原因（剩余时间），无法继续处理。处理建议」
+- **接单前触发**（`onMessage` 前置守卫，位于会话状态检查之后、任务执行之前）：后端冷却中的 bot 收到新任务不执行，同样移交 Leader 调度；受限的是 Leader 本身则直接回复「Team Leader 当前后端不可用：原因与建议」。两个方向的 dispatch 移交本身失败（Leader 运行时不在或派发抛错）时都不静默：回复 / @ 发起人「任务移交 Team Leader 失败，请重试」（接单前守卫回复原消息，执行中分支把卡片 detail 改写为「任务移交 Team Leader 失败，请重试」并附技术错误详情）
+- **派发时兜底**（`CollaborationService.dispatch` 开头）：目标受限且有同组可用者时**自动转派**首个可用成员（instruction 前加「任务接替提示」前缀，完成后仍交回 CEO 助理）；整组均受限时抛「分组 "xxx" 内所有成员均处于后端不可用状态（剩余时间），无法派发。请直接向用户汇报并确认下一步。」——这条错误会作为协作派发失败回滚收件箱并回复用户
 
 代班只切**执行者**：交接单携带的 `workspaceDir` 与 `taskId` 不变，备用成员在同一个工作区现场接续。
 
@@ -142,12 +142,12 @@ flowchart TD
 |------|------------------------|------|
 | `reviewBy` | 可选，bot id 格式 | 指向未启用的 bot 或指向自己都会在启动时报错退出；运行时已不读取（见历史注记） |
 | `collaborationMaxRounds` | 整数 1–32，默认 16 | 该 bot 发起协作时允许的交接总次数上限 |
-| `group` | 可选，`/^[a-z0-9][a-z0-9_-]{0,31}$/` | 同组成员互为会话限额时的代班候选（见上一节）；字段含义详见 [多 bot 注册](bot-registry.md) |
+| `group` | 可选，`/^[a-z0-9][a-z0-9_-]{0,31}$/` | 同组成员互为后端故障时的代班候选（见上一节）；字段含义详见 [多 bot 注册](bot-registry.md) |
 
 ## 变更指引
 
 - **改交接单字段**：`CollaborationMessage`、`docs/完整的内部交接单.md` 与飞书消息里的取件码格式（12 位 hex）需保持一致，接收方正则 `任务编号：([a-f0-9]{12})` 同步改
 - **改去重键**：`collaborationTurnKey` 现在只返回 `dispatchId`。不要轻易改回「任务 + 轮次 + 接收方」组合键——taskId 是话题级标识，同话题的新协作会重新从第 1 轮开始，组合键会误拦这些新派发
 - **跨进程协作**：当前 Inbox 是进程内存，若未来拆成多进程部署，需要把 `register`/`consume` 换成共享存储，并保留「领取即删」语义
-- **限额状态也是进程内存**：`SessionLimitTracker` 重启即清零，受限 bot 重启后立即可用；受限时长优先取自 Claude 报错文案里的重置时钟点（解析规则见上文），5 小时只是兜底。改动时注意与「执行中触发」「接单前守卫」「派发兜底」三个消费点保持一致
+- **冷却状态也是进程内存**：`SessionLimitTracker` 重启即清零，受限后端重启后立即可用；冷却时长由错误分类与服务端重试提示决定（规则见 [后端故障恢复](provider-recovery.md)）。改动时注意与「执行中触发」「接单前守卫」「派发兜底」三个消费点保持一致
 - **协作触发点**：路由只在成功分支且 `!isCompacting` 时执行，改动收尾逻辑时注意不要让失败/取消路径意外派发；dispatch 与 [产品方案交付](product-spec.md) 的提交互斥，同轮同时出现要抛错
