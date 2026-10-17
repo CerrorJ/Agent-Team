@@ -1,3 +1,5 @@
+import type { ProviderErrorDetails } from '../core/provider-error.js'
+
 export type CliId = 'claude' | 'codex'
 
 export const CODEX_REASONING_EFFORTS = ['low', 'medium', 'high'] as const
@@ -74,7 +76,13 @@ export type CliEvent =
       input: unknown
     }
   | { type: 'result'; answer: string; sessionId?: string; stats?: CliRunStats }
-  | { type: 'error'; message: string; sessionId?: string }
+  | { type: 'retry'; attempt: number; delayMs: number; reason: string }
+  | {
+      type: 'error'
+      message: string
+      sessionId?: string
+      details?: ProviderErrorDetails
+    }
 
 export interface CliAdapter {
   readonly id: CliId

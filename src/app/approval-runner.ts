@@ -80,7 +80,8 @@ export const continueApprovalFlow = async (options: {
           event.type !== 'tool_start' &&
           event.type !== 'tool_end' &&
           event.type !== 'context' &&
-          event.type !== 'model'
+          event.type !== 'model' &&
+          event.type !== 'retry'
         )
           return
         progress.accept(event)

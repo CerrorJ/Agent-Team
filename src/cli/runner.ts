@@ -8,8 +8,27 @@ import type {
   CliRunResult,
   CliToolCall,
 } from './types.js'
+import { setTimeout as delay } from 'node:timers/promises'
+import {
+  classifyProviderError,
+  extractProviderErrorDetails,
+  getProviderErrorPolicy,
+  providerFailureLabel,
+  type ProviderFailure,
+} from '../core/provider-error.js'
+import {
+  backendEndpoint,
+  sessionLimitTracker,
+} from '../core/session-limit-tracker.js'
 
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 60 * 1000
+
+// CLI 收尾时可能再包一层通用 429/执行失败，不能覆盖更具体的余额或额度原因。
+const failurePriority = (failure: ProviderFailure): number => {
+  if (failure.type === 'unknown') return 0
+  const specific = !['rate_limit', 'service_unavailable'].includes(failure.type)
+  return (specific ? 4 : 1) + (failure.code ? 1 : 0)
+}
 
 // 只返回调用标识与入参，去掉事件上的其他字段
 const toToolCalls = (calls: Map<string, CliToolCall>): CliToolCall[] =>
@@ -32,8 +51,78 @@ export interface RunCliOptions {
   onEvent?: (event: CliEvent) => void
 }
 
+export class ProviderCliError extends Error {
+  constructor(
+    readonly failure: ProviderFailure,
+    readonly sessionId?: string,
+    readonly performedWork = false,
+  ) {
+    super(failure.message)
+    this.name = 'ProviderCliError'
+  }
+}
+
+// 所有执行入口共用分类/冷却；只有未执行工具或产生结果的轮次可以自动重试。
+export const runCli = async (options: RunCliOptions): Promise<CliRunResult> => {
+  options.signal?.throwIfAborted()
+  const policy = getProviderErrorPolicy()
+
+  const unavailable = sessionLimitTracker.getLimitInfo(
+    options.adapter.id,
+    options.env,
+  )
+
+  if (unavailable.failure)
+    throw new ProviderCliError(unavailable.failure, options.sessionId)
+
+  const deadline =
+    Date.now() +
+    (options.timeoutMs ?? envTimeoutMs(options.adapter) ?? DEFAULT_TIMEOUT_MS)
+
+  let sessionId = options.sessionId
+  for (let attempt = 0; ; attempt += 1) {
+    options.signal?.throwIfAborted()
+    const remaining = deadline - Date.now()
+    if (remaining <= 0)
+      throw new Error(`${options.adapter.displayName} 执行超时`)
+    try {
+      return await runCliOnce({ ...options, sessionId, timeoutMs: remaining })
+    } catch (error) {
+      if (!(error instanceof ProviderCliError) || options.signal?.aborted)
+        throw error
+      sessionId = error.sessionId ?? sessionId
+
+      const retryDelay =
+        error.failure.retryAfterMs ?? policy.baseDelayMs * 2 ** attempt
+
+      if (
+        !error.performedWork &&
+        error.failure.retryable &&
+        attempt < policy.maxRetries &&
+        retryDelay <= policy.maxRetryDelayMs &&
+        Date.now() + retryDelay < deadline
+      ) {
+        options.onEvent?.({
+          type: 'retry',
+          attempt: attempt + 1,
+          delayMs: retryDelay,
+          reason: providerFailureLabel(error.failure.type),
+        })
+        await delay(retryDelay, undefined, { signal: options.signal })
+        continue
+      }
+      sessionLimitTracker.markFailure(
+        options.adapter.id,
+        options.env,
+        error.failure,
+      )
+      throw error
+    }
+  }
+}
+
 // Runner 只读取适配器翻译后的 CliEvent，不再关心供应商的原生字段。
-export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
+const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
   const {
     adapter,
     prompt,
@@ -112,7 +201,8 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
 
     let finalResult: CliRunResult | undefined
     let stoppedByToolCall: CliToolCall | undefined
-    let resultError: Error | undefined
+    let resultError: ProviderCliError | undefined
+    let performedWork = false
     let stderr = ''
     let settled = false
     let timedOut = false
@@ -142,8 +232,29 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
           observedSessionId = event.sessionId
         }
         if (event.type === 'error') {
-          resultError = new Error(event.message)
+          const failure = classifyProviderError(
+            { ...event.details, message: event.message },
+            backendEndpoint(adapter.id, env),
+          )
+
+          if (
+            !resultError ||
+            failurePriority(failure) >= failurePriority(resultError.failure)
+          ) {
+            resultError = new ProviderCliError(
+              failure,
+              observedSessionId,
+              performedWork,
+            )
+          }
           continue
+        }
+        if (
+          event.type === 'tool_start' ||
+          event.type === 'tool_call' ||
+          event.type === 'result'
+        ) {
+          performedWork = true
         }
         // 应用层工具调用按 toolUseId 去重收集；调用失败时在 tool_end 移入 rejected，
         // 成功与被拒的调用分别随结果返回（见下方 finalResult.toolCalls）
@@ -175,6 +286,8 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
           continue
         }
         if (event.type === 'result') {
+          // CLI 自己已从临时网络/限流错误恢复，后续成功结果不应被旧错误覆盖。
+          if (resultError?.failure.retryable) resultError = undefined
           if (event.answer) observedAnswer = event.answer
           if (event.stats) observedStats = event.stats
           if (!observedAnswer) continue
@@ -219,11 +332,49 @@ export const runCli = (options: RunCliOptions): Promise<CliRunResult> => {
       if (signal?.aborted) {
         return fail(new Error(`${adapter.displayName} 执行已取消`))
       }
-      if (resultError) return fail(resultError)
+      // 正常退出且已有成功结果时，stderr 只作为诊断日志，不影响成功状态。
+      if (stderr.trim() && (code !== 0 || !finalResult || resultError)) {
+        const stderrFailure = classifyProviderError(
+          {
+            ...extractProviderErrorDetails(stderr.trim()),
+            message: stderr.trim(),
+          },
+          backendEndpoint(adapter.id, env),
+        )
+
+        if (
+          !resultError ||
+          failurePriority(stderrFailure) > failurePriority(resultError.failure)
+        ) {
+          resultError = new ProviderCliError(
+            stderrFailure,
+            observedSessionId,
+            performedWork,
+          )
+        }
+      }
+      if (resultError)
+        return fail(
+          new ProviderCliError(
+            resultError.failure,
+            observedSessionId,
+            performedWork,
+          ),
+        )
       if (code !== 0) {
         return fail(
-          new Error(
-            stderr.trim() || `${adapter.displayName} 退出，状态码 ${code}`,
+          new ProviderCliError(
+            classifyProviderError(
+              {
+                ...extractProviderErrorDetails(stderr.trim()),
+                message:
+                  stderr.trim() ||
+                  `${adapter.displayName} 退出，状态码 ${code}`,
+              },
+              backendEndpoint(adapter.id, env),
+            ),
+            observedSessionId,
+            performedWork,
           ),
         )
       }

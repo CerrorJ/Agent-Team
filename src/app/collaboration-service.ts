@@ -5,7 +5,6 @@ import type { Bot } from '../im/lark.js'
 import { buildCollaborationCard } from '../im/card.js'
 import { getBotModelDisplayName, type BotConfig } from '../core/bot-registry.js'
 import type { CollaborationMessage } from '../core/collaboration.js'
-import { sessionLimitTracker } from '../core/session-limit-tracker.js'
 import type { AppRuntime } from './runtime.js'
 
 export interface CollaborationDispatch {
@@ -39,7 +38,9 @@ export class CollaborationService {
     let effectiveInstruction = options.instruction
 
     // 如果目标 bot 当前受限，在同组中寻找可用的备用成员进行自动转派
-    if (sessionLimitTracker.isLimited(effectiveTargetBotId)) {
+    if (
+      this.runtime.teamRegistry.getAvailability(effectiveTargetBotId).isLimited
+    ) {
       const availableFallbacks = this.runtime.teamRegistry
         .getAvailableFallbackMembers(effectiveTargetBotId)
         .filter((cfg) => this.runtime.botRuntimes.has(cfg.id))
@@ -48,19 +49,25 @@ export class CollaborationService {
         const fallback = availableFallbacks[0]
         const fallbackModel = getBotModelDisplayName(fallback)
         console.log(
-          `[协作] 检测到 ${effectiveTargetBotId} 受限，自动转派至同组备用成员 ${fallback.id} (${fallbackModel})`,
+          `[协作] 检测到 ${effectiveTargetBotId} 后端不可用，自动转派至同组备用成员 ${fallback.id} (${fallbackModel})`,
         )
         effectiveTargetBotId = fallback.id
-        effectiveInstruction = `【任务接替提示：原定成员 ${options.targetBotId} 触发会话限额，已转派由你接替推进。请直接基于工作区当前现场继续推进，完成后交回 CEO 助理】\n\n${options.instruction}`
+        effectiveInstruction = `【任务接替提示：原定成员 ${options.targetBotId} 模型后端不可用，已转派由你接替推进。请直接基于工作区当前现场继续推进，完成后交回 CEO 助理】\n\n${options.instruction}`
       }
     }
 
-    if (sessionLimitTracker.isLimited(effectiveTargetBotId)) {
+    if (
+      this.runtime.teamRegistry.getAvailability(effectiveTargetBotId).isLimited
+    ) {
       const targetConfig = this.runtime.teamRegistry.get(options.targetBotId)
       const groupName = targetConfig?.group ?? options.targetBotId
-      const resetInfo = sessionLimitTracker.getLimitInfo(options.targetBotId)
+
+      const resetInfo = this.runtime.teamRegistry.getAvailability(
+        options.targetBotId,
+      )
+
       throw new Error(
-        `分组 "${groupName}" 内所有成员均处于会话限额状态${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，无法派发。请直接向用户汇报并确认下一步。`,
+        `分组 "${groupName}" 内所有成员均处于后端不可用状态${resetInfo.resetsText ? `（${resetInfo.resetsText}）` : ''}，无法派发。请直接向用户汇报并确认下一步。`,
       )
     }
 

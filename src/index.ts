@@ -10,10 +10,11 @@ import {
   type IncomingMessage,
 } from './im/lark.js'
 import {
-  isSessionLimitError,
-  extractResetTime,
+  backendEndpoint,
   sessionLimitTracker,
 } from './core/session-limit-tracker.js'
+import { classifyProviderError } from './core/provider-error.js'
+import { ProviderCliError } from './cli/runner.js'
 import {
   answerContinuation,
   answerNeedsContinuation,
@@ -383,7 +384,7 @@ const handleBotMessage = async (
   }
 
   // 检查当前 bot 是否处于会话限额不可用状态，若受限则直接回传 CEO 调度派发
-  if (sessionLimitTracker.isLimited(config.id)) {
+  if (teamRegistry.getAvailability(config.id, session.cliId).isLimited) {
     if (
       (isNew && session.status === 'creating') ||
       (isCompacting && session.status === 'active')
@@ -398,7 +399,7 @@ const handleBotMessage = async (
       }
     }
 
-    const resetInfo = sessionLimitTracker.getLimitInfo(config.id)
+    const resetInfo = teamRegistry.getAvailability(config.id, session.cliId)
     const leaderId = agentTeamConfig.teamLeaderId
     const groupName = config.group ?? config.id
 
@@ -415,22 +416,24 @@ const handleBotMessage = async (
           availableFallbacks.length > 0
             ? [
                 `【任务接续派发】`,
-                `成员 ${config.id} 当前处于会话额度限制中${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，无法接单。`,
+                `成员 ${config.id} 当前后端不可用：${resetInfo.reason}${resetInfo.resetsText ? `（${resetInfo.resetsText}）` : ''}，无法接单。`,
                 `所在分组 "${groupName}" 内可用备用成员：${fallbackIds}。`,
                 `【原任务需求】：${collaboration?.objective ?? taskText}`,
+                `【建议处理】：${resetInfo.guidance}`,
                 `【请 CEO 调度】：请使用 dispatch_task 派发给同组可用成员（${fallbackIds}）基于工作区现场接续推进，并汇总交付。`,
               ].join('\n\n')
             : [
                 `【团队资源受限汇报】`,
-                `用户向成员 ${config.id} 发起任务，但所在分组 "${groupName}" 内所有成员均处于会话限额状态。`,
+                `用户向成员 ${config.id} 发起任务，但所在分组 "${groupName}" 内所有成员均处于后端不可用状态。`,
                 `【原任务需求】：${collaboration?.objective ?? taskText}`,
+                `【建议处理】：${resetInfo.guidance}`,
                 `【请 CEO 处理】：请直接在当前话题向用户说明团队该分组资源受限不可用，并向用户确认下一步决策。`,
               ].join('\n\n')
 
         const mentionText =
           availableFallbacks.length > 0
-            ? `当前成员处于会话额度限制中，任务已移交 Team Leader 接续调度同组备用成员处理`
-            : `分组 "${groupName}" 成员均已达会话限额，已移交 Team Leader 向你确认后续处理`
+            ? `当前成员处于模型后端不可用状态，任务已移交 Team Leader 接续调度同组备用成员处理`
+            : `分组 "${groupName}" 成员后端均不可用，已移交 Team Leader 向你确认后续处理`
 
         try {
           await collaborationService.dispatch({
@@ -445,7 +448,7 @@ const handleBotMessage = async (
             reportToBotId: leaderId,
             objective:
               availableFallbacks.length > 0
-                ? '同组成员限额接续派发'
+                ? '同组成员后端故障接续派发'
                 : '团队资源受限确认',
             instruction,
             expectedOutput:
@@ -469,15 +472,15 @@ const handleBotMessage = async (
       await bot.reply(
         msg.messageId,
         availableFallbacks.length > 0
-          ? `当前成员处于会话额度限制中，任务移交 Team Leader 失败，请重试。`
-          : `分组 "${groupName}" 成员均已达会话限额，移交 Team Leader 失败，请重试。`,
+          ? `当前成员处于模型后端不可用状态，任务移交 Team Leader 失败，请重试。`
+          : `分组 "${groupName}" 成员后端均不可用，移交 Team Leader 失败，请重试。`,
         hasThread,
       )
       return
     } else {
       await bot.reply(
         msg.messageId,
-        `Team Leader 当前处于会话额度限制中${resetInfo.resetsText ? `（预计 ${resetInfo.resetsText} 重置）` : ''}，请稍后再试。`,
+        `Team Leader 当前后端不可用：${resetInfo.reason}${resetInfo.resetsText ? `（${resetInfo.resetsText}）` : ''}。${resetInfo.guidance}`,
         hasThread,
       )
       return
@@ -712,7 +715,8 @@ const handleBotMessage = async (
             event.type !== 'tool_start' &&
             event.type !== 'tool_end' &&
             event.type !== 'context' &&
-            event.type !== 'model'
+            event.type !== 'model' &&
+            event.type !== 'retry'
           )
             return
           progress.accept(event)
@@ -797,7 +801,8 @@ const handleBotMessage = async (
                   event.type !== 'tool_start' &&
                   event.type !== 'tool_end' &&
                   event.type !== 'context' &&
-                  event.type !== 'model'
+                  event.type !== 'model' &&
+                  event.type !== 'retry'
                 )
                   return
                 progress.accept(event)
@@ -1095,13 +1100,34 @@ const handleBotMessage = async (
         return
       }
       const message = (error as Error).message
-      const isSessionLimit = isSessionLimitError(message)
 
-      if (isSessionLimit) {
-        const resetText = extractResetTime(message)
-        sessionLimitTracker.markLimit(config.id, resetText)
+      const failure =
+        error instanceof ProviderCliError
+          ? error.failure
+          : classifyProviderError(
+              { message },
+              backendEndpoint(session.cliId, config.cliEnv),
+            )
+
+      if (error instanceof ProviderCliError && error.sessionId) {
+        await sessions.setCliSessionId(session.id, error.sessionId)
+      }
+
+      if (failure.type !== 'unknown') {
+        // Runner 已记录故障；原生 compact 等非 Runner 路径在这里补记。
+        if (!(error instanceof ProviderCliError)) {
+          sessionLimitTracker.markFailure(session.cliId, config.cliEnv, failure)
+        }
+
+        const unavailable = teamRegistry.getAvailability(
+          config.id,
+          session.cliId,
+        )
+
+        const resetText = unavailable.resetsText
+        const failureReason = unavailable.reason ?? '模型后端不可用'
         console.warn(
-          `[限额] Bot ${config.id} 触发会话限额${resetText ? ` (重置: ${resetText})` : ''}`,
+          `[后端故障] Bot ${config.id} ${failureReason}${resetText ? ` (重新尝试: ${resetText})` : ''}`,
         )
 
         const leaderId = agentTeamConfig.teamLeaderId
@@ -1123,17 +1149,19 @@ const handleBotMessage = async (
             ? availableFallbacks.length > 0
               ? [
                   `【任务接续派发】`,
-                  `成员 ${config.id} 在执行任务时触发了会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}，当前会话已停止。`,
+                  `成员 ${config.id} 在执行任务时遇到${failureReason}${resetText ? `（${resetText}）` : ''}，当前会话已停止。`,
                   `所在分组 "${groupName}" 内有可用备用成员：${fallbackIds}。`,
                   `【原任务目标】：${collaboration?.objective ?? resolved}`,
+                  `【建议处理】：${unavailable.guidance}`,
                   `【工作区目录】：${session.workspaceDir}`,
                   `【请 CEO 调度】：请使用 dispatch_task 派发给同组可用成员（${fallbackIds}）基于工作区现场接续推进，并汇总交付。`,
                 ].join('\n\n')
               : [
                   `【团队资源受限汇报】`,
-                  `成员 ${config.id} 在执行任务时触发了会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。`,
-                  `所在分组 "${groupName}" 内所有成员均已达会话限额，暂无可用备用成员。`,
+                  `成员 ${config.id} 在执行任务时遇到${failureReason}${resetText ? `（${resetText}）` : ''}。`,
+                  `所在分组 "${groupName}" 内所有成员后端均不可用，暂无可用备用成员。`,
                   `【原任务目标】：${collaboration?.objective ?? resolved}`,
+                  `【建议处理】：${unavailable.guidance}`,
                   `【请 CEO 处理】：请直接在当前话题向用户说明团队该分组资源受限不可用，并向用户确认下一步决策。`,
                 ].join('\n\n')
             : undefined
@@ -1145,13 +1173,13 @@ const handleBotMessage = async (
 
           const mentionText =
             availableFallbacks.length > 0
-              ? `成员已达会话限额，任务已移交 Team Leader 接续调度备用成员处理`
-              : `分组 "${groupName}" 成员均已达会话限额，已移交 Team Leader 向你确认后续处理`
+              ? `成员后端不可用，任务已移交 Team Leader 接续调度备用成员处理`
+              : `分组 "${groupName}" 成员后端均不可用，已移交 Team Leader 向你确认后续处理`
 
           const failureText =
             availableFallbacks.length > 0
-              ? `成员已达会话限额，任务移交 Team Leader 失败，请重试。`
-              : `分组 "${groupName}" 成员均已达会话限额，移交 Team Leader 失败，请重试。`
+              ? `成员后端不可用，任务移交 Team Leader 失败，请重试。`
+              : `分组 "${groupName}" 成员后端均不可用，移交 Team Leader 失败，请重试。`
 
           if (leaderRuntime && handoffInstruction) {
             try {
@@ -1168,7 +1196,7 @@ const handleBotMessage = async (
                 reportToBotId: leaderId,
                 objective:
                   availableFallbacks.length > 0
-                    ? '同组成员限额接续派发'
+                    ? '同组成员后端故障接续派发'
                     : '团队资源受限确认',
                 instruction: handoffInstruction,
                 expectedOutput,
@@ -1212,8 +1240,8 @@ const handleBotMessage = async (
               title: taskCardTitle,
               status: 'failed',
               detail: handoffSuccess
-                ? `已触发会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。任务已移交 Team Leader 接续派发。`
-                : `已触发会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。任务移交 Team Leader 失败，请重试。`,
+                ? `${failureReason}${resetText ? `（${resetText}）` : ''}。任务已移交 Team Leader 接续派发。`
+                : `${failureReason}${resetText ? `（${resetText}）` : ''}。任务移交 Team Leader 失败，请重试。`,
               expectedOutput,
               handoffDetail: handoffInstruction,
               technicalDetail: message,
@@ -1226,7 +1254,7 @@ const handleBotMessage = async (
             buildTaskCard({
               title: taskCardTitle,
               status: 'failed',
-              detail: `已触发会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}。`,
+              detail: `${failureReason}${resetText ? `（${resetText}）` : ''}。`,
               technicalDetail: message,
               progress: progress.snapshot(),
             }),
@@ -1238,7 +1266,7 @@ const handleBotMessage = async (
               openId: ownerOpenId,
               name: '',
             },
-            text: `Team Leader 已达到会话额度限制${resetText ? `（预计 ${resetText} 重置）` : ''}，无法继续处理。请稍后重试。`,
+            text: `Team Leader 后端不可用：${failureReason}${resetText ? `（${resetText}）` : ''}，无法继续处理。${unavailable.guidance}`,
             replyInThread: hasThread,
           })
           return

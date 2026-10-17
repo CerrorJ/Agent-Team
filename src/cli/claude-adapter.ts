@@ -1,4 +1,5 @@
 import { promptInputForPlatform } from './types.js'
+import { extractProviderErrorDetails } from '../core/provider-error.js'
 import type {
   CliAdapter,
   CliPromptInput,
@@ -31,11 +32,14 @@ interface ClaudeEvent {
   usage?: unknown
   modelUsage?: unknown
   message?: unknown
+  error?: unknown
+  errors?: unknown
 }
 
 // 原始数据结构-content中的数据
 interface ClaudeContentBlock {
   type?: unknown
+  text?: unknown
   id?: unknown
   name?: unknown
   input?: unknown
@@ -242,6 +246,30 @@ export class ClaudeAdapter implements CliAdapter {
       ]
     }
     if (event.type === 'assistant') {
+      // 某些 CLI 将后端拒绝放在带 error 字段的 assistant 事件，而非 result.is_error。
+      if (event.error !== undefined && event.error !== null) {
+        const text = messageBlocks(event.message)
+          .flatMap((block) =>
+            block.type === 'text' && typeof block.text === 'string'
+              ? [block.text]
+              : [],
+          )
+          .join('\n')
+
+        return [
+          {
+            type: 'error',
+            message: text || String(event.error),
+            sessionId,
+            details: extractProviderErrorDetails({
+              error:
+                typeof event.error === 'string'
+                  ? { code: event.error }
+                  : event.error,
+            }),
+          },
+        ]
+      }
       const message = isRecord(event.message) ? event.message : {}
       // message.usage 是运行时token数,随执行过程到达，转化成 context，可以实时更新卡片
       const usedTokens = usageTokens(message.usage)
@@ -335,15 +363,30 @@ export class ClaudeAdapter implements CliAdapter {
       })
     }
     // 任务结束时还会发出 result
-    if (event.type !== 'result') return []
-    if (event.is_error) {
+    if (event.type !== 'result' && event.type !== 'error') return []
+    if (event.is_error || event.type === 'error') {
       return [
         {
           type: 'error',
           message:
             typeof event.result === 'string'
               ? event.result
-              : 'Claude Code 执行失败',
+              : typeof event.message === 'string'
+                ? event.message
+                : isRecord(event.error) &&
+                    typeof event.error.message === 'string'
+                  ? event.error.message
+                  : Array.isArray(event.errors)
+                    ? event.errors
+                        .filter(
+                          (value): value is string => typeof value === 'string',
+                        )
+                        .join('\n') || 'Claude Code 执行失败'
+                    : 'Claude Code 执行失败',
+          details: {
+            ...extractProviderErrorDetails(event.result),
+            ...extractProviderErrorDetails(event),
+          },
           ...(sessionId ? { sessionId } : {}),
         },
       ]

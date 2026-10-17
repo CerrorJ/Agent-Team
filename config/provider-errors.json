@@ -1,0 +1,10 @@
+{
+  "maxRetries": 2,
+  "baseDelayMs": 1000,
+  "maxRetryDelayMs": 30000,
+  "rateLimitCooldownMs": 60000,
+  "quotaCooldownMs": 300000,
+  "configurationCooldownMs": 60000,
+  "serviceCooldownMs": 30000,
+  "rules": []
+}

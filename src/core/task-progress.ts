@@ -43,6 +43,7 @@ export class TaskProgressTracker {
   private contextStartTokens: number | undefined
   private model: string | undefined
   private modelSource: 'reported' | 'configured' | undefined
+  private retryDetail: string | undefined
   constructor(
     private readonly now: () => number = Date.now,
     private readonly contextWindowTokens?: number,
@@ -53,6 +54,11 @@ export class TaskProgressTracker {
   }
   // 所有事件入口，用 ID 配对避免多个工具同时运行串线
   accept(event: CliEvent): TaskProgressSnapshot {
+    if (event.type === 'retry') {
+      this.retryDetail = `${event.reason}，${Math.ceil(event.delayMs / 1000)} 秒后进行第 ${event.attempt} 次重试`
+    } else if (event.type !== 'error') {
+      this.retryDetail = undefined
+    }
     if (event.type === 'model') {
       if (this.modelSource === 'reported' && event.source === 'configured') {
         return this.snapshot()
@@ -96,7 +102,9 @@ export class TaskProgressTracker {
     const active = [...this.activeTools.values()].at(-1)
     return {
       current:
-        active?.label ?? (this.toolCount ? '正在分析执行结果' : '正在理解任务'),
+        this.retryDetail ??
+        active?.label ??
+        (this.toolCount ? '正在分析执行结果' : '正在理解任务'),
       ...(this.model ? { model: this.model } : {}),
       ...(this.modelSource ? { modelSource: this.modelSource } : {}),
       ...(active ? { currentToolName: active.toolName } : {}),

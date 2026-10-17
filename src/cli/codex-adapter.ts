@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { extractProviderErrorDetails } from '../core/provider-error.js'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -272,7 +273,13 @@ export class CodexAdapter implements CliAdapter {
       ]
     }
     if (event.type === 'error' || event.type === 'turn.failed') {
-      return [{ type: 'error', message: errorMessage(event) }]
+      return [
+        {
+          type: 'error',
+          message: errorMessage(event),
+          details: extractProviderErrorDetails(event),
+        },
+      ]
     }
     if (event.type === 'turn.completed') {
       const stats = parseStats(event.usage)

@@ -45,7 +45,7 @@
 - **角色专精团队**：可在 `config/bots.json` 注册多个 Bot（如 Team Leader、产品经理、开发工程师、审查工程师、测试工程师）。
 - **`dispatch_task` 工具与交接单**：通过交接单模型（`taskId` / `dispatchId` / `round`），Team Leader 可将任务确定性派发给团队成员，成员完成并验证后交回结论，形成「需求 ➔ 拆解 ➔ 研发 ➔ 审查 ➔ 验收」的完整自动化闭环。
 - **收件箱防重与幂等**：进程内 `CollaborationInbox` 取件码机制结合飞书重推去重，确保交接可靠不漏跑、不重跑。
-- **分组容灾与限额自动接力（Group Failover & Limit Continuation）**：支持同组配置（`"group": "developer"`）。当主力 Bot（如官方 Claude 架构的 `developer`）因触发 5 小时用量或 Token 达到上限被挂起拦截（`hit session limit`）时，系统自动识别并安全将控制权归还 CEO 助理；CEO 助理自动重定向唤醒同组备份成员（如接入智谱/DeepSeek 备用模型的 `developer2`），以全新的独立 Session 继承当前工作区代码产物继续执行，无需人工介入重跑，既规避上下文污染又节约 Token 开销。
+- **分组容灾与后端故障接力**：支持同组配置（`"group": "developer"`）。按实际错误区分短时限流、额度耗尽、余额、认证、模型配置和服务故障；工作开始前有限重试，失败后按账号或模型冷却，并通过 Team Leader 调度可用的同组成员。共享受限后端的 Bot 不作为可用备用。厂家规则与恢复策略可配置，详见 [模型后端故障恢复](docs/模型后端故障恢复.md)。
 
 ### 3. 📊 飞书 2.0 交互卡片与工具级实时进度
 

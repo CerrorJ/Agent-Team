@@ -1,8 +1,9 @@
 import { access } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { sessionLimitTracker } from './session-limit-tracker.js'
+import { sessionLimitTracker, type LimitInfo } from './session-limit-tracker.js'
 import type { BotConfig } from './bot-registry.js'
+import type { CliId } from '../cli/types.js'
 
 export interface MissingSkill {
   botId: string
@@ -35,6 +36,16 @@ export class TeamRegistry {
     return this.configs.get(botId)
   }
 
+  getAvailability(botId: string, cliId?: CliId): LimitInfo {
+    const config = this.configs.get(botId)
+    return config
+      ? sessionLimitTracker.getLimitInfo(
+          cliId ?? config.defaultCliId,
+          config.cliEnv,
+        )
+      : { isLimited: true, reason: '成员未注册' }
+  }
+
   // 获取指定 bot 所在分组的所有成员（未指定 group 则自身单独成组）
   getGroupMembers(botId: string): BotConfig[] {
     const current = this.configs.get(botId)
@@ -47,7 +58,7 @@ export class TeamRegistry {
   getAvailableFallbackMembers(botId: string): BotConfig[] {
     const groupMembers = this.getGroupMembers(botId)
     return groupMembers.filter(
-      (m) => m.id !== botId && !sessionLimitTracker.isLimited(m.id),
+      (m) => m.id !== botId && !this.getAvailability(m.id).isLimited,
     )
   }
 
