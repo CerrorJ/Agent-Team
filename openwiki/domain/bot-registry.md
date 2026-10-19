@@ -39,7 +39,7 @@ bot 字段说明（zod `BotSchema` 校验）：
 | 字段 | 校验规则 | 说明 |
 |------|----------|------|
 | `id` | `/^[a-z0-9][a-z0-9_-]{0,31}$/`，不可重复 | bot 标识，进入会话键 `botId:chatId:threadId` |
-| `group` | 可选，`/^[a-z0-9][a-z0-9_-]{0,31}$/` | 同组成员互为会话限额时的代班候选（模板中 `developer` / `developer2` 同属 `developer` 组）；未配置时自身单独成组，详见 [多 bot 协作](collaboration.md) 的会话限额一节 |
+| `group` | 可选，`/^[a-z0-9][a-z0-9_-]{0,31}$/` | 同组成员互为模型后端故障时的代班候选（模板中 `developer` / `developer2` 同属 `developer` 组）；未配置时自身单独成组，详见 [多 bot 协作](collaboration.md) 的后端故障一节 |
 | `appIdEnv` / `appSecretEnv` | `/^[A-Z_][A-Z0-9_]*$/` | 凭证**环境变量名**（不是凭证本身），启动时从 `process.env` 读取 |
 | `defaultCli` | `claude` 或 `codex` | 该 bot 新话题的默认执行引擎 |
 | `role` | 必填非空字符串 | 一句话角色（如「开发」「审查」），进入团队名单与任务提示词 |

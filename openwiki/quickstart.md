@@ -15,7 +15,7 @@ Agent-Team 把**飞书**变成 AI 编程 CLI（Claude Code / Codex）的**指挥
 - **Bot 互相 @ 协作**——多 agent 分工
 - **任务进度实时可视化**——通过可刷新的飞书卡片展示
 
-> **当前阶段：** 飞书消息已经可以真实驱动 Claude Code 与 Codex 执行任务：会话按话题持久化、卡片实时展示工具级进度、发起人可从卡片停止任务。可在 `config/bots.json` 注册多个 bot（需声明 `teamLeader` 与 `defaultProductDeliveryMode`），每个 bot 指定默认执行引擎，凭证既可独立配置也可共用一套系统级凭证（后者共享长连接，见 [多 bot 注册](domain/bot-registry.md)）；还可用 `cliEnv` 给单个 bot 覆盖 CLI 模型后端。团队协作由 `dispatch_task` 应用层工具驱动：CLI（目前限定 Team Leader）把任务派给其他成员、结果按轮次回传（详见 [多 bot 协作](domain/collaboration.md)）；成员触发 Claude 会话限额时自动转派同组备用成员（`group`）或移交 Team Leader 调度。bot 配置 `grill-me` skill 后可经 `request_clarification` 逐题澄清需求（详见 [需求澄清](domain/clarification.md)）；`to-spec` / `lark-doc` 启用产品方案确认闭环（详见 [产品方案交付](domain/product-spec.md)）；开发类任务的高危操作经 `request_approval` 审批卡放行（详见 [高危操作审批](domain/approval.md)）；定时任务支持 once / interval / cron 三类规则、`/schedule` 命令与本地 HTTP 管理接口（详见 [定时任务调度](domain/scheduling.md)）。整体链路见 [消息处理流程](workflows/message-flow.md)，CLI 事件解析见 [AI CLI 输出解析](domain/ai-cli-probe.md)。
+> **当前阶段：** 飞书消息已经可以真实驱动 Claude Code 与 Codex 执行任务：会话按话题持久化、卡片实时展示工具级进度、发起人可从卡片停止任务。可在 `config/bots.json` 注册多个 bot（需声明 `teamLeader` 与 `defaultProductDeliveryMode`），每个 bot 指定默认执行引擎，凭证既可独立配置也可共用一套系统级凭证（后者共享长连接，见 [多 bot 注册](domain/bot-registry.md)）；还可用 `cliEnv` 给单个 bot 覆盖 CLI 模型后端。团队协作由 `dispatch_task` 应用层工具驱动：CLI（目前限定 Team Leader）把任务派给其他成员、结果按轮次回传（详见 [多 bot 协作](domain/collaboration.md)）；模型后端故障按多厂家错误分类处理（限流先自动重试，额度/计费等登记冷却后自动转派同组备用成员（`group`）或移交 Team Leader 调度，见 [后端故障恢复](domain/provider-recovery.md)）。bot 配置 `grill-me` skill 后可经 `request_clarification` 逐题澄清需求（详见 [需求澄清](domain/clarification.md)）；`to-spec` / `lark-doc` 启用产品方案确认闭环（详见 [产品方案交付](domain/product-spec.md)）；开发类任务的高危操作经 `request_approval` 审批卡放行（详见 [高危操作审批](domain/approval.md)）；定时任务支持 once / interval / cron 三类规则、`/schedule` 命令与本地 HTTP 管理接口（详见 [定时任务调度](domain/scheduling.md)）。整体链路见 [消息处理流程](workflows/message-flow.md)，CLI 事件解析见 [AI CLI 输出解析](domain/ai-cli-probe.md)。
 
 ## 技术栈
 
@@ -69,7 +69,7 @@ pnpm test
 
 启动后控制台输出 `Agent Team 启动，正在建立飞书长连接…` 与 `[配置] 已注册 N 个 bot，Team Leader=...，已恢复 M 个会话`，随后监听飞书消息并拉起定时调度。本机需要安装并登录 `claude`（用 Claude Code 时）或 `codex`（用 Codex 时）CLI，任务会通过子进程在 bot 配置的工作目录中执行。新话题可用 `/claude <任务>` 或 `/codex <任务>` 显式选择引擎；`/team` 可查看当前团队，`/schedule <需求>` 与 `/schedules` 管理定时任务。
 
-仓库目前有一组 node:test 回归测试（`tests/product-spec-submission.test.ts`，覆盖 [产品方案交付](domain/product-spec.md) 的提交兜底重跑与 MCP 入参校验），运行方式与踩坑见 [运维手册](operations/runbook.md) 的测试一节。
+仓库目前有三组 node:test 回归测试（`tests/product-spec-submission.test.ts` 覆盖 [产品方案交付](domain/product-spec.md) 的提交兜底重跑与 MCP 入参校验；`tests/provider-error.test.ts` 与 `tests/cli-recovery.test.ts` 覆盖 [后端故障恢复](domain/provider-recovery.md) 的错误分类与 runner 重试/冷却边界），运行方式与踩坑见 [运维手册](operations/runbook.md) 的测试一节。
 
 ## 核心概念导航
 
@@ -87,6 +87,7 @@ pnpm test
 | 角色模型动态配置 | /model 配置卡片按「角色 × 引擎」免重启覆盖模型后端：三级来源合并、热重载、端点探测 | [角色模型动态配置](domain/model-config.md) |
 | 任务卡片系统 | 飞书卡片构建 + 节流刷新机制（含澄清/方案/审批/定时卡片族） | [任务卡片系统](domain/task-card.md) |
 | AI CLI 输出解析 | Claude Code / Codex headless 输出解析与统一事件协议 | [AI CLI 输出解析](domain/ai-cli-probe.md) |
+| 后端故障恢复 | 多厂家模型后端错误分类（七类）、自动重试边界、冷却作用域与 provider-errors.json 扩展规则 | [后端故障恢复](domain/provider-recovery.md) |
 | 运维手册 | 环境变量、运行命令、飞书配置、排查、测试 | [运维手册](operations/runbook.md) |
 | 源码地图 | 文件树与职责索引 | [源码地图](source-map.md) |
 
@@ -114,5 +115,5 @@ flowchart LR
 | 领域 | 锚点 | 延后原因 |
 |------|------|----------|
 | 任意 @ 触发协作 | [多 bot 协作](domain/collaboration.md) 的取件分支 | 外部 bot 消息 @ 当前 bot 但领取不到交接单时仅记日志按外部派活处理（内部团队 bot 的非派发消息已被直接过滤），通用路由未实现 |
-| 测试覆盖面 | `tests/`（目前仅产品方案提交一组） | 现有 node:test 回归只覆盖 [产品方案交付](domain/product-spec.md) 的提交兜底与 MCP 校验，其余领域（会话、协作、调度等）尚无测试 |
+| 测试覆盖面 | `tests/`（产品方案、后端错误分类、runner 重试三组） | 现有 node:test 回归覆盖 [产品方案交付](domain/product-spec.md)、[后端故障恢复](domain/provider-recovery.md) 的分类与重试边界，其余领域（会话、协作路由、调度等）尚无测试 |
 | 部署 CI | `SETUP.md`、`src/deploy-cli.ts`、`.github/workflows/` | 部署常驻已有 pm2 封装（`pnpm agent-team`，见 [运维手册](operations/runbook.md)），但仍无应用部署的 CI 流水线，仅有 OpenWiki 文档自动更新工作流 |

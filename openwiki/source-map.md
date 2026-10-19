@@ -23,7 +23,8 @@ Agent-Team/
 │   ├── core/
 │   │   ├── bot-registry.ts   # bots.json 解析校验 + 凭证环境变量解析 + buildBotPrompt 提示词组装
 │   │   ├── team-registry.ts  # TeamRegistry 团队注册表：名单上下文 + Skill 缺失检查 + 同组备用成员
-│   │   ├── session-limit-tracker.ts # Claude 会话限额检测与追踪（同组代班依据）
+│   │   ├── session-limit-tracker.ts # 模型后端冷却追踪（按端点+凭证哈希的后端域，同组代班依据）
+│   │   ├── provider-error.ts # 多厂家后端错误分类 + 策略加载（config/provider-errors.json）+ 重试提示解析
 │   │   ├── clarification.ts  # 需求澄清：数据模型 + ClarificationFlowStore
 │   │   ├── collaboration.ts  # bot 间协作交接单 + 共享收件箱 CollaborationInbox + dispatch_task 协议
 │   │   ├── approval.ts       # 高危操作审批：数据模型 + ApprovalFlowStore
@@ -63,18 +64,22 @@ Agent-Team/
 │       ├── registry.ts        # 按 CliId 取适配器（claude / codex）
 │       ├── claude-adapter.ts  # Claude Code 输出 → 统一事件
 │       ├── codex-adapter.ts   # Codex 输出 → 统一事件
-│       ├── runner.ts          # CLI 子进程生命周期（spawn/超时/取消/工具调用收集）
+│       ├── runner.ts          # CLI 子进程生命周期（spawn/超时/取消/自动重试与冷却/工具调用收集）
 │       ├── native-compact.ts  # /compact 原生上下文压缩（Claude stream-json / Codex app-server）
 │       ├── native-sessions.ts # /resume 会话清单（Claude 本地 JSONL / Codex app-server thread/list）
 │       ├── spawn-cli.ts       # 跨平台 spawn：Windows shell 启动 + 进程树清理
 │       └── timeout.ts         # armTimeout 钳制 setTimeout 上限
 ├── config/
-│   └── bots.example.json      # bot 注册文件模板（teamLeader + defaultProductDeliveryMode + bots 数组）
+│   ├── bots.example.json      # bot 注册文件模板（teamLeader + defaultProductDeliveryMode + bots 数组）
+│   └── provider-errors.json   # 多厂家后端错误扩展规则与冷却默认值（默认空规则，PROVIDER_ERROR_CONFIG 可换路径）
 ├── tests/
-│   └── product-spec-submission.test.ts  # 产品方案提交链路回归（node:test：落盘校验、兜底重跑、MCP 入参、rejectedToolCalls）
+│   ├── product-spec-submission.test.ts  # 产品方案提交链路回归（node:test：落盘校验、兜底重跑、MCP 入参、rejectedToolCalls）
+│   ├── provider-error.test.ts           # 后端错误分类/提取/策略/冷却作用域/代班排除回归
+│   └── cli-recovery.test.ts             # runner 自动重试与冷却边界回归（真实子进程 fixture）
 ├── docs/
 │   ├── ClaudeCode和Codex在headless输出结构.md  # 两种 CLI 输出对照表
-│   └── 完整的内部交接单.md    # bot 间协作设计文档
+│   ├── 完整的内部交接单.md    # bot 间协作设计文档
+│   └── 模型后端故障恢复.md    # 多厂家错误分类与故障恢复设计文档
 ├── workspace-template/       # 新工作区模板：grill-me / to-spec / to-tickets / implement-ticket / verify 五个 Skill
 │   │                         # + code-reviewer / tester 子代理定义（.claude .md 与 .codex .toml）
 │   └── docs/agents/issue-tracker.md  # 本地 Markdown issue 跟踪约定（.scratch/<slug>/ 下 spec 与 tickets）
@@ -83,7 +88,7 @@ Agent-Team/
 ├── .github/
 │   └── workflows/
 │       └── openwiki-update.yml    # OpenWiki 文档自动更新工作流
-├── .env.example              # 环境变量模板（BOTS_CONFIG、FEISHU_* 凭证、CLI_WORKDIR、*_TIMEOUT_MS、PATROL_WEBHOOK_URL）
+├── .env.example              # 环境变量模板（BOTS_CONFIG、FEISHU_* 凭证、CLI_WORKDIR、*_TIMEOUT_MS、PROVIDER_ERROR_CONFIG、PATROL_WEBHOOK_URL）
 ├── .gitattributes            # 统一 LF 检出（* text=auto eol=lf），与 .prettierrc 的 endOfLine 对齐
 ├── .gitignore                # 忽略 node_modules/ dist/ .env data/ *.log
 ├── .prettierrc / .prettierignore  # Prettier 格式化配置
@@ -180,8 +185,9 @@ Agent-Team/
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
 | `bot-registry.ts` | `loadAgentTeamConfig` / `parseAgentTeamConfig` / `buildBotPrompt` / `BotConfig` / `AgentTeamConfig` | bots.json 的 zod 校验（含 teamLeader 与 group 代班组）、凭证环境变量解析（系统级 FEISHU_APP_ID/SECRET 回退）、工作目录优先级、提示词组装（详见 [多 bot 注册](domain/bot-registry.md)） |
-| `team-registry.ts` | `TeamRegistry` / `MissingSkill` | 团队名单上下文、Skill 缺失检查、`/team` 数据源、同组备用成员查询（`getGroupMembers` / `getAvailableFallbackMembers`，限额代班用） |
-| `session-limit-tracker.ts` | `SessionLimitTracker` / `isSessionLimitError` / `extractResetTime` / `parseResetDurationMs` / `sessionLimitTracker` | Claude 会话限额检测与内存追踪（受限时长按重置时钟点解析，兜底 5 小时），驱动同组代班与 Team Leader 移交（详见 [多 bot 协作](domain/collaboration.md)） |
+| `team-registry.ts` | `TeamRegistry` / `MissingSkill` | 团队名单上下文、Skill 缺失检查、`/team` 数据源、同组备用成员查询（`getGroupMembers` / `getAvailableFallbackMembers`，`getAvailability` 按各 bot 实时 `cliEnv` 查后端冷却，代班用） |
+| `session-limit-tracker.ts` | `SessionLimitTracker` / `backendScopeKey` / `backendEndpoint` / `sessionLimitTracker` | 模型后端冷却的内存追踪：按「引擎 + 端点 + 凭证」哈希出账号/模型域键（支持 `AGENT_TEAM_QUOTA_GROUP` 显式合并），`markFailure` / `getLimitInfo` / `clearLimit`，驱动同组代班与 Team Leader 移交（详见 [多 bot 协作](domain/collaboration.md) 与 [后端故障恢复](domain/provider-recovery.md)） |
+| `provider-error.ts` | `ProviderFailureTypeSchema` / `classifyProviderError` / `extractProviderErrorDetails` / `parseProviderErrorPolicy` / `getProviderErrorPolicy` / `parseRetryAfter` / `parseResetDurationMs` / `providerFailureLabel` / `providerFailureGuidance` | 多厂家后端错误分类：七类错误（限流/额度/计费/认证/配置/服务不可用/未知）、结构化字段优先识别、内置中英文文案与状态码规则、`config/provider-errors.json` 扩展规则加载、服务端重试提示解析（详见 [后端故障恢复](domain/provider-recovery.md)） |
 | `clarification.ts` | `ClarificationRequestSchema` / `ClarificationFlowStore` / `findClarificationRequest` / `isClarificationOwner` | 需求澄清数据模型、按任务存储的流程状态机（详见 [需求澄清](domain/clarification.md)） |
 | `approval.ts` / `approval-store.ts` | `ApprovalRequestSchema` / `ApprovalFlowStore` / `JsonApprovalFlowStore` / `findApprovalRequest` / `formatApprovalDecision` | 高危操作审批数据模型、同任务旧流程过期、JSON 持久化（详见 [高危操作审批](domain/approval.md)） |
 | `product-spec.ts` / `product-spec-store.ts` | `ProductSpecRequestSchema` / `ProductSpecToolInputSchema` / `ProductSpecFlowStore` / `JsonProductSpecFlowStore` / `isProductSpecOwner` | local/lark-doc 双模式方案请求校验（工作区内相对路径、Docx 链接）、MCP 注册用扁平入参 schema（顶层 union 会被 SDK 降级）、流程存储（详见 [产品方案交付](domain/product-spec.md)） |
@@ -208,7 +214,7 @@ Agent-Team/
 | `card-action-handler.ts` | `createCardActionHandler` / `scheduleApprovalContinuation` | 卡片回调：`approve_product_spec`、`answer_clarification`、`decide_approval`、`resume_cli_session`、`abort_task` |
 | `clarification-runner.ts` | `continueClarificationFlow` | 答案收齐后拼 prompt 回原话题续跑 CLI，支持多轮澄清 |
 | `approval-runner.ts` | `continueApprovalFlow` | 审批决定（含超时自动拒绝）回传 CLI 续跑：批准继续执行、拒绝安全收束 |
-| `collaboration-service.ts` | `CollaborationService` / `CollaborationDispatch` | 协作派发三步全成：登记 inbox → 发协作卡片 → @ 目标 bot，失败回滚收件箱；派发前检测目标限额并自动转派同组备用成员 |
+| `collaboration-service.ts` | `CollaborationService` / `CollaborationDispatch` | 协作派发三步全成：登记 inbox → 发协作卡片 → @ 目标 bot，失败回滚收件箱；派发前检测目标后端冷却并自动转派同组备用成员 |
 | `scheduler.ts` | `Scheduler` | 定时调度中枢：逐任务布防 setTimeout（cron 用 croner）、防重叠、重启补账（详见 [定时任务调度](domain/scheduling.md)） |
 | `schedule-watcher.ts` | `startScheduleFileWatcher` / `reconcileScheduleFile` | schedules.json 热更新对账（watchFile 轮询 + 防抖 + 防重入） |
 | `schedule-api.ts` | `startScheduleApi` | 本地 HTTP 管理接口：REST 增删改查 + `/api/schedules/manage` 供 MCP 工具回传 |
@@ -231,12 +237,12 @@ Agent-Team/
 
 | 文件 | 关键导出 | 说明 |
 |------|----------|------|
-| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `CliCompactPlan` / `CliSessionSummary` / `CliToolCall` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / stats / tool_call / result / error；`CliRunResult.toolCalls` 只含成功的应用层调用，被拒的进 `rejectedToolCalls`（供上层带真实原因重试）；Windows 下 prompt 走 stdin；压缩计划与会话摘要类型 |
+| `types.ts` | `CliAdapter` / `CliEvent` / `CliRunResult` / `CliRunStats` / `CliCompactPlan` / `CliSessionSummary` / `CliToolCall` / `promptInputForPlatform` | 统一事件协议：session / tool_start / tool_end / context / stats / tool_call / result / retry / error；`error` 事件可附结构化 `details`（status / code / retryAfterMs / resetAt），`retry` 由 runner 自动重试时发出；`CliRunResult.toolCalls` 只含成功的应用层调用，被拒的进 `rejectedToolCalls`（供上层带真实原因重试）；Windows 下 prompt 走 stdin；压缩计划与会话摘要类型 |
 | `app-tools.ts` | 五个工具名常量 / `claudeAppToolArgs` / `codexAppToolArgs` | 应用层 MCP 工具注册：Claude 用 `--mcp-config` JSON，Codex 用 `-c` 配置覆盖；开发态借 tsx 跑 .ts 服务，编译产物用 node 跑 .js |
 | `registry.ts` | `getCliAdapter` / `listCliAdapters` / `parseCliId` | 按 `CliId` 取适配器（claude / codex）并列出引擎清单 |
 | `claude-adapter.ts` | `ClaudeAdapter` | `claude -p --output-format stream-json --verbose` 的参数组装与逐行事件翻译；`mcp__agent_team__*` 五个工具名归一为统一名后吐 `tool_call` |
 | `codex-adapter.ts` | `CodexAdapter` | `codex exec --json --skip-git-repo-check --yolo` 的参数组装与事件翻译（Windows 用 stdin prompt 与 `--dangerously-bypass-approvals-and-sandbox`）；`agent_team` 的 `mcp_tool_call` 吐 `tool_call`，`turn.completed` 额外吐 `stats` |
-| `runner.ts` | `runCli` / `RunCliOptions` | spawn 子进程、readline 逐行读、默认 2 小时超时（`CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖，0 或非法值回退默认）、AbortSignal 取消、`stopToolNames` 命中即杀进程；`tool_call` 按 toolUseId 去重收集，成功的进 `toolCalls`，失败调用移入 `rejectedToolCalls` 随结果返回 |
+| `runner.ts` | `runCli` / `RunCliOptions` / `ProviderCliError` | spawn 子进程、readline 逐行读、默认 2 小时超时（`CLAUDE_TIMEOUT_MS` / `CODEX_TIMEOUT_MS` / `CLI_TIMEOUT_MS` 覆盖，0 或非法值回退默认）、AbortSignal 取消、`stopToolNames` 命中即杀进程；错误经 `classifyProviderError` 分类后，retryable 且未执行工作的轮次在共享超时预算内自动重试，放弃后按后端域登记冷却（见 [后端故障恢复](domain/provider-recovery.md)）；`tool_call` 按 toolUseId 去重收集，成功的进 `toolCalls`，失败调用移入 `rejectedToolCalls` 随结果返回 |
 | `native-compact.ts` | `compactCliSession` / `CompactCliSessionResult` | `/compact` 的原生上下文压缩：Claude 走 `-p - --resume` + stream-json，Codex 走 app-server JSON-RPC |
 | `native-sessions.ts` | `listNativeCliSessions` / `CliSessionSummary` | `/resume` 的会话清单：Claude 扫 `~/.claude/projects` JSONL，Codex 走 app-server `thread/list` |
 | `spawn-cli.ts` | `spawnCli` / `killCli` | Windows 下 shell 启动 `.cmd` 包装的 CLI；`killCli` 用 `taskkill /t /f` 连进程树清理避免孤儿进程 |
