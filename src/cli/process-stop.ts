@@ -62,15 +62,11 @@ const terminateWindowsTree = (
     ) => {
       if (completed) return
       completed = true
-      try {
-        report?.({
-          ...result,
-          method: 'windows-taskkill',
-          durationMs: Date.now() - startedAt,
-        })
-      } catch {
-        // 诊断观察者不参与终止判定，不能使已完成的终止 Promise 永久悬挂。
-      }
+      notifyStop(report, {
+        ...result,
+        method: 'windows-taskkill',
+        durationMs: Date.now() - startedAt,
+      })
       resolve(result.outcome === 'confirmed')
     }
 
@@ -109,3 +105,14 @@ const terminateWindowsTree = (
       })
     })
   })
+
+const notifyStop = (
+  report: ((result: ProcessStopReport) => void) | undefined,
+  result: ProcessStopReport,
+): void => {
+  try {
+    report?.(result)
+  } catch {
+    // 诊断观察者不参与终止判定，不能使已完成的终止 Promise 永久悬挂。
+  }
+}
