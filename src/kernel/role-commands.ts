@@ -28,11 +28,11 @@ export const prepareRoleCommand = (input: {
 }): (() => { id: string }) => {
   const { command, store } = input
   const role = store.get('role_versions', command.roleId, roleVersionSchema)
-  new SkillStore(store).resolve(role.skills)
   if (role.version !== command.expectedRoleVersion)
     throw new Error('VERSION_CONFLICT')
   if (command.type === 'role.setEnabled')
     return () => setEnabled(store, command)
+  new SkillStore(store).resolve(role.skills)
 
   const active = store
     .list('runs', runSchema)
@@ -107,7 +107,10 @@ const setEnabled = (
   const state = readiness.read(role)
   if (state.version !== command.expectedReadinessVersion)
     throw new Error('VERSION_CONFLICT')
-  if (command.enabled) assertTrialPassed(store, state.latestTrialRunId, role)
+  if (command.enabled) {
+    new SkillStore(store).resolve(role.skills)
+    assertTrialPassed(store, state.latestTrialRunId, role)
+  }
   readiness.save({
     ...state,
     version: state.version + 1,

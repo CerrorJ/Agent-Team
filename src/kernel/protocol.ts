@@ -11,7 +11,7 @@ export * from './feishu-contracts.js'
 export * from './skill-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.5.1'
+export const KERNEL_VERSION = '0.5.2'
 export const DATA_SCHEMA_VERSION = 7
 
 const requestBase = {

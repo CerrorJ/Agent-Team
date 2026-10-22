@@ -238,6 +238,34 @@ test('技能预览不自动安装；原子激活、固定角色/Run、卸载保�
       expectedVersion: 1,
     })
     assert.equal((await fixture.snapshot()).skills[0]?.available, false)
+
+    const readiness = (await fixture.snapshot()).roleReadiness.find(
+      (item) => item.roleId === roleId,
+    )!
+
+    await fixture.command({
+      type: 'role.setEnabled',
+      roleId,
+      expectedRoleVersion: 1,
+      expectedReadinessVersion: readiness.version,
+      enabled: false,
+    })
+    assert.equal(
+      (await fixture.snapshot()).roleReadiness.find(
+        (item) => item.roleId === roleId,
+      )?.enabled,
+      false,
+    )
+    await assert.rejects(
+      fixture.command({
+        type: 'role.setEnabled',
+        roleId,
+        expectedRoleVersion: 1,
+        expectedReadinessVersion: readiness.version + 1,
+        enabled: true,
+      }),
+      /SKILL_NOT_AVAILABLE/,
+    )
     assert.ok(
       existsSync(skillStoragePath(fixture.dataDirectory, skill.id, 'versions')),
     )
