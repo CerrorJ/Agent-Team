@@ -40,7 +40,10 @@ test(
         cwd,
         prompt: 'fixture',
         signal: controller.signal,
-        onProcessStop: (report) => reports.push(report),
+        onProcessStop: (report) => {
+          reports.push(report)
+          throw new Error('diagnostic observer fixture')
+        },
       })
 
       for (

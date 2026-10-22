@@ -62,11 +62,15 @@ const terminateWindowsTree = (
     ) => {
       if (completed) return
       completed = true
-      report?.({
-        ...result,
-        method: 'windows-taskkill',
-        durationMs: Date.now() - startedAt,
-      })
+      try {
+        report?.({
+          ...result,
+          method: 'windows-taskkill',
+          durationMs: Date.now() - startedAt,
+        })
+      } catch {
+        // 诊断观察者不参与终止判定，不能使已完成的终止 Promise 永久悬挂。
+      }
       resolve(result.outcome === 'confirmed')
     }
 

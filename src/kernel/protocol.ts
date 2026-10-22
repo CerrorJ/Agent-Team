@@ -1,10 +1,10 @@
-import { z } from 'zod'
+﻿import { z } from 'zod'
 import { businessCommandSchema } from './business-contracts.js'
 export * from './business-contracts.js'
 export * from './activity-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.2.4'
+export const KERNEL_VERSION = '0.2.5'
 export const DATA_SCHEMA_VERSION = 2
 
 const requestBase = {
@@ -12,7 +12,7 @@ const requestBase = {
   requestId: z.string().uuid(),
 }
 
-/** 私有连接也必须校验输入；业务操作使用版本化命令，不接受任意 shell 或文件访问。 */
+/** 绉佹湁杩炴帴涔熷繀椤绘牎楠岃緭鍏ワ紱涓氬姟鎿嶄綔浣跨敤鐗堟湰鍖栧懡浠わ紝涓嶆帴鍙椾换鎰?shell 鎴栨枃浠惰闂€?*/
 export const requestSchema = z.discriminatedUnion('method', [
   z.object({ ...requestBase, method: z.literal('kernel.handshake') }).strict(),
   z.object({ ...requestBase, method: z.literal('kernel.health') }).strict(),
