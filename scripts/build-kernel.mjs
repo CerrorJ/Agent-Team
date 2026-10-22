@@ -1,4 +1,4 @@
-﻿import { execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { mkdir, writeFile, copyFile, readFile } from 'node:fs/promises'
 import { build } from 'esbuild'
 
