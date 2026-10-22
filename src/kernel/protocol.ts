@@ -6,10 +6,11 @@ export * from './product-contracts.js'
 export * from './role-contracts.js'
 export * from './workspace-contracts.js'
 export * from './credential-contracts.js'
+export * from './human-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.3.2'
-export const DATA_SCHEMA_VERSION = 4
+export const KERNEL_VERSION = '0.4.0'
+export const DATA_SCHEMA_VERSION = 5
 
 const requestBase = {
   protocolVersion: z.literal(PROTOCOL_VERSION),

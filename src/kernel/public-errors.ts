@@ -1,4 +1,9 @@
 const messages: Record<string, string> = {
+  HUMAN_REQUEST_EXPIRED: '人工请求已经过期，不能继续放行',
+  HUMAN_REQUEST_NOT_PENDING: '人工请求已经处理或撤销',
+  HUMAN_DECISION_INVALID: '决定与本次请求类型或题目不匹配',
+  HUMAN_SESSION_REQUIRED: '缺少可靠续接会话，不能继续本次执行',
+  STALE_HUMAN_REQUEST: '旧人工请求不能影响当前执行',
   TEAM_PLAN_INVALID: '团队计划包含重复或无效的子任务引用',
   TEAM_DEPENDENCY_CYCLE: '子任务不能形成循环依赖',
   TEAM_NOT_STARTED: '请先启动所属团队任务',

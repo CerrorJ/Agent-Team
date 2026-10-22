@@ -9,6 +9,7 @@ import {
 } from './product-contracts.js'
 import { productCommandSchemas } from './product-command-contracts.js'
 import { roleCommandSchemas, roleTrialSchema } from './role-contracts.js'
+import { humanCommandSchemas } from './human-contracts.js'
 
 const id = z.string().uuid()
 const shortText = z.string().trim().min(1).max(200)
@@ -65,6 +66,8 @@ export const runStatusSchema = z.enum([
   'queued',
   'preparing',
   'running',
+  'waiting_input',
+  'waiting_approval',
   'stopping',
   'stopped',
   'succeeded',
@@ -110,6 +113,16 @@ export const runSchema = z
     startedAt: z.string().datetime().nullable(),
     endedAt: z.string().datetime().nullable(),
     failureCode: z.string().nullable(),
+    pendingHumanRequestId: id.nullable().optional(),
+    continuation: z
+      .object({
+        requestId: id,
+        sessionId: z.string().min(1).max(200),
+        prompt: z.string().min(1).max(40_000),
+      })
+      .strict()
+      .nullable()
+      .optional(),
     processState: z.enum([
       'not_started',
       'active',
@@ -147,6 +160,7 @@ export const acceptanceSchema = z
   .strict()
 
 export const businessCommandSchema = z.discriminatedUnion('type', [
+  ...humanCommandSchemas,
   ...teamCommandSchemas,
   z
     .object({

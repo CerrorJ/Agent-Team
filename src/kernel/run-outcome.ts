@@ -11,6 +11,7 @@ import { collectRunDelivery } from './git-workspace.js'
 import { trialSucceeded } from './role-trial-files.js'
 import { finishRoleTrial } from './role-trial-state.js'
 import type { WorkspaceStore } from './workspace-store.js'
+import { pauseForHuman } from './human-pause.js'
 
 interface RunOutcome {
   store: WorkspaceStore
@@ -30,6 +31,15 @@ export const finishRun = (input: RunOutcome): void => {
     markUncertain(input.store, current)
     return
   }
+  if (
+    input.result &&
+    pauseForHuman({
+      store: input.store,
+      runId: input.runId,
+      result: input.result,
+    })
+  )
+    return
   const stopped = current.status === 'stopping'
 
   const effective =
@@ -53,7 +63,7 @@ const persistOutcome = (input: PreparedOutcome): void => {
   const { store, stopped, current, delivery } = input
   store.database
     .prepare(
-      "UPDATE execution_segments SET ended_at=?,status='ended' WHERE run_id=?",
+      "UPDATE execution_segments SET ended_at=?,status='ended' WHERE run_id=? AND ended_at IS NULL",
     )
     .run(new Date().toISOString(), current.id)
   const run = store.get('runs', input.runId, runSchema)

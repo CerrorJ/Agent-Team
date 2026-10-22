@@ -157,6 +157,27 @@ export const collectRunDelivery = (
   }
 }
 
+/** 续接复用本 Run 的目录，拒绝符号链接重定向、换仓库或切分支；不重置已有贡献。 */
+export const validateRunContinuation = (input: {
+  project: Project
+  run: Run
+  dataDirectory: string
+}): void => {
+  const { project, run, dataDirectory } = input
+  const base = realpathSync(join(dataDirectory, 'worktrees'))
+  const actual = realpathSync(run.workDirectory)
+  if (relative(join(base, run.id), actual)) throw new Error('INVALID_WORKSPACE')
+
+  const common = (cwd: string) =>
+    realpathSync(resolve(cwd, git(cwd, ['rev-parse', '--git-common-dir'])))
+
+  if (
+    common(actual) !== common(project.repositoryPath) ||
+    git(actual, ['symbolic-ref', '--short', 'HEAD']) !== run.executionBranch
+  )
+    throw new Error('INVALID_WORKSPACE')
+}
+
 /** 仅应用已验收贡献，每份应用一次；冲突保留隔离目录并失败，禁止重置主仓库。 */
 export const applyRunInputPatches = (run: Run, patches: string[]): string => {
   try {

@@ -13,6 +13,9 @@ import type { CliExecutionPort } from './run-execution.js'
 import type { CredentialResolver } from './credential-contracts.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import type { BusinessCommand } from './business-contracts.js'
+import { resolveHumanRequest } from './human-commands.js'
+import type { HumanActor } from './human-contracts.js'
+import { expireHumanRequests } from './human-expiration.js'
 
 export interface CommandOutcome {
   id: string
@@ -38,11 +41,27 @@ export class WorkspaceService {
     this.scheduler.recover()
   }
 
-  command(input: { key: string; command: BusinessCommand }): CommandOutcome {
+  command(
+    input: { key: string; command: BusinessCommand },
+    actor: HumanActor = { channel: 'desktop', identity: 'local-owner' },
+  ): CommandOutcome {
     if (this.closing) throw new Error('KERNEL_STOPPED: 内核正在退出')
     const previous = this.ledger.find<CommandOutcome>(input)
     if (previous) return previous
-    const operation = this.prepare(input.command)
+    expireHumanRequests(this.options.store)
+
+    const operation =
+      input.command.type === 'human.resolve'
+        ? () =>
+            resolveHumanRequest({
+              store: this.options.store,
+              command: input.command as Extract<
+                BusinessCommand,
+                { type: 'human.resolve' }
+              >,
+              actor,
+            })
+        : this.prepare(input.command)
 
     const result = this.ledger.execute(input, () => ({
       ...operation(),
@@ -63,7 +82,9 @@ export class WorkspaceService {
     await this.scheduler.shutdown()
   }
 
-  private prepare(command: BusinessCommand): () => { id: string } {
+  private prepare(
+    command: Exclude<BusinessCommand, { type: 'human.resolve' }>,
+  ): () => { id: string } {
     const { store, dataDirectory } = this.options
     if (isProductCommand(command))
       return () => saveProductObject({ store, command })

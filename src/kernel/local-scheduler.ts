@@ -5,6 +5,7 @@ import { finishRoleTrial } from './role-trial-state.js'
 import { queueBlocker } from './queue-rules.js'
 import { refreshTeamProgress } from './team-progress.js'
 import type { CredentialResolver } from './credential-contracts.js'
+import { expireHumanRequests } from './human-expiration.js'
 
 type ActiveExecution = { controller: AbortController; finished: Promise<void> }
 
@@ -13,6 +14,7 @@ export class LocalScheduler {
   private readonly active = new Map<string, ActiveExecution>()
   private closing = false
   private faulted = false
+  private readonly expirationTimer: ReturnType<typeof setInterval>
 
   constructor(
     private readonly options: {
@@ -21,7 +23,16 @@ export class LocalScheduler {
       execute?: CliExecutionPort
       credentials?: CredentialResolver
     },
-  ) {}
+  ) {
+    this.expirationTimer = setInterval(() => {
+      try {
+        this.kick()
+      } catch {
+        this.faulted = true
+      }
+    }, 1000)
+    this.expirationTimer.unref()
+  }
 
   recover(): void {
     const store = this.options.store
@@ -42,6 +53,7 @@ export class LocalScheduler {
   kick(): void {
     if (this.closing || this.faulted) return
     const store = this.options.store
+    expireHumanRequests(store)
     refreshTeamProgress(store)
     for (const [id, execution] of this.active) {
       if (store.get('runs', id, runSchema).status === 'stopping')
@@ -88,6 +100,7 @@ export class LocalScheduler {
 
   async shutdown(): Promise<void> {
     this.closing = true
+    clearInterval(this.expirationTimer)
     const store = this.options.store
     this.assertKnown()
     for (const run of store.list('runs', runSchema)) {

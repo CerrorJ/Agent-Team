@@ -18,6 +18,7 @@ import type { WorkspaceStore } from './workspace-store.js'
 import { captureTaskConfiguration } from './run-snapshots.js'
 import { assertRoleCanExecute } from './role-execution-guard.js'
 import { finishRoleTrial } from './role-trial-state.js'
+import { stopWaitingRun } from './human-stop.js'
 
 export type RunCommand = Extract<
   BusinessCommand,
@@ -171,6 +172,10 @@ const stopRun = (
   if (run.version !== command.expectedVersion)
     throw new Error('VERSION_CONFLICT: 执行已改变')
   if (run.processState === 'uncertain') throw new Error('STATE_UNCERTAIN')
+  if (['waiting_input', 'waiting_approval'].includes(run.status)) {
+    stopWaitingRun(store, run)
+    return { id: run.id }
+  }
   const status = run.status === 'queued' ? 'cancelled' : 'stopping'
   assertExecutionTransition(run.status, status)
   store.updateRun({

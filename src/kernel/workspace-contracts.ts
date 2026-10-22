@@ -14,6 +14,7 @@ import {
 } from './product-contracts.js'
 import { roleReadinessSchema } from './role-contracts.js'
 import { activitySchema } from './activity-contracts.js'
+import { humanRequestSchema } from './human-contracts.js'
 
 export const workspaceSnapshotSchema = z
   .object({
@@ -28,6 +29,7 @@ export const workspaceSnapshotSchema = z
     requirements: z.array(requirementVersionSchema).default([]),
     teams: z.array(teamVersionSchema).default([]),
     roleReadiness: z.array(roleReadinessSchema).default([]),
+    humanRequests: z.array(humanRequestSchema).default([]),
     logs: z.array(activitySchema),
   })
   .strict()

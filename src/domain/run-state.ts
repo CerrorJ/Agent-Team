@@ -2,6 +2,8 @@ export type ExecutionState =
   | 'queued'
   | 'preparing'
   | 'running'
+  | 'waiting_input'
+  | 'waiting_approval'
   | 'stopping'
   | 'stopped'
   | 'succeeded'
@@ -12,7 +14,15 @@ export type ExecutionState =
 const transitions: Record<ExecutionState, readonly ExecutionState[]> = {
   queued: ['preparing', 'cancelled', 'failed'],
   preparing: ['running', 'stopping', 'failed'],
-  running: ['stopping', 'succeeded', 'failed'],
+  running: [
+    'stopping',
+    'waiting_input',
+    'waiting_approval',
+    'succeeded',
+    'failed',
+  ],
+  waiting_input: ['queued', 'stopped', 'failed'],
+  waiting_approval: ['queued', 'stopped', 'failed'],
   stopping: ['stopped', 'failed'],
   stopped: [],
   succeeded: [],
