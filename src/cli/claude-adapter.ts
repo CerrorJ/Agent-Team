@@ -1,4 +1,5 @@
 import { promptInputForPlatform } from './types.js'
+import { parseStructuredHumanOutput } from './structured-human-output.js'
 import {
   controlledClaudeArgs,
   type ControlledClaudePolicy,
@@ -30,6 +31,7 @@ interface ClaudeEvent {
   model?: unknown
   is_error?: unknown
   result?: unknown
+  structured_output?: unknown
   session_id?: unknown
   duration_ms?: unknown
   num_turns?: unknown
@@ -410,6 +412,18 @@ export class ClaudeAdapter implements CliAdapter {
             ...extractProviderErrorDetails(event),
           },
           ...(sessionId ? { sessionId } : {}),
+        },
+      ]
+    }
+    if (this.controlledPolicy?.humanRequests) {
+      const structured = parseStructuredHumanOutput(event.structured_output)
+      if (structured.type !== 'result') return [structured]
+      const stats = parseStats(event)
+      return [
+        {
+          ...structured,
+          ...(sessionId ? { sessionId } : {}),
+          ...(stats ? { stats } : {}),
         },
       ]
     }

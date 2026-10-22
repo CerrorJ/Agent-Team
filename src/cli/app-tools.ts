@@ -7,6 +7,7 @@ export const CLARIFICATION_TOOL_NAME = 'request_clarification'
 export const PRODUCT_SPEC_TOOL_NAME = 'request_spec_approval'
 export const DISPATCH_TASK_TOOL_NAME = 'dispatch_task'
 export const REQUEST_APPROVAL_TOOL_NAME = 'request_approval'
+export const PLAN_REVIEW_TOOL_NAME = 'request_plan_review'
 export const SCHEDULE_MANAGE_TOOL_NAME = 'schedule_manage'
 // Claude Code 会给 MCP 工具名加 mcp__<server>__ 前缀，事件里要用这个名字匹配
 export const CLAUDE_CLARIFICATION_TOOL_NAME = `mcp__agent_team__${CLARIFICATION_TOOL_NAME}`

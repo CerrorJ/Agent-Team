@@ -318,6 +318,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
           const resultSessionId = event.sessionId ?? observedSessionId
           finalResult = {
             answer: observedAnswer,
+            ...(event.humanRequest ? { humanRequest: event.humanRequest } : {}),
             ...(resultSessionId ? { sessionId: resultSessionId } : {}),
             ...(observedStats ? { stats: observedStats } : {}),
           }

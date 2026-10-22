@@ -1,8 +1,13 @@
 import type { CliPromptInput } from './types.js'
+import {
+  codexTrustedToolArgs,
+  type TrustedAppTools,
+} from './trusted-app-tools.js'
 
 export interface ControlledCodexPolicy {
   permission: 'read-only' | 'workspace-write'
   providerBaseUrl?: string
+  appTools?: TrustedAppTools
 }
 
 /** 桌面执行明确权限，不继承旧飞书入口的 bypass，也不修改用户 CLI 配置。 */
@@ -26,6 +31,8 @@ export const controlledCodexArgs = (input: {
   if (process.platform === 'win32') args.push('-c', 'windows.sandbox="mxc"')
   if (input.policy.providerBaseUrl)
     args.push(...providerArgs(input.policy.providerBaseUrl))
+  if (input.policy.appTools)
+    args.push(...codexTrustedToolArgs(input.policy.appTools))
   args.push('exec')
   if (input.sessionId) args.push('resume')
   args.push('--json', '--ignore-user-config', '--ignore-rules')

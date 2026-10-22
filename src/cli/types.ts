@@ -75,7 +75,13 @@ export type CliEvent =
       toolName: string
       input: unknown
     }
-  | { type: 'result'; answer: string; sessionId?: string; stats?: CliRunStats }
+  | {
+      type: 'result'
+      answer: string
+      sessionId?: string
+      stats?: CliRunStats
+      humanRequest?: import('../domain/human-request.js').HumanPayload
+    }
   | { type: 'retry'; attempt: number; delayMs: number; reason: string }
   | {
       type: 'error'
@@ -108,6 +114,7 @@ export interface CliAdapter {
 }
 
 export interface CliRunResult {
+  humanRequest?: import('../domain/human-request.js').HumanPayload
   answer: string
   sessionId?: string
   stats?: CliRunStats

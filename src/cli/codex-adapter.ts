@@ -18,6 +18,7 @@ import {
   PRODUCT_SPEC_TOOL_NAME,
   DISPATCH_TASK_TOOL_NAME,
   REQUEST_APPROVAL_TOOL_NAME,
+  PLAN_REVIEW_TOOL_NAME,
   SCHEDULE_MANAGE_TOOL_NAME,
   codexAppToolArgs,
 } from './app-tools.js'
@@ -347,7 +348,8 @@ export class CodexAdapter implements CliAdapter {
           item.tool === PRODUCT_SPEC_TOOL_NAME ||
           item.tool === DISPATCH_TASK_TOOL_NAME ||
           item.tool === REQUEST_APPROVAL_TOOL_NAME ||
-          item.tool === SCHEDULE_MANAGE_TOOL_NAME)
+          item.tool === SCHEDULE_MANAGE_TOOL_NAME ||
+          item.tool === PLAN_REVIEW_TOOL_NAME)
       ) {
         events.push({
           type: 'tool_call',

@@ -1,19 +1,21 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, writeFile, copyFile, readFile } from 'node:fs/promises'
+import { mkdir, writeFile, copyFile } from 'node:fs/promises'
 import { build } from 'esbuild'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { writeKernelNotices } from './kernel-notices.mjs'
 
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
   encoding: 'utf8',
 }).trim()
 const output = 'dist-kernel'
 await mkdir(output, { recursive: true })
-await build({
+const result = await build({
   entryPoints: {
     'embedded-entry': 'src/kernel/embedded-entry.ts',
     kernel: 'src/kernel/kernel.ts',
     protocol: 'src/kernel/protocol.ts',
+    'human-mcp-entry': 'src/kernel/human-mcp-entry.ts',
   },
   outdir: output,
   bundle: true,
@@ -21,6 +23,10 @@ await build({
   target: 'node22',
   format: 'esm',
   legalComments: 'eof',
+  metafile: true,
+  banner: {
+    js: 'import { createRequire as bundleRequire } from "node:module"; const require = bundleRequire(import.meta.url);',
+  },
 })
 const { KERNEL_VERSION, PROTOCOL_VERSION, DATA_SCHEMA_VERSION } = await import(
   pathToFileURL(resolve(output, 'protocol.js')).href
@@ -65,10 +71,4 @@ await writeFile(
   ) + '\n',
 )
 await copyFile('docs/embedded-kernel.md', `${output}/README.md`)
-await writeFile(
-  `${output}/THIRD-PARTY-NOTICES.txt`,
-  'Agent-Team: ISC (package.json), source https://github.com/CerrorJ/Agent-Team\n' +
-    'Node.js SQLite: supplied by host Node/Electron runtime; not vendored.\n\n' +
-    'Zod: https://github.com/colinhacks/zod\n' +
-    (await readFile('node_modules/zod/LICENSE', 'utf8')),
-)
+await writeKernelNotices(result.metafile, output)

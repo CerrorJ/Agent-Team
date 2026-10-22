@@ -89,6 +89,7 @@ export const handshakeSchema = z
         'role-trials',
         'team-workflow',
         'codex-and-claude',
+        'human-workflow',
       ]),
     ),
     unavailable: z.array(z.string()),

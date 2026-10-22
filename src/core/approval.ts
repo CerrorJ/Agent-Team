@@ -1,18 +1,15 @@
 import { randomUUID } from 'node:crypto'
-import { z } from 'zod'
+import {
+  ApprovalRequestSchema,
+  type ApprovalRequest,
+} from '../domain/operation-approval.js'
+export {
+  ApprovalRequestSchema,
+  type ApprovalRequest,
+} from '../domain/operation-approval.js'
 import type { CollaborationOrigin } from './collaboration.js'
 
 export const DEFAULT_APPROVAL_TIMEOUT_SECONDS = 300
-
-export const ApprovalRequestSchema = z.object({
-  operation: z.string().trim().min(1).max(120),
-  detail: z.string().trim().min(1).max(2_000),
-  impact: z.string().trim().min(1).max(500),
-  rollback: z.string().trim().min(1).max(500),
-  timeoutSeconds: z.number().int().min(60).max(3_600).optional(),
-})
-
-export type ApprovalRequest = z.infer<typeof ApprovalRequestSchema>
 
 export interface ApprovalFlow {
   token: string

@@ -53,6 +53,7 @@ export class EmbeddedKernel {
         'role-trials',
         'team-workflow',
         'codex-and-claude',
+        'human-workflow',
       ],
       unavailable: ['feishu', 'skills'],
       runtime: {

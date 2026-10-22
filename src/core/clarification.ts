@@ -2,63 +2,15 @@
 // -> 渲染飞书卡片逐题收集答案 -> 答案拼进下一轮 prompt 继续任务。
 // 本文件只放数据模型、校验与流程存储，卡片交互在 im/ 与 app/ 层。
 import { randomUUID } from 'node:crypto'
-import { z } from 'zod'
+import {
+  ClarificationRequestSchema,
+  type ClarificationRequest,
+} from '../domain/clarification-request.js'
+export {
+  ClarificationRequestSchema,
+  type ClarificationRequest,
+} from '../domain/clarification-request.js'
 import type { CollaborationOrigin } from './collaboration.js'
-
-const OptionSchema = z.object({
-  id: z.string().regex(/^[a-z0-9_-]{1,32}$/),
-  label: z.string().trim().min(1).max(100),
-})
-
-const QuestionSchema = z
-  .object({
-    id: z.string().regex(/^[a-z0-9_-]{1,32}$/),
-    prompt: z.string().trim().min(1).max(300),
-    options: z.array(OptionSchema).min(2).max(4),
-    recommendedOptionId: z
-      .string()
-      .regex(/^[a-z0-9_-]{1,32}$/)
-      .optional(),
-  })
-  .superRefine((question, ctx) => {
-    const optionIds = question.options.map((option) => option.id)
-    if (new Set(optionIds).size !== optionIds.length) {
-      ctx.addIssue({
-        code: 'custom',
-        message: '同一道问题的选项 ID 不能重复',
-        path: ['options'],
-      })
-    }
-    if (
-      question.recommendedOptionId &&
-      !optionIds.includes(question.recommendedOptionId)
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        message: '推荐项必须指向当前问题中的选项',
-        path: ['recommendedOptionId'],
-      })
-    }
-  })
-
-export const ClarificationRequestSchema = z
-  .object({
-    title: z.string().trim().min(1).max(80).default('需求澄清'),
-    intro: z.string().trim().max(300).optional().default(''),
-    questions: z.array(QuestionSchema).min(1).max(5),
-  })
-  .superRefine((request, ctx) => {
-    const questionIds = request.questions.map((question) => question.id)
-    if (new Set(questionIds).size !== questionIds.length) {
-      ctx.addIssue({
-        code: 'custom',
-        message: '同一份澄清请求的问题 ID 不能重复',
-        path: ['questions'],
-      })
-    }
-  })
-
-export type ClarificationRequest = z.infer<typeof ClarificationRequestSchema>
 
 export interface ClarificationAnswer {
   questionId: string

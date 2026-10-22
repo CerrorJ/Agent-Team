@@ -1,7 +1,9 @@
 import type { CliPromptInput } from './types.js'
+import { humanOutputJsonSchema } from './structured-human-output.js'
 
 export interface ControlledClaudePolicy {
   permission: 'read-only' | 'workspace-write'
+  humanRequests?: boolean
 }
 
 /** 原生 Windows 没有 Claude shell 沙箱，因此两平台统一先开放受限文件工具，不提供无隔离命令。 */
@@ -37,6 +39,8 @@ export const controlledClaudeArgs = (input: {
     '--verbose',
   ]
 
+  if (input.policy.humanRequests)
+    args.push('--json-schema', humanOutputJsonSchema())
   if (input.model) args.push('--model', input.model)
   if (input.reasoningEffort) args.push('--effort', input.reasoningEffort)
   if (input.sessionId) args.push('--resume', input.sessionId)

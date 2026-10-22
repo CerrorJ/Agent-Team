@@ -16,4 +16,18 @@ schema 4 升级前保存一致备份，v5 把等待态纳入每任务唯一活�
 
 本增量尚未把受信人工请求 MCP 注册到真实 CLI，未接入桌面人工处理界面、专用飞书连接/卡片/outbox。单次操作决定目前只有请求语义与续接边界，不扩张受控工具权限，不代表可批准任意命令或外部副作用。需要继续实现并验收受信运行时边界，不能宣布 M3 完成。原独立飞书入口和生成的 OpenWiki 未改。
 
+## 受信 CLI 请求增量（后续记录优先）
+
+Codex 正常任务仅注册内核自己的三个 stdio MCP 工具（澄清、方案、单次操作请求），试运行不加载。命令/脚本/环境由内核生成，使用宿主内嵌 Node，不修改用户 CLI 配置；MCP 子进程显式清空提供方密钥与 NODE_OPTIONS。服务不读取 dotenv/业务库、不执行请求中的操作；Runner 取得整树结束证据后才发布人工请求。构建从实际 bundle 依赖图收集完整许可，包括 MCP SDK 1.30.0（锁文件解析版本）、AJV、fast-uri 等，保留旧独立入口。
+
+Claude 继续使用 restricted/safe-mode、空 MCP 和受限文件工具。它通过原生 --json-schema 返回结构化请求并自然结束，经适配器转换为同一领域请求，不伪装为 MCP 调用。CLI 本机验证器使用 draft-7，要求根对象；服务只支持 JSON Schema 子集，因此输出约定采用 outcome 包装、anyOf、约束说明，返回后仍按完整 Zod 长度、题目、类型等校验。不关闭安全模式来加载其他定制。
+
+单独真实开发源码探针中，Codex MCP 与 Claude 原生结构化输出分别完成“真实提出澄清 → confirmed_ended 等待 → 所有者答案 → 同 Run/attempt 1 的新段 → 实际文件核对”，均正常关闭。Claude 最初的默认 draft-2020-12/schema 根联合被真实 CLI 拒绝，未当成功；修复后实际闭环通过。初始合成角色职责与试运行要求冲突导致一次超时，停止确认并保留现场；没有放宽随机挑战。
+
+这些是源码探针，尚非独立 Tester、桌面 UI 或打包验收。单次操作批准不扩大沙箱权限；专用飞书、精确外部操作执行边界和桌面待处理界面继续开发。
+
+依据：[Claude CLI 结构化输出](https://code.claude.com/docs/en/headless)、[官方 schema 子集与返回后校验](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)。
+
+本增量默认测试 77/77、typecheck、lint/规模、format、内核声明与 bundle 构建通过。额外使用已打包 Electron 42 可执行文件，以 ELECTRON_RUN_AS_NODE 运行开发 bundle 的 stdio MCP，实际完成协议握手与三个工具查询，无外部 Node 依赖；这是宿主兼容探针，不是完整桌面人工处理验收。后续先从本增量已提交干净源码装配，再实现桌面待处理入口并独立验收。
+
 Windows 偶发 taskkill 128 的旧状态待确认现场保留；真实开发凭据、macOS 原生和跨仓 CI 仍在纬舟外部清单。

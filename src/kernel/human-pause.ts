@@ -16,7 +16,7 @@ export const pauseForHuman = (input: {
   runId: string
   result: CliRunResult
 }): boolean => {
-  const payload = findHumanPayload(input.result)
+  const payload = input.result.humanRequest ?? findHumanPayload(input.result)
   if (!payload) return false
   const { store } = input
   const run = store.get('runs', input.runId, runSchema)
@@ -42,7 +42,7 @@ export const pauseForHuman = (input: {
       .prepare(
         "UPDATE execution_segments SET ended_at=?,status='ended',session_id=? WHERE id=?",
       )
-      .run(new Date().toISOString(), sessionId, segment.id)
+      .run(new Date().toISOString(), sessionId, String(segment.id))
     new HumanStore(store).add(request)
     store.updateRun({
       ...run,

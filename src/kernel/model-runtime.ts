@@ -3,6 +3,7 @@ import { CodexAdapter } from '../cli/codex-adapter.js'
 import type { Run } from './business-contracts.js'
 import type { ModelProfile } from './product-contracts.js'
 import type { CliAdapter } from '../cli/types.js'
+import { runToolPolicy } from './human-mcp-runtime.js'
 import {
   credentialBindingSchema,
   type CredentialResolver,
@@ -20,7 +21,7 @@ export const executionModel = async (
   const role = run.roleSnapshot
   const profile = role.modelProfileSnapshot
   const custom = await resolveProvider({ profile, cli: role.cli, credentials })
-  const policy = { permission: role.permission }
+  const policy = runToolPolicy(run)
 
   const adapter =
     role.cli === 'claude'
