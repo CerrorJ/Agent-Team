@@ -10,13 +10,7 @@ const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
 }).trim()
 const output = 'dist-kernel'
 await mkdir(output, { recursive: true })
-const result = await build({
-  entryPoints: {
-    'embedded-entry': 'src/kernel/embedded-entry.ts',
-    kernel: 'src/kernel/kernel.ts',
-    protocol: 'src/kernel/protocol.ts',
-    'human-mcp-entry': 'src/kernel/human-mcp-entry.ts',
-  },
+const options = {
   outdir: output,
   bundle: true,
   platform: 'node',
@@ -24,9 +18,30 @@ const result = await build({
   format: 'esm',
   legalComments: 'eof',
   metafile: true,
+}
+const result = await build({
+  ...options,
+  entryPoints: {
+    'embedded-entry': 'src/kernel/embedded-entry.ts',
+    kernel: 'src/kernel/kernel.ts',
+    protocol: 'src/kernel/protocol.ts',
+  },
+})
+const mcp = await build({
+  ...options,
+  entryPoints: { 'human-mcp-entry': 'src/kernel/human-mcp-entry.ts' },
   banner: {
     js: 'import { createRequire as bundleRequire } from "node:module"; const require = bundleRequire(import.meta.url);',
   },
+})
+// 协议同时供 renderer 消费，实际 bundle 不得混入 Node/Electron 兼容注入。
+await build({
+  entryPoints: [`${output}/protocol.js`],
+  bundle: true,
+  platform: 'browser',
+  format: 'esm',
+  write: false,
+  logLevel: 'silent',
 })
 const { KERNEL_VERSION, PROTOCOL_VERSION, DATA_SCHEMA_VERSION } = await import(
   pathToFileURL(resolve(output, 'protocol.js')).href
@@ -71,4 +86,7 @@ await writeFile(
   ) + '\n',
 )
 await copyFile('docs/embedded-kernel.md', `${output}/README.md`)
-await writeKernelNotices(result.metafile, output)
+await writeKernelNotices(
+  { inputs: { ...result.metafile.inputs, ...mcp.metafile.inputs } },
+  output,
+)
