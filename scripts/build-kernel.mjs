@@ -26,8 +26,10 @@ const result = await build({
     kernel: 'src/kernel/kernel.ts',
   },
   banner: {
-    js: 'import { createRequire as bundleRequire } from "node:module"; const require = bundleRequire(import.meta.url);',
+    js: 'import { createRequire as bundleRequire } from "node:module"; import { fileURLToPath as bundleFilePath } from "node:url"; const require = bundleRequire(import.meta.url); const weftpilotSdkDirectory = bundleFilePath(new URL("./vendor/lark-sdk/lib/", import.meta.url));',
   },
+  // 当前依赖中仅 Lark SDK 的版本探测使用此符号；保持路径随产物移动，不写入构建设备绝对路径。
+  define: { __dirname: 'weftpilotSdkDirectory' },
 })
 const contract = await build({
   ...options,
@@ -52,6 +54,15 @@ await build({
 const { KERNEL_VERSION, PROTOCOL_VERSION, DATA_SCHEMA_VERSION } = await import(
   pathToFileURL(resolve(output, 'protocol.js')).href
 )
+await mkdir(`${output}/vendor/lark-sdk`, { recursive: true })
+await copyFile(
+  'node_modules/@larksuiteoapi/node-sdk/package.json',
+  `${output}/vendor/lark-sdk/package.json`,
+)
+// 生成物也必须能够在纯 Node 中实际导入，避免只检查源码而遗漏 CJS 资源路径兼容问题。
+const runtime = await import(pathToFileURL(resolve(output, 'kernel.js')).href)
+if (typeof runtime.createKernel !== 'function')
+  throw new Error('内核产物导入失败')
 await writeFile(
   `${output}/manifest.json`,
   JSON.stringify(
