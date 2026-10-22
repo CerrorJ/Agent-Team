@@ -28,7 +28,7 @@ export const executionPrompt = (run: Run): string => {
   const trial = run.trial
 
   const goal = trial
-    ? `这是角色配置试运行。读取当前目录的 ${trial.inputFile}，${trial.outputFile ? `用文件写入工具把其内容原样保存为 ${trial.outputFile}` : '原样返回文件中的内容'}。不得访问网络、安装软件、读写其他目录或提交代码。`
+    ? `这是一次独立的角色配置读写检查。读取当前目录的 ${trial.inputFile}，${trial.outputFile ? `用文件写入工具把其内容原样保存为 ${trial.outputFile}` : '原样返回文件中的内容'}。完成后立即结束，仅简短报告结果；不要扫描仓库或继续其他工作。不得访问网络、安装软件、读写其他目录或提交代码。`
     : `${run.goalSnapshot}\n验收条件：${run.acceptanceSnapshot}\n此前退回意见：${run.feedbackSnapshot || '无'}`
 
   const requirement = run.requirementSnapshot
