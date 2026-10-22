@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-kernel/
+artifacts/
 .env
 data/
 *.log

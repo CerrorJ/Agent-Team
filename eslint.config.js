@@ -3,8 +3,29 @@ import stylistic from '@stylistic/eslint-plugin'
 
 export default [
   {
+    files: [
+      'src/kernel/**/*.ts',
+      'src/cli/windows-command.ts',
+      'scripts/**/*.mjs',
+    ],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 300, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'error',
+        { max: 50, skipBlankLines: true, skipComments: true },
+      ],
+      'max-depth': ['error', 3],
+      complexity: ['error', 10],
+      'max-params': ['error', 4],
+    },
+  },
+  {
     ignores: [
       'dist/**',
+      'dist-kernel/**',
       'data/**',
       'node_modules/**',
       'ao-31-deploy/**',

@@ -17,7 +17,9 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "build:kernel": "tsc -p tsconfig.kernel.json && node scripts/build-kernel.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -43,6 +45,7 @@
     "@babel/plugin-syntax-typescript": "^8.0.3",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "^26.1.1",
+    "esbuild": "0.27.4",
     "eslint": "^10.8.1",
     "prettier": "^3.9.6",
     "tsx": "^4.23.1",

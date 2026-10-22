@@ -1,0 +1,24 @@
+name: Embedded kernel
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+jobs:
+  checks:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+      - run: npm install -g pnpm@12.3.4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm build:kernel

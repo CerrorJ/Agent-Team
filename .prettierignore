@@ -9,3 +9,5 @@ docs
 pnpm-lock.yaml
 .env
 .env.*
+dist-kernel/
+artifacts/
