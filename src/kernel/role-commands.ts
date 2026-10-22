@@ -10,6 +10,7 @@ import { projectBaseline } from './git-workspace.js'
 import { createTaskRun } from './run-commands.js'
 import { RoleReadinessStore } from './role-readiness-store.js'
 import type { WorkspaceStore } from './workspace-store.js'
+import { SkillStore } from './skill-store.js'
 
 type RoleCommand = Extract<
   BusinessCommand,
@@ -27,6 +28,7 @@ export const prepareRoleCommand = (input: {
 }): (() => { id: string }) => {
   const { command, store } = input
   const role = store.get('role_versions', command.roleId, roleVersionSchema)
+  new SkillStore(store).resolve(role.skills)
   if (role.version !== command.expectedRoleVersion)
     throw new Error('VERSION_CONFLICT')
   if (command.type === 'role.setEnabled')

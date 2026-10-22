@@ -11,6 +11,7 @@ import { productCommandSchemas } from './product-command-contracts.js'
 import { roleCommandSchemas, roleTrialSchema } from './role-contracts.js'
 import { humanCommandSchemas } from './human-contracts.js'
 import { feishuCommandSchema } from './feishu-contracts.js'
+import { skillCommandSchemas, skillReferenceSchema } from './skill-contracts.js'
 
 const id = z.string().uuid()
 const shortText = z.string().trim().min(1).max(200)
@@ -39,7 +40,7 @@ export const roleVersionSchema = z
     modelProfileSnapshot: modelProfileSchema.nullable().optional(),
     model: z.string().trim().max(200),
     permission: z.enum(['read-only', 'workspace-write']),
-    skills: z.array(z.never()),
+    skills: z.array(skillReferenceSchema).max(12),
     createdAt: z.string().datetime(),
   })
   .strict()
@@ -183,6 +184,7 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
       modelProfileRef: requirementRefSchema.nullable().optional(),
       model: z.string().trim().max(200),
       permission: z.enum(['read-only', 'workspace-write']),
+      skills: z.array(skillReferenceSchema).max(12).optional(),
     })
     .strict(),
   z
@@ -229,6 +231,7 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
   ...productCommandSchemas,
   ...roleCommandSchemas,
   feishuCommandSchema,
+  ...skillCommandSchemas,
 ])
 
 export type Project = z.infer<typeof projectSchema>

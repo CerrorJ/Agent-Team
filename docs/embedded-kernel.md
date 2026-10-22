@@ -1,14 +1,14 @@
-# 嵌入式内核 M3 开发版
+# 嵌入式内核 M4 开发版
 
 正式开发授权日期：2026-10-22。独立飞书服务仍使用 `pnpm start:once`，
 其入口、配置及生产数据未迁移。嵌入入口不加载该配置；飞书只通过另行显式绑定的专用应用连接，不自动连接已有服务。
 
 `createKernel({dataDirectory, sourceCommit, onEvent})` 显式打开独立 SQLite 数据目录。
-协议 1、schema 6（确切内核版本及提交见 manifest.json）；支持 handshake、health、events、shutdown，
+协议 1、schema 7（确切内核版本及提交见 manifest.json）；支持 handshake、health、events、shutdown，
 以及 workspace.snapshot / command / run / delivery。项目、角色版本、Task/Run、
 Codex/Claude 执行、隔离 worktree、停止/重试、交付/验收、对象版本和依赖团队已接入共享入口。
 三类人工请求、同 Run 新段续接与飞书渠道适配已加入；真实飞书租户仍待专用凭据验证，不能以端口测试代替。
-技能尚未接入。当前仍在桌面联调与阶段验收。
+固定来源、技能预览/安装/卸载及Run副本已接入，详见[M4开发记录](m4-skills.md)。当前仍在桌面联调与阶段验收。
 实例锁使用专用 SQLite 独占事务，关闭或进程死亡后释放；第二实例直接失败。
 不允许指向旧服务 data 目录。导入模块没有飞书或进程启动副作用。
 

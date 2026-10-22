@@ -9,6 +9,7 @@ import {
   type FeishuCredentialResolver,
 } from './feishu-runtime.js'
 import type { FeishuTransportFactory } from './feishu-transport.js'
+import type { SkillFetch } from './skill-download.js'
 import {
   DATA_SCHEMA_VERSION,
   KERNEL_VERSION,
@@ -31,6 +32,7 @@ export interface KernelOptions {
   credentials?: CredentialResolver
   feishuCredentials?: FeishuCredentialResolver
   feishuTransport?: FeishuTransportFactory
+  skillFetch?: SkillFetch
 }
 
 /** 导入不读取 .env 或启动渠道；创建后仅恢复已授权的本机任务。 */
@@ -47,30 +49,7 @@ export class EmbeddedKernel {
   readonly handshake: KernelHandshake
 
   constructor(private readonly options: KernelOptions) {
-    this.handshake = handshakeSchema.parse({
-      kernelVersion: KERNEL_VERSION,
-      protocolVersion: PROTOCOL_VERSION,
-      dataSchemaVersion: DATA_SCHEMA_VERSION,
-      sourceCommit: options.sourceCommit,
-      capabilities: [
-        'health',
-        'persistent-events',
-        'graceful-shutdown',
-        'local-workflow',
-        'product-catalog',
-        'role-trials',
-        'team-workflow',
-        'codex-and-claude',
-        'human-workflow',
-        'feishu-channel',
-      ],
-      unavailable: ['skills'],
-      runtime: {
-        node: process.versions.node,
-        platform: process.platform,
-        arch: process.arch,
-      },
-    })
+    this.handshake = createHandshake(options.sourceCommit)
     this.journal = new KernelJournal(options.dataDirectory)
     try {
       this.store = new WorkspaceStore(this.journal.database)
@@ -79,6 +58,7 @@ export class EmbeddedKernel {
         dataDirectory: options.dataDirectory,
         ...(options.execute ? { execute: options.execute } : {}),
         ...(options.credentials ? { credentials: options.credentials } : {}),
+        ...(options.skillFetch ? { skillFetch: options.skillFetch } : {}),
       })
       this.feishu = new FeishuRuntime({
         store: this.store,
@@ -210,4 +190,32 @@ export class EmbeddedKernel {
       error: publicError(error),
     }
   }
+}
+
+const createHandshake = (sourceCommit: string): KernelHandshake => {
+  return handshakeSchema.parse({
+    kernelVersion: KERNEL_VERSION,
+    protocolVersion: PROTOCOL_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+    sourceCommit: sourceCommit,
+    capabilities: [
+      'health',
+      'persistent-events',
+      'graceful-shutdown',
+      'local-workflow',
+      'product-catalog',
+      'role-trials',
+      'team-workflow',
+      'codex-and-claude',
+      'human-workflow',
+      'feishu-channel',
+      'skills',
+    ],
+    unavailable: [],
+    runtime: {
+      node: process.versions.node,
+      platform: process.platform,
+      arch: process.arch,
+    },
+  })
 }

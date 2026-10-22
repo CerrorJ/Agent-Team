@@ -26,7 +26,7 @@ test('无飞书配置创建，协议与真实运行时可查，未实现能力�
     assert.equal(handshake.sourceCommit, sourceCommit)
     assert.equal(handshake.runtime.node, process.versions.node)
     assert.ok(handshake.capabilities.includes('feishu-channel'))
-    assert.ok(handshake.unavailable.includes('skills'))
+    assert.ok(handshake.capabilities.includes('skills'))
     assert.equal(
       (await kernel.dispatch(request('feishu.connect'))).status,
       'rejected',

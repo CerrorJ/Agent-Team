@@ -10,6 +10,7 @@ import { inspectProjectRepository } from './git-workspace.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import { ProductStore } from './product-store.js'
 import { RoleReadinessStore } from './role-readiness-store.js'
+import { SkillStore } from './skill-store.js'
 import {
   modelProfileSchema,
   requirementVersionSchema,
@@ -59,6 +60,8 @@ const saveRole = (
   const id = command.id ?? randomUUID()
 
   const profile = resolveRoleModel(store, command)
+  const skills = command.skills ?? []
+  new SkillStore(store).resolve(skills)
 
   const role: RoleVersion = {
     id,
@@ -69,7 +72,7 @@ const saveRole = (
     model: profile?.model ?? command.model,
     modelProfileSnapshot: profile,
     permission: command.permission,
-    skills: [],
+    skills,
     createdAt: new Date().toISOString(),
   }
 

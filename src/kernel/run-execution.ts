@@ -16,6 +16,7 @@ import { finishRun } from './run-outcome.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import type { CredentialResolver } from './credential-contracts.js'
 import { buildRunCliOptions } from './run-cli-options.js'
+import { prepareRunSkills, verifyRunSkills } from './run-skills.js'
 
 export type CliExecutionPort = (options: RunCliOptions) => Promise<CliRunResult>
 
@@ -40,6 +41,7 @@ export const executeQueuedRun = async (
       run,
       dataDirectory: input.dataDirectory,
     })
+    prepareRunSkills({ store, run, dataDirectory: input.dataDirectory })
     // M1 不加载项目自定义 CLI 扩展，避免外部 MCP/Hook 绕过既定工具权限。
     if (
       run.roleSnapshot.cli === 'codex' &&
@@ -52,6 +54,8 @@ export const executeQueuedRun = async (
     const result = await execute(
       buildRunCliOptions({ store, run, controller, segmentId, runtime }),
     )
+
+    verifyRunSkills(store, run)
 
     finishRun({ store, runId, result })
   } catch (error) {

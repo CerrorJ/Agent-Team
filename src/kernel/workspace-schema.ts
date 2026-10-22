@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { initializeProductSchema } from './product-schema.js'
 import { initializeHumanSchema } from './human-schema.js'
 import { initializeFeishuSchema } from './feishu-schema.js'
+import { initializeSkillSchema } from './skill-schema.js'
 
 /** M1 新增表与旧生命周期事件分离，迁移只新增，不改写 M0 历史。 */
 const workspaceSchemaV2 = `
@@ -69,4 +70,5 @@ export const initializeWorkspaceSchema = (database: DatabaseSync): void => {
   if (version < 4) database.exec('PRAGMA user_version=4')
   if (version < 5) initializeHumanSchema(database)
   if (version < 6) initializeFeishuSchema(database)
+  if (version < 7) initializeSkillSchema(database)
 }

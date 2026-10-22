@@ -69,6 +69,38 @@ export const localKernelFixture = async (
 ) => {
   const directory = mkdtempSync(join(tmpdir(), 'weftpilot-role-lifecycle-'))
   const repositoryPath = join(directory, 'repository')
+  initializeRepository(repositoryPath)
+
+  const kernel = createKernel({
+    ...options,
+    dataDirectory: join(directory, 'data'),
+    sourceCommit: 'a'.repeat(40),
+    execute,
+  })
+
+  const projectId = await issueCommand(kernel, {
+    type: 'project.create',
+    name: '生命周期测试',
+    repositoryPath,
+    defaultBranch: 'main',
+  })
+
+  return {
+    directory,
+    dataDirectory: join(directory, 'data'),
+    kernel,
+    projectId,
+    command: (command: BusinessCommand, key?: string) =>
+      issueCommand(kernel, command, key),
+    snapshot: () => readSnapshot(kernel),
+    cleanup: async () => {
+      await kernel.shutdown()
+      rmSync(directory, { recursive: true, force: true })
+    },
+  }
+}
+
+const initializeRepository = (repositoryPath: string): void => {
   mkdirSync(repositoryPath)
   execFileSync('git', ['init', '-b', 'main'], {
     cwd: repositoryPath,
@@ -88,30 +120,4 @@ export const localKernelFixture = async (
     ],
     { cwd: repositoryPath, stdio: 'ignore' },
   )
-
-  const kernel = createKernel({
-    ...options,
-    dataDirectory: join(directory, 'data'),
-    sourceCommit: 'a'.repeat(40),
-    execute,
-  })
-
-  const projectId = await issueCommand(kernel, {
-    type: 'project.create',
-    name: '生命周期测试',
-    repositoryPath,
-    defaultBranch: 'main',
-  })
-
-  return {
-    kernel,
-    projectId,
-    command: (command: BusinessCommand, key?: string) =>
-      issueCommand(kernel, command, key),
-    snapshot: () => readSnapshot(kernel),
-    cleanup: async () => {
-      await kernel.shutdown()
-      rmSync(directory, { recursive: true, force: true })
-    },
-  }
 }

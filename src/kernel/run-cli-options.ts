@@ -6,6 +6,7 @@ import type { WorkspaceStore } from './workspace-store.js'
 import type { executionModel } from './model-runtime.js'
 import { executionPrompt } from './role-trial-files.js'
 import { runInputContext } from './run-inputs.js'
+import { runSkillContext } from './run-skills.js'
 
 /** 每段使用固定Run快照，进程证据只写入当前段，不回写已结束的历史段。 */
 export const buildRunCliOptions = (input: {
@@ -23,8 +24,9 @@ export const buildRunCliOptions = (input: {
     signal: controller.signal,
     timeoutMs: 30 * 60_000,
     prompt:
-      run.continuation?.prompt ??
-      executionPrompt(run) + runInputContext(store, run),
+      (run.continuation?.prompt ??
+        executionPrompt(run) + runInputContext(store, run)) +
+      runSkillContext(run),
     ...(run.continuation ? { sessionId: run.continuation.sessionId } : {}),
     stopToolNames: [
       'request_clarification',

@@ -3,6 +3,7 @@ import { existsSync, realpathSync, mkdtempSync, rmdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { relative, resolve, isAbsolute, join } from 'node:path'
 import type { Project, Run } from './business-contracts.js'
+import { runDeliveryPathspec } from './run-skills.js'
 
 const git = (
   cwd: string,
@@ -111,21 +112,14 @@ export const collectRunDelivery = (
   contributionDiff: string
   inputDeliveryIds: string[]
 } => {
-  git(run.workDirectory, ['add', '--intent-to-add', '--', '.'])
+  git(run.workDirectory, [
+    'add',
+    '--intent-to-add',
+    '--',
+    ...runDeliveryPathspec(run),
+  ])
 
-  const diff = git(
-    run.workDirectory,
-    [
-      'diff',
-      '--no-ext-diff',
-      '--no-textconv',
-      '--binary',
-      run.baselineCommit,
-      '--',
-      '.',
-    ],
-    true,
-  )
+  const diff = diffAgainst(run, run.baselineCommit)
 
   if (diff.length > 500_000)
     throw new Error(
@@ -133,19 +127,7 @@ export const collectRunDelivery = (
     )
 
   const contributionDiff = run.inputTree
-    ? git(
-        run.workDirectory,
-        [
-          'diff',
-          '--no-ext-diff',
-          '--no-textconv',
-          '--binary',
-          run.inputTree,
-          '--',
-          '.',
-        ],
-        true,
-      )
+    ? diffAgainst(run, run.inputTree)
     : diff
 
   if (contributionDiff.length > 500_000) throw new Error('DELIVERY_TOO_LARGE')
@@ -156,6 +138,21 @@ export const collectRunDelivery = (
     headCommit: git(run.workDirectory, ['rev-parse', 'HEAD']),
   }
 }
+
+const diffAgainst = (run: Run, baseline: string): string =>
+  git(
+    run.workDirectory,
+    [
+      'diff',
+      '--no-ext-diff',
+      '--no-textconv',
+      '--binary',
+      baseline,
+      '--',
+      ...runDeliveryPathspec(run),
+    ],
+    true,
+  )
 
 /** 续接复用本 Run 的目录，拒绝符号链接重定向、换仓库或切分支；不重置已有贡献。 */
 export const validateRunContinuation = (input: {

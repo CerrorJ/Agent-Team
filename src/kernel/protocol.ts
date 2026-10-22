@@ -8,10 +8,11 @@ export * from './workspace-contracts.js'
 export * from './credential-contracts.js'
 export * from './human-contracts.js'
 export * from './feishu-contracts.js'
+export * from './skill-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.4.6'
-export const DATA_SCHEMA_VERSION = 6
+export const KERNEL_VERSION = '0.5.0'
+export const DATA_SCHEMA_VERSION = 7
 
 const requestBase = {
   protocolVersion: z.literal(PROTOCOL_VERSION),
@@ -95,6 +96,7 @@ export const handshakeSchema = z
         'codex-and-claude',
         'human-workflow',
         'feishu-channel',
+        'skills',
       ]),
     ),
     unavailable: z.array(z.string()),

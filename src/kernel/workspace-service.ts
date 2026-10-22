@@ -17,6 +17,9 @@ import { resolveHumanRequest } from './human-commands.js'
 import type { HumanActor } from './human-contracts.js'
 import { expireHumanRequests } from './human-expiration.js'
 import { FeishuStore } from './feishu-store.js'
+import { SkillStore, type SkillCommand } from './skill-store.js'
+import { SkillRuntime } from './skill-runtime.js'
+import type { SkillFetch } from './skill-download.js'
 
 export interface CommandOutcome {
   id: string
@@ -27,6 +30,7 @@ export interface CommandOutcome {
 export class WorkspaceService {
   private readonly ledger: CommandLedger
   private readonly scheduler: LocalScheduler
+  private readonly skills: SkillRuntime
   private closing = false
 
   constructor(
@@ -35,11 +39,16 @@ export class WorkspaceService {
       dataDirectory: string
       execute?: CliExecutionPort
       credentials?: CredentialResolver
+      skillFetch?: SkillFetch
     },
   ) {
     this.ledger = new CommandLedger(options.store)
     this.scheduler = new LocalScheduler(options)
     this.scheduler.recover()
+    this.skills = new SkillRuntime({
+      ...options,
+      ...(options.skillFetch ? { fetcher: options.skillFetch } : {}),
+    })
   }
 
   command(
@@ -75,11 +84,13 @@ export class WorkspaceService {
     }))
 
     this.scheduler.kick()
+    this.skills.kick()
     return result
   }
 
   async shutdown(): Promise<void> {
     this.closing = true
+    await this.skills.shutdown()
     await this.scheduler.shutdown()
   }
 
@@ -87,6 +98,8 @@ export class WorkspaceService {
     command: Exclude<BusinessCommand, { type: 'human.resolve' }>,
   ): () => { id: string } {
     const { store, dataDirectory } = this.options
+    if (command.type.startsWith('skill.'))
+      return () => new SkillStore(store).command(command as SkillCommand)
     if (command.type === 'feishu.save')
       return () => new FeishuStore(store).save(command)
     if (isProductCommand(command))
@@ -95,7 +108,9 @@ export class WorkspaceService {
       return prepareRoleCommand({ store, command, dataDirectory })
     if (isTeamCommand(command))
       return prepareTeamCommand({ store, command, dataDirectory })
-    return this.prepareTaskCommand(command)
+    return this.prepareTaskCommand(
+      command as Exclude<typeof command, SkillCommand>,
+    )
   }
 
   private prepareTaskCommand(

@@ -107,12 +107,37 @@ test('中文空格路径的真实 worktree 保留主仓库文件，脏目录阻�
       runId: id,
     })
 
-    const run = {
+    const run: Run = {
       id,
+      version: 1,
+      taskId: randomUUID(),
+      projectId: project.id,
+      attempt: 1,
+      retryOfRunId: null,
+      status: 'running',
+      acceptanceSnapshot: '文件交付',
+      goalSnapshot: '执行Git测试',
+      feedbackSnapshot: '',
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      endedAt: null,
+      failureCode: null,
+      processState: 'active',
       workDirectory,
       baselineCommit: projectBaseline(project),
       executionBranch: `weftpilot/run-${id}`,
-    } as Run
+      roleSnapshot: {
+        id: randomUUID(),
+        version: 1,
+        name: 'Git fixture',
+        responsibility: 'Delivery capture',
+        cli: 'codex',
+        model: '',
+        permission: 'read-only',
+        skills: [],
+        createdAt: new Date().toISOString(),
+      },
+    }
 
     prepareRunWorktree({ project, run, dataDirectory: directory })
     assert.equal(existsSync(hookSentinel), false)
