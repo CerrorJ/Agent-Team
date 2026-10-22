@@ -13,6 +13,7 @@ import type { FeishuTransport } from '../src/kernel/feishu-transport.js'
 import { fulfillTrial } from './helpers/role-trial-fixture.js'
 import { taskSchema } from '../src/kernel/business-contracts.js'
 import { taskStatusCard } from '../src/kernel/feishu-card.js'
+import { humanRequestSchema } from '../src/kernel/human-contracts.js'
 
 const bindingCommand = () => ({
   type: 'feishu.save' as const,
@@ -213,6 +214,30 @@ test('卡片仅展示共享状态，未提供自动答案或任意命令入口',
     assert.equal(card.schema, '2.0')
     assert.match(JSON.stringify(card), /执行成功与验收分开/)
     assert.equal(JSON.stringify(card).includes('shell'), false)
+
+    const request = humanRequestSchema.parse({
+      id: randomUUID(),
+      version: 1,
+      runId: fixture.run.id,
+      taskId: task.id,
+      projectId: task.projectId,
+      segmentId: randomUUID(),
+      payload: { kind: 'plan', title: '长方案', summary: '文'.repeat(4000) },
+      digest: 'a'.repeat(64),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      decidedAt: null,
+      decision: null,
+      actor: null,
+    })
+
+    const longCard = JSON.stringify(
+      taskStatusCard({ task, run: fixture.run, request, bindingVersion: 1 }),
+    )
+
+    assert.equal(longCard.includes('"tag":"form"'), false)
+    assert.match(longCard, /在纬舟桌面完整查看/)
   } finally {
     fixture.database.close()
   }

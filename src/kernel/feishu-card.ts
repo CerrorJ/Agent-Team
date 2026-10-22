@@ -37,7 +37,7 @@ const requestElements = (
 
   const summary =
     request.payload.kind === 'clarification'
-      ? request.payload.request.title
+      ? `${request.payload.request.title}\n${request.payload.request.intro}`
       : request.payload.kind === 'plan'
         ? `${request.payload.title}\n${request.payload.summary}`
         : `${request.payload.request.operation}\n${request.payload.request.detail}\n影响：${request.payload.request.impact}\n回滚：${request.payload.request.rollback}`
@@ -49,6 +49,16 @@ const requestElements = (
   ]
 
   if (request.status !== 'pending') return content
+  if (request.payload.kind === 'operation')
+    content.push(
+      paragraph('确认只针对本次操作请求，原有工具权限保持，不放行其他操作。'),
+    )
+  // 卡片尺寸有限，不能在截断操作范围或方案后仍提供批准按钮。
+  if (summary.length > 3500)
+    return [
+      ...content,
+      paragraph('原文较长，卡片仅展示摘要；请在纬舟桌面完整查看并处理本请求。'),
+    ]
   content.push(answerForm(request, bindingVersion), {
     tag: 'form',
     name: 'reject_request',

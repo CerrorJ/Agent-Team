@@ -10,7 +10,7 @@ export * from './human-contracts.js'
 export * from './feishu-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.4.4'
+export const KERNEL_VERSION = '0.4.5'
 export const DATA_SCHEMA_VERSION = 6
 
 const requestBase = {
