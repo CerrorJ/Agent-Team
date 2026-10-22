@@ -22,6 +22,7 @@ import {
 } from './business-contracts.js'
 import { initializeWorkspaceSchema } from './workspace-schema.js'
 import { ProductStore } from './product-store.js'
+import { projectQueue } from './queue-rules.js'
 
 export type ObjectTable =
   'projects' | 'role_versions' | 'tasks' | 'runs' | 'deliveries' | 'acceptances'
@@ -209,7 +210,7 @@ export class WorkspaceStore {
           this.list('role_versions', roleVersionSchema),
         ),
         tasks: this.list('tasks', taskSchema),
-        runs: this.list('runs', runSchema),
+        runs: projectQueue(this),
         deliveries: this.list('deliveries', deliverySchema),
         acceptances: this.list('acceptances', acceptanceSchema),
         ...new ProductStore(this).snapshot(),

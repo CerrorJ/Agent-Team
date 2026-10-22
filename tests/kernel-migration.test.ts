@@ -7,6 +7,35 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createKernel } from '../src/kernel/kernel.js'
 
+test('schema 3 的产品对象在 v4 JSON 契约迁移前取得一致备份', async () => {
+  const dataDirectory = mkdtempSync(join(tmpdir(), 'weftpilot-v4-migration-'))
+  const first = createKernel({ dataDirectory, sourceCommit: 'a'.repeat(40) })
+  await first.shutdown()
+  const database = new DatabaseSync(join(dataDirectory, 'kernel.sqlite'))
+  database.exec('PRAGMA user_version=3')
+  database.close()
+  const migrated = createKernel({ dataDirectory, sourceCommit: 'a'.repeat(40) })
+  try {
+    assert.equal(migrated.handshake.dataSchemaVersion, 4)
+
+    const backup = new DatabaseSync(
+      join(dataDirectory, 'kernel.schema-3.backup.sqlite'),
+      { readOnly: true },
+    )
+
+    assert.equal(backup.prepare('PRAGMA user_version').get()?.user_version, 3)
+    assert.equal(backup.prepare('PRAGMA quick_check').get()?.quick_check, 'ok')
+    assert.equal(
+      backup.prepare('SELECT COUNT(*) AS n FROM team_versions').get()?.n,
+      0,
+    )
+    backup.close()
+  } finally {
+    await migrated.shutdown()
+    rmSync(dataDirectory, { recursive: true, force: true })
+  }
+})
+
 test('M0 在一致备份后迁移到当前 schema，备份保留原生命周期事件', async () => {
   const dataDirectory = mkdtempSync(join(tmpdir(), 'weftpilot-migration-'))
   const database = new DatabaseSync(join(dataDirectory, 'kernel.sqlite'))
@@ -19,7 +48,7 @@ test('M0 在一致备份后迁移到当前 schema，备份保留原生命周期�
   database.close()
   const kernel = createKernel({ dataDirectory, sourceCommit: 'a'.repeat(40) })
   try {
-    assert.equal(kernel.handshake.dataSchemaVersion, 3)
+    assert.equal(kernel.handshake.dataSchemaVersion, 4)
 
     const backup = new DatabaseSync(
       join(dataDirectory, 'kernel.schema-1.backup.sqlite'),
@@ -92,7 +121,7 @@ test('M1 schema 2 升级保留项目并生成独立一致备份，重新打开�
   const { WorkspaceStore } = await import('../src/kernel/workspace-store.js')
   new WorkspaceStore(reopened)
   assert.equal(reopened.prepare('PRAGMA foreign_keys').get()?.foreign_keys, 1)
-  assert.equal(reopened.prepare('PRAGMA user_version').get()?.user_version, 3)
+  assert.equal(reopened.prepare('PRAGMA user_version').get()?.user_version, 4)
   reopened.close()
   rmSync(dataDirectory, { recursive: true, force: true })
 })

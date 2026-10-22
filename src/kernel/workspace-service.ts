@@ -1,10 +1,14 @@
 import { CommandLedger } from './command-ledger.js'
-import { prepareCatalogCommand } from './catalog-commands.js'
-import { prepareRunCommand } from './run-commands.js'
+import {
+  prepareCatalogCommand,
+  type CatalogCommand,
+} from './catalog-commands.js'
+import { prepareRunCommand, type RunCommand } from './run-commands.js'
 import { acceptDelivery } from './acceptance-command.js'
 import { LocalScheduler } from './local-scheduler.js'
 import { saveProductObject, isProductCommand } from './product-commands.js'
 import { prepareRoleCommand, isRoleLifecycleCommand } from './role-commands.js'
+import { prepareTeamCommand, isTeamCommand } from './team-commands.js'
 import type { CliExecutionPort } from './run-execution.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import type { BusinessCommand } from './business-contracts.js'
@@ -42,6 +46,7 @@ export class WorkspaceService {
       ...operation(),
       status:
         input.command.type.startsWith('run.') ||
+        input.command.type === 'team.start' ||
         input.command.type === 'role.trial'
           ? ('accepted' as const)
           : ('completed' as const),
@@ -62,6 +67,18 @@ export class WorkspaceService {
       return () => saveProductObject({ store, command })
     if (isRoleLifecycleCommand(command))
       return prepareRoleCommand({ store, command, dataDirectory })
+    if (isTeamCommand(command))
+      return prepareTeamCommand({ store, command, dataDirectory })
+    return this.prepareTaskCommand(command)
+  }
+
+  private prepareTaskCommand(
+    command:
+      | CatalogCommand
+      | RunCommand
+      | Extract<BusinessCommand, { type: 'delivery.accept' }>,
+  ): () => { id: string } {
+    const { store, dataDirectory } = this.options
     switch (command.type) {
       case 'project.create':
       case 'role.save':

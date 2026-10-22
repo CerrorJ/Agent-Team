@@ -1,6 +1,6 @@
 import { spawnCli } from './spawn-cli.js'
 import type { ChildProcess } from 'node:child_process'
-import { terminateCli } from './process-stop.js'
+import { terminateCli, type ProcessStopReport } from './process-stop.js'
 import { armTimeout, envTimeoutMs } from './timeout.js'
 import { promptInputForPlatform } from './types.js'
 import { readBoundedLines } from './bounded-lines.js'
@@ -41,6 +41,7 @@ const toToolCalls = (calls: Map<string, CliToolCall>): CliToolCall[] =>
   }))
 
 export interface RunCliOptions {
+  onProcessStop?: (result: ProcessStopReport) => void
   /** 宿主可替换进程终止端口以验证系统失败；桌面生产路径始终使用默认实现。 */
   stopProcess?: (child: ChildProcess) => Promise<boolean>
   onProcessStart?: (pid: number) => void
@@ -194,7 +195,9 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
     let termination: Promise<boolean> | undefined
 
     const terminate = () => {
-      termination ??= (options.stopProcess ?? terminateCli)(child)
+      termination ??= options.stopProcess
+        ? options.stopProcess(child)
+        : terminateCli(child, options.onProcessStop)
     }
 
     // stdin 模式下把 prompt 写入子进程；否则 prompt 已在命令行参数里，stdin 直接收口。

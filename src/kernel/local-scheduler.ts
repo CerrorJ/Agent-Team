@@ -1,13 +1,15 @@
-import { runSchema, taskSchema } from './business-contracts.js'
+﻿import { runSchema, taskSchema } from './business-contracts.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import { executeQueuedRun, type CliExecutionPort } from './run-execution.js'
 import { finishRoleTrial } from './role-trial-state.js'
+import { queueBlocker } from './queue-rules.js'
+import { refreshTeamProgress } from './team-progress.js'
 
-/** M1 单执行槽，确保工作目录不并发写；M2 再扩展团队与依赖调度。 */
+type ActiveExecution = { controller: AbortController; finished: Promise<void> }
+
+/** 活动句柄在微任务前登记，避免连续命令重复启动；恢复不依赖旧 PID 猜测进程死亡。 */
 export class LocalScheduler {
-  private active:
-    | { runId: string; controller: AbortController; finished: Promise<void> }
-    | undefined
+  private readonly active = new Map<string, ActiveExecution>()
   private closing = false
   private faulted = false
 
@@ -23,16 +25,14 @@ export class LocalScheduler {
     const store = this.options.store
     for (const run of store.list('runs', runSchema)) {
       if (!['preparing', 'running', 'stopping'].includes(run.status)) continue
-      // 无结束证据时只恢复为待确认，不依据 PID 或心跳宣布死亡，不自动重放。
-      store.transaction(() => {
+      store.transaction(() =>
         store.updateRun({
           ...run,
-          status: run.status,
           version: run.version + 1,
           processState: 'uncertain',
           failureCode: 'STATE_UNCERTAIN',
-        })
-      })
+        }),
+      )
     }
     this.kick()
   }
@@ -40,32 +40,30 @@ export class LocalScheduler {
   kick(): void {
     if (this.closing || this.faulted) return
     const store = this.options.store
-    if (
-      store
-        .list('runs', runSchema)
-        .some((run) => run.processState === 'uncertain')
-    )
-      return
-    if (this.active) {
-      const current = store.get('runs', this.active.runId, runSchema)
-      if (current.status === 'stopping') this.active.controller.abort()
-      return
+    refreshTeamProgress(store)
+    for (const [id, execution] of this.active) {
+      if (store.get('runs', id, runSchema).status === 'stopping')
+        execution.controller.abort()
     }
+    for (const run of store.list('runs', runSchema)) {
+      if (run.status !== 'queued' || this.active.has(run.id)) continue
+      if (
+        queueBlocker({ store, run, reservedIds: new Set(this.active.keys()) })
+      )
+        continue
+      this.start(run.id)
+    }
+  }
 
-    const queued = store
-      .list('runs', runSchema)
-      .find((run) => run.status === 'queued')
-
-    if (!queued) return
+  private start(runId: string): void {
     const controller = new AbortController()
 
-    // 微任务启动，先安装活动句柄；重复 kick 不会重复启动同一 Run。
     const finished = Promise.resolve()
       .then(() =>
         executeQueuedRun(
           {
-            store,
-            runId: queued.id,
+            store: this.options.store,
+            runId,
             dataDirectory: this.options.dataDirectory,
             controller,
           },
@@ -76,22 +74,17 @@ export class LocalScheduler {
         this.faulted = true
       })
       .finally(() => {
-        this.active = undefined
+        this.active.delete(runId)
         this.kick()
       })
 
-    this.active = { runId: queued.id, controller, finished }
+    this.active.set(runId, { controller, finished })
   }
 
   async shutdown(): Promise<void> {
     this.closing = true
     const store = this.options.store
-    if (
-      store
-        .list('runs', runSchema)
-        .some((run) => run.processState === 'uncertain')
-    )
-      throw new Error('STATE_UNCERTAIN')
+    this.assertKnown()
     for (const run of store.list('runs', runSchema)) {
       if (run.status === 'queued') this.cancelQueued(run.id)
       else if (run.status === 'running' || run.status === 'preparing') {
@@ -104,11 +97,17 @@ export class LocalScheduler {
         )
       }
     }
-    this.active?.controller.abort()
-    await this.active?.finished
+    for (const execution of this.active.values()) execution.controller.abort()
+    await Promise.all(
+      [...this.active.values()].map((execution) => execution.finished),
+    )
+    this.assertKnown()
+  }
+
+  private assertKnown(): void {
     if (
       this.faulted ||
-      store
+      this.options.store
         .list('runs', runSchema)
         .some((run) => run.processState === 'uncertain')
     )

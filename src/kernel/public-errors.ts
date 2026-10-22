@@ -1,4 +1,11 @@
 const messages: Record<string, string> = {
+  TEAM_PLAN_INVALID: '团队计划包含重复或无效的子任务引用',
+  TEAM_DEPENDENCY_CYCLE: '子任务不能形成循环依赖',
+  TEAM_NOT_STARTED: '请先启动所属团队任务',
+  TASK_NOT_TEAM: '该任务不是团队任务',
+  DEPENDENCY_NOT_ACCEPTED: '上游子任务尚未通过人工验收',
+  DEPENDENCY_PROJECT_MISMATCH: '上游交付不属于当前项目',
+  DEPENDENCY_PATCH_CONFLICT: '上游代码贡献存在冲突，执行目录已保留，未启动 CLI',
   VALIDATION_FAILED: '输入格式或协议版本不兼容',
   KERNEL_STOPPED: '内核正在停止或已停止',
   VERSION_CONFLICT: '数据已变化，请刷新后操作',

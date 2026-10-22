@@ -49,6 +49,7 @@ const taskForStart = (
 ): Task => {
   if (command.type === 'run.start') {
     const task = store.get('tasks', command.taskId, taskSchema)
+    assertTeamStarted(store, task)
     if (task.purpose === 'role_trial' || task.purpose === 'team_parent')
       throw new Error('TASK_NOT_EXECUTABLE')
     if (task.version !== command.expectedVersion)
@@ -71,6 +72,14 @@ const taskForStart = (
 
   if (latest?.id !== run.id) throw new Error('STALE_RUN: 请从最新一次执行重试')
   return store.get('tasks', run.taskId, taskSchema)
+}
+
+const assertTeamStarted = (store: WorkspaceStore, task: Task): void => {
+  if (
+    task.parentTaskId &&
+    store.get('tasks', task.parentTaskId, taskSchema).status === 'ready'
+  )
+    throw new Error('TEAM_NOT_STARTED')
 }
 
 export const createTaskRun = (input: {

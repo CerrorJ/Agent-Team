@@ -1,9 +1,11 @@
 import { z } from 'zod'
+import { teamCommandSchemas } from './team-contracts.js'
 import {
   cliIdSchema,
   modelProfileSchema,
   requirementVersionSchema,
   requirementRefSchema,
+  teamVersionSchema,
 } from './product-contracts.js'
 import { productCommandSchemas } from './product-command-contracts.js'
 import { roleCommandSchemas, roleTrialSchema } from './role-contracts.js'
@@ -51,6 +53,9 @@ export const taskSchema = z
     acceptanceCriteria: longText,
     requirementRef: requirementRefSchema.nullable().optional(),
     purpose: z.enum(['task', 'role_trial', 'team_parent']).optional(),
+    parentTaskId: id.nullable().optional(),
+    dependencyTaskIds: z.array(id).max(12).optional(),
+    teamSnapshot: teamVersionSchema.nullable().optional(),
     status: z.enum(['ready', 'in_progress', 'in_review', 'done']),
     createdAt: z.string().datetime(),
   })
@@ -82,6 +87,20 @@ export const runSchema = z
     acceptanceSnapshot: longText,
     goalSnapshot: longText,
     feedbackSnapshot: z.string().max(20_000).default(''),
+    waitingReason: z
+      .enum([
+        'uncertain_project',
+        'dependency_acceptance',
+        'project_busy',
+        'role_busy',
+        'capacity',
+      ])
+      .optional(),
+    inputDeliveryIds: z.array(id).max(144).optional(),
+    inputTree: z
+      .string()
+      .regex(/^[a-f0-9]{40,64}$/)
+      .optional(),
     requirementSnapshot: requirementVersionSchema.nullable().optional(),
     purpose: z.enum(['task', 'role_trial']).optional(),
     trial: roleTrialSchema.nullable().optional(),
@@ -109,6 +128,8 @@ export const deliverySchema = z
     answer: z.string().max(200_000),
     diff: z.string().max(500_000),
     headCommit: z.string(),
+    contributionDiff: z.string().max(500_000).optional(),
+    inputDeliveryIds: z.array(id).max(144).optional(),
     createdAt: z.string().datetime(),
   })
   .strict()
@@ -126,6 +147,7 @@ export const acceptanceSchema = z
   .strict()
 
 export const businessCommandSchema = z.discriminatedUnion('type', [
+  ...teamCommandSchemas,
   z
     .object({
       type: z.literal('project.create'),

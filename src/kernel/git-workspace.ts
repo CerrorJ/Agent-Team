@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os'
 import { relative, resolve, isAbsolute, join } from 'node:path'
 import type { Project, Run } from './business-contracts.js'
 
-const git = (cwd: string, args: string[], raw = false): string => {
+const git = (
+  cwd: string,
+  args: string[],
+  raw = false,
+  input?: string,
+): string => {
   const output = execFileSync(
     'git',
     ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args],
@@ -15,7 +20,8 @@ const git = (cwd: string, args: string[], raw = false): string => {
       windowsHide: true,
       timeout: 15_000,
       maxBuffer: 1_000_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+      ...(input === undefined ? {} : { input }),
     },
   )
 
@@ -99,7 +105,12 @@ export const prepareRunWorktree = (input: {
 /** 只在内核拥有的 worktree 捕获新文件差异，不暂存/改动用户主工作区。 */
 export const collectRunDelivery = (
   run: Run,
-): { diff: string; headCommit: string } => {
+): {
+  diff: string
+  headCommit: string
+  contributionDiff: string
+  inputDeliveryIds: string[]
+} => {
   git(run.workDirectory, ['add', '--intent-to-add', '--', '.'])
 
   const diff = git(
@@ -120,7 +131,47 @@ export const collectRunDelivery = (
     throw new Error(
       'DELIVERY_TOO_LARGE: 代码差异超出当前交付上限，请查看执行目录',
     )
-  return { diff, headCommit: git(run.workDirectory, ['rev-parse', 'HEAD']) }
+
+  const contributionDiff = run.inputTree
+    ? git(
+        run.workDirectory,
+        [
+          'diff',
+          '--no-ext-diff',
+          '--no-textconv',
+          '--binary',
+          run.inputTree,
+          '--',
+          '.',
+        ],
+        true,
+      )
+    : diff
+
+  if (contributionDiff.length > 500_000) throw new Error('DELIVERY_TOO_LARGE')
+  return {
+    diff,
+    contributionDiff,
+    inputDeliveryIds: run.inputDeliveryIds ?? [],
+    headCommit: git(run.workDirectory, ['rev-parse', 'HEAD']),
+  }
+}
+
+/** 仅应用已验收贡献，每份应用一次；冲突保留隔离目录并失败，禁止重置主仓库。 */
+export const applyRunInputPatches = (run: Run, patches: string[]): string => {
+  try {
+    for (const patch of patches.filter((value) => value.length))
+      git(
+        run.workDirectory,
+        ['apply', '--index', '--whitespace=nowarn', '-'],
+        false,
+        patch,
+      )
+  } catch {
+    throw new Error('DEPENDENCY_PATCH_CONFLICT')
+  }
+  // 不调用自定义 merge driver 或 Hook，也不为输入检查点生成用户代码提交。
+  return git(run.workDirectory, ['write-tree'])
 }
 
 const repositoryRoot = (path: string) => {

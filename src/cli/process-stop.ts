@@ -1,5 +1,14 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
+import { join } from 'node:path'
+
+export interface ProcessStopReport {
+  method: 'windows-taskkill'
+  outcome: 'confirmed' | 'failed' | 'timeout'
+  exitCode: number | null
+  errorCode: string | null
+  durationMs: number
+}
 
 const groupExists = (pid: number): boolean => {
   try {
@@ -11,9 +20,13 @@ const groupExists = (pid: number): boolean => {
 }
 
 /** 只终止本次创建的子进程树/进程组，不对恢复时来源不明的 PID 执行终止。 */
-export const terminateCli = async (child: ChildProcess): Promise<boolean> => {
+export const terminateCli = async (
+  child: ChildProcess,
+  report?: (result: ProcessStopReport) => void,
+): Promise<boolean> => {
   if (!child.pid) return false
-  if (process.platform === 'win32') return terminateWindowsTree(child.pid)
+  if (process.platform === 'win32')
+    return terminateWindowsTree(child.pid, report)
   const pid = child.pid
   try {
     process.kill(-pid, 'SIGTERM')
@@ -36,9 +49,35 @@ export const terminateCli = async (child: ChildProcess): Promise<boolean> => {
   return false
 }
 
-const terminateWindowsTree = (pid: number): Promise<boolean> =>
+const terminateWindowsTree = (
+  pid: number,
+  report?: (result: ProcessStopReport) => void,
+): Promise<boolean> =>
   new Promise((resolve) => {
-    const killer = spawn('taskkill.exe', ['/pid', String(pid), '/t', '/f'], {
+    const startedAt = Date.now()
+    let completed = false
+
+    const finish = (
+      result: Omit<ProcessStopReport, 'method' | 'durationMs'>,
+    ) => {
+      if (completed) return
+      completed = true
+      notifyStop(report, {
+        ...result,
+        method: 'windows-taskkill',
+        durationMs: Date.now() - startedAt,
+      })
+      resolve(result.outcome === 'confirmed')
+    }
+
+    // 不从任务工作目录或 CLI 的 PATH 查找系统终止工具。
+    const executable = join(
+      process.env.SystemRoot ?? 'C:\\Windows',
+      'System32',
+      'taskkill.exe',
+    )
+
+    const killer = spawn(executable, ['/pid', String(pid), '/t', '/f'], {
       windowsHide: true,
       stdio: 'ignore',
       shell: false,
@@ -46,15 +85,34 @@ const terminateWindowsTree = (pid: number): Promise<boolean> =>
 
     const timer = setTimeout(() => {
       killer.kill()
-      resolve(false)
+      finish({ outcome: 'timeout', exitCode: null, errorCode: null })
     }, 7_000)
 
-    killer.once('error', () => {
+    killer.once('error', (error: NodeJS.ErrnoException) => {
       clearTimeout(timer)
-      resolve(false)
+      finish({
+        outcome: 'failed',
+        exitCode: null,
+        errorCode: error.code ?? 'UNKNOWN',
+      })
     })
     killer.once('close', (code) => {
       clearTimeout(timer)
-      resolve(code === 0)
+      finish({
+        outcome: code === 0 ? 'confirmed' : 'failed',
+        exitCode: code,
+        errorCode: null,
+      })
     })
   })
+
+const notifyStop = (
+  report: ((result: ProcessStopReport) => void) | undefined,
+  result: ProcessStopReport,
+): void => {
+  try {
+    report?.(result)
+  } catch {
+    // 诊断观察者不参与终止判定，不能使已完成的终止 Promise 永久悬挂。
+  }
+}

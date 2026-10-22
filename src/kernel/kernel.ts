@@ -47,8 +47,12 @@ export class EmbeddedKernel {
         'persistent-events',
         'graceful-shutdown',
         'local-workflow',
+        'product-catalog',
+        'role-trials',
+        'team-workflow',
+        'codex-and-claude',
       ],
-      unavailable: ['feishu', 'skills', 'teams'],
+      unavailable: ['feishu', 'skills'],
       runtime: {
         node: process.versions.node,
         platform: process.platform,

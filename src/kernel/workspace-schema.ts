@@ -63,4 +63,6 @@ export const initializeWorkspaceSchema = (database: DatabaseSync): void => {
 
   if (version < 2) database.exec(workspaceSchemaV2)
   if (version < 3) initializeProductSchema(database)
+  // v4 固定团队依赖输入与贡献补丁的 JSON 契约，旧内核必须拒绝打开。
+  if (version < 4) database.exec('PRAGMA user_version=4')
 }

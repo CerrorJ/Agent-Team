@@ -7,8 +7,8 @@ export * from './role-contracts.js'
 export * from './workspace-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.3.0'
-export const DATA_SCHEMA_VERSION = 3
+export const KERNEL_VERSION = '0.3.1'
+export const DATA_SCHEMA_VERSION = 4
 
 const requestBase = {
   protocolVersion: z.literal(PROTOCOL_VERSION),

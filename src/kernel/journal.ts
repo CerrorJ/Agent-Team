@@ -27,7 +27,7 @@ export class KernelJournal {
       .prepare('PRAGMA user_version')
       .get()?.user_version
 
-    if (version !== 0 && version !== 1 && version !== 2 && version !== 3) {
+    if (![0, 1, 2, 3, 4].includes(Number(version))) {
       this.database.close()
       throw new Error('数据版本不兼容，请使用匹配的内核或备份')
     }
@@ -47,7 +47,7 @@ export class KernelJournal {
       `kernel.schema-${String(version)}.backup.sqlite`,
     )
 
-    if ((version === 1 || version === 2) && !existsSync(backup))
+    if ([1, 2, 3].includes(Number(version)) && !existsSync(backup))
       this.database.prepare('VACUUM INTO ?').run(backup)
   }
 

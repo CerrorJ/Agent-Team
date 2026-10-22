@@ -3,9 +3,15 @@ import { join } from 'node:path'
 import { executionModel } from './model-runtime.js'
 import { prepareTrialInput, executionPrompt } from './role-trial-files.js'
 import { runCli, type RunCliOptions } from '../cli/runner.js'
+import type { ProcessStopReport } from '../cli/process-stop.js'
 import type { CliEvent, CliRunResult } from '../cli/types.js'
 import { projectSchema, runSchema, type Run } from './business-contracts.js'
-import { prepareRunWorktree } from './git-workspace.js'
+import { prepareRunWorktree, applyRunInputPatches } from './git-workspace.js'
+import {
+  captureRunInputs,
+  runInputContext,
+  runInputPatches,
+} from './run-inputs.js'
 import { finishRun } from './run-outcome.js'
 import type { WorkspaceStore } from './workspace-store.js'
 
@@ -24,10 +30,11 @@ export const executeQueuedRun = async (
   const { store, runId, controller } = input
   try {
     if (!prepareState(store, runId)) return
-    const run = store.get('runs', runId, runSchema)
+    let run = store.get('runs', runId, runSchema)
     const runtime = executionModel(run)
     const project = store.get('projects', run.projectId, projectSchema)
     prepareRunWorktree({ project, run, dataDirectory: input.dataDirectory })
+    run = prepareInputs(store, run)
     prepareTrialInput(run)
     // M1 不加载项目自定义 CLI 扩展，避免外部 MCP/Hook 绕过既定工具权限。
     if (
@@ -43,9 +50,11 @@ export const executeQueuedRun = async (
       cwd: run.workDirectory,
       signal: controller.signal,
       timeoutMs: 30 * 60_000,
-      prompt: executionPrompt(run),
+      prompt: executionPrompt(run) + runInputContext(store, run),
       onEvent: (event) => recordActivity({ store, runId, event, controller }),
       onProcessStart: (pid) => recordProcess({ store, runId, pid, controller }),
+      onProcessStop: (report) =>
+        recordStop({ store, runId, controller, report }),
     })
 
     finishRun({ store, runId, result })
@@ -97,9 +106,21 @@ const prepareState = (store: WorkspaceStore, runId: string): boolean => {
   if (run.status === 'cancelled') return false
   if (run.status !== 'queued') throw new Error('RUN_NOT_QUEUED')
   store.transaction(() =>
-    store.updateRun({ ...run, status: 'preparing', version: run.version + 1 }),
+    store.updateRun({
+      ...run,
+      status: 'preparing',
+      version: run.version + 1,
+      inputDeliveryIds: captureRunInputs(store, run),
+    }),
   )
   return true
+}
+
+const prepareInputs = (store: WorkspaceStore, run: Run): Run => {
+  const inputTree = applyRunInputPatches(run, runInputPatches(store, run))
+  const prepared = { ...run, inputTree, version: run.version + 1 }
+  store.transaction(() => store.updateRun(prepared))
+  return prepared
 }
 
 const recordActivity = (input: {
@@ -142,5 +163,26 @@ const recordActivity = (input: {
     )
   } catch {
     input.controller.abort()
+  }
+}
+
+const recordStop = (input: {
+  store: WorkspaceStore
+  runId: string
+  controller: AbortController
+  report: ProcessStopReport
+}): void => {
+  const { store, runId, report, controller } = input
+  try {
+    const run = store.get('runs', runId, runSchema)
+    store.transaction(() =>
+      store.event('run.activity', {
+        id: runId,
+        version: run.version,
+        label: `process_stop:${report.outcome}:${report.exitCode ?? report.errorCode ?? 'none'}:${report.durationMs}ms`,
+      }),
+    )
+  } catch {
+    controller.abort()
   }
 }
