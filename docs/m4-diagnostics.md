@@ -1,6 +1,7 @@
 # M4 只读环境诊断
 
 0.5.6增量，协议1/schema7不变，新增`kernel.diagnostics`及`environment-diagnostics`能力。
+当前兼容修复0.5.8：先检查SQLite结构，再读取业务快照；业务JSON无效时返回WORKSPACE_DATA_INVALID及快照相关检查unchecked，仍可导出最小故障报告，不把健康连接误报为断线，不回传原始解析异常或偷偷修复数据。
 检查SQLite quick_check/外键、待核对进程数量、项目目录可达性、历史就绪角色数量、前100个已安装/历史技能的实际文件摘要，以及固定Git/Codex/Claude程序是否可定位。
 技能超出扫描上限明确显示未检测数量；检查失败不修改任务、角色、技能可用性或业务游标。
 

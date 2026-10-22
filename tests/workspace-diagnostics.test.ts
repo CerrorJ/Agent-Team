@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { randomUUID } from 'node:crypto'
+import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -114,6 +115,66 @@ test('诊断协议拒绝自定义命令或路径，导出投影没有业务文�
       'rejected',
     )
   } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('业务JSON损坏仍返回最小故障诊断，不谎报断线、泄露原文或修复数据', async () => {
+  const fixture = await localKernelFixture(async () => {
+    throw new Error('CLI must not run')
+  })
+
+  const database = new DatabaseSync(
+    join(fixture.dataDirectory, 'kernel.sqlite'),
+  )
+
+  const damaged = 'synthetic-private-broken-json'
+  try {
+    database
+      .prepare('UPDATE projects SET data=? WHERE id=?')
+      .run(damaged, fixture.projectId)
+
+    const result = await fixture.kernel.dispatch({
+      protocolVersion: 1,
+      requestId: randomUUID(),
+      method: 'kernel.diagnostics',
+    })
+
+    assert.equal(result.status, 'completed')
+    const report = environmentDiagnosticsSchema.parse(result.result)
+    assert.equal(
+      report.checks.find((item) => item.id === 'database')?.state,
+      'passed',
+    )
+    assert.equal(
+      report.checks.find((item) => item.id === 'workspace-data')?.state,
+      'failed',
+    )
+    assert.equal(
+      report.checks.find((item) => item.id === 'dependent-checks')?.state,
+      'unchecked',
+    )
+    assert.equal(
+      report.checks.find((item) => item.id === 'projects'),
+      undefined,
+    )
+    assert.equal(JSON.stringify(report).includes(damaged), false)
+    assert.equal(
+      database
+        .prepare('SELECT data FROM projects WHERE id=?')
+        .get(fixture.projectId)?.data,
+      damaged,
+    )
+
+    const health = await fixture.kernel.dispatch({
+      protocolVersion: 1,
+      requestId: randomUUID(),
+      method: 'kernel.health',
+    })
+
+    assert.equal(health.status, 'completed')
+  } finally {
+    database.close()
     await fixture.cleanup()
   }
 })

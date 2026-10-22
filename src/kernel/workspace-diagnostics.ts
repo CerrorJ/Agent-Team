@@ -14,15 +14,27 @@ export const inspectWorkspaceEnvironment = (input: {
   store: WorkspaceStore
   dataDirectory: string
 }) => {
-  const snapshot = input.store.snapshot()
+  const checks = [databaseCheck(input.store)]
+  try {
+    const snapshot = input.store.snapshot()
+    checks.push(
+      ...workspaceChecks(snapshot),
+      ...skillChecks(snapshot, input.dataDirectory),
+    )
+  } catch {
+    checks.push(
+      { id: 'workspace-data', state: 'failed', code: 'WORKSPACE_DATA_INVALID' },
+      {
+        id: 'dependent-checks',
+        state: 'unchecked',
+        code: 'WORKSPACE_CHECKS_UNAVAILABLE',
+      },
+    )
+  }
   return environmentDiagnosticsSchema.parse({
     formatVersion: 1,
     checkedAt: new Date().toISOString(),
-    checks: [
-      databaseCheck(input.store),
-      ...workspaceChecks(snapshot),
-      ...skillChecks(snapshot, input.dataDirectory),
-    ],
+    checks,
     authentication: 'unchecked',
     tools: (['git', 'codex', 'claude'] as const).map((id) => ({
       id,
