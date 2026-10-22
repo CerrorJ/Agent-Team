@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { CodexAdapter } from '../cli/codex-adapter.js'
 import { runCli, type RunCliOptions } from '../cli/runner.js'
 import type { CliEvent, CliRunResult } from '../cli/types.js'
-import { projectSchema, runSchema } from './business-contracts.js'
+import { projectSchema, runSchema, type Run } from './business-contracts.js'
 import { prepareRunWorktree } from './git-workspace.js'
 import { finishRun } from './run-outcome.js'
 import type { WorkspaceStore } from './workspace-store.js'
@@ -30,15 +30,7 @@ export const executeQueuedRun = async (
     if (existsSync(join(run.workDirectory, '.codex/config.toml')))
       throw new Error('CAPABILITY_UNSUPPORTED')
     controller.signal.throwIfAborted()
-    store.transaction(() =>
-      store.updateRun({
-        ...run,
-        version: run.version + 1,
-        status: 'running',
-        startedAt: new Date().toISOString(),
-        processState: 'active',
-      }),
-    )
+    markRunning(store, run)
 
     const result = await execute({
       adapter: new CodexAdapter({ permission: run.roleSnapshot.permission }),
@@ -50,6 +42,7 @@ export const executeQueuedRun = async (
         ? { env: { CODEX_MODEL: run.roleSnapshot.model } }
         : {}),
       onEvent: (event) => recordActivity({ store, runId, event, controller }),
+      onProcessStart: (pid) => recordProcess({ store, runId, pid, controller }),
     })
 
     finishRun({ store, runId, result })
@@ -60,6 +53,38 @@ export const executeQueuedRun = async (
         : 'CLI_EXECUTION_FAILED'
 
     finishRun({ store, runId, failureCode })
+  }
+}
+
+const markRunning = (store: WorkspaceStore, run: Run): void => {
+  store.transaction(() => {
+    store.database
+      .prepare('INSERT INTO execution_segments(id,run_id) VALUES(?,?)')
+      .run(run.id, run.id)
+    store.updateRun({
+      ...run,
+      version: run.version + 1,
+      status: 'running',
+      startedAt: new Date().toISOString(),
+      processState: 'active',
+    })
+  })
+}
+
+const recordProcess = (input: {
+  store: WorkspaceStore
+  runId: string
+  pid: number
+  controller: AbortController
+}): void => {
+  try {
+    input.store.database
+      .prepare(
+        "UPDATE execution_segments SET pid=?,started_at=?,status='running' WHERE id=?",
+      )
+      .run(input.pid, new Date().toISOString(), input.runId)
+  } catch {
+    input.controller.abort()
   }
 }
 
@@ -82,11 +107,27 @@ const recordActivity = (input: {
   try {
     const run = input.store.get('runs', input.runId, runSchema)
 
+    const total = Number(
+      input.store.database
+        .prepare(
+          "SELECT COUNT(*) AS total FROM workspace_events WHERE aggregate_id=? AND type='run.activity'",
+        )
+        .get(run.id)?.total,
+    )
+
+    if (total > 500) return
+    if (input.event.type === 'session')
+      input.store.database
+        .prepare('UPDATE execution_segments SET session_id=? WHERE run_id=?')
+        .run(input.event.sessionId, run.id)
+
     // 只保存归一化类型与工具名称，不持久化工具参数、原始 stderr 或用户内容。
     const label =
-      input.event.type === 'tool_start'
-        ? input.event.toolName
-        : input.event.type
+      total === 500
+        ? '日志已达到保留上限'
+        : input.event.type === 'tool_start'
+          ? input.event.toolName
+          : input.event.type
 
     input.store.transaction(() =>
       input.store.event('run.activity', {

@@ -1,11 +1,13 @@
-# 嵌入式内核 M0
+# 嵌入式内核 M1 开发版
 
 正式开发授权日期：2026-10-22。独立飞书服务仍使用 `pnpm start:once`，
 其入口、配置及生产数据未迁移。嵌入入口不加载该配置，不提供飞书连接能力。
 
 `createKernel({dataDirectory, sourceCommit, onEvent})` 显式打开独立 SQLite 数据目录。
-协议 1、内核 0.1.0、schema 1；仅支持 handshake、health、events、shutdown。
-项目、角色、任务执行、审批与技能尚不在能力清单中，后续阶段增量接入现有执行器。
+协议 1、内核 0.2.0、schema 2；支持 handshake、health、events、shutdown，
+以及 workspace.snapshot / command / run / delivery。项目、角色版本、Task/Run、
+单 Codex 执行、隔离 worktree、停止/重试、交付/验收已经接入共享应用入口。
+团队、飞书和技能尚未接入，不在能力清单中。当前仍在桌面联调与阶段验收。
 实例锁使用专用 SQLite 独占事务，关闭或进程死亡后释放；第二实例直接失败。
 不允许指向旧服务 data 目录。导入模块没有飞书或进程启动副作用。
 
@@ -18,4 +20,6 @@
 
 校验：`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm test`。
 新增测试验证无飞书导入、输入拒绝、事件重启恢复、实例互斥与协议不兼容。
-本阶段不声称原独立服务已与嵌入模式共享完整业务对象；该统一化在 M1—M3 完成。
+本阶段不声称原独立飞书入口已与嵌入模式共享新对象；渠道统一在 M3 验证。
+从 schema 1 升级前，使用 SQLite VACUUM INTO 保存一致备份；旧内核拒绝 schema 2。
+默认测试不调用付费模型；真实 CLI 集成单独执行并记录。未知旧进程保留待确认，不自动重放。

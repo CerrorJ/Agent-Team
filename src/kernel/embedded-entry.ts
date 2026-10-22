@@ -24,8 +24,8 @@ const kernel = createKernel({
   onEvent: (event) => parentPort.postMessage({ kind: 'event', event }),
 })
 
-parentPort.on('message', ({ data }) => {
-  const response = kernel.dispatch(data)
+parentPort.on('message', async ({ data }) => {
+  const response = await kernel.dispatch(data)
   parentPort.postMessage({ kind: 'response', response })
   if (response.status === 'completed' && kernelStateStopped(response.result)) {
     process.exitCode = 0

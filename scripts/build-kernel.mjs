@@ -24,9 +24,9 @@ await writeFile(
   `${output}/manifest.json`,
   JSON.stringify(
     {
-      kernelVersion: '0.1.0',
+      kernelVersion: '0.2.0',
       protocolVersion: 1,
-      dataSchemaVersion: 1,
+      dataSchemaVersion: 2,
       sourceCommit,
       platform: 'any',
       arch: 'any',
@@ -41,7 +41,7 @@ await writeFile(
   JSON.stringify(
     {
       name: '@weftpilot/agent-team-kernel',
-      version: '0.1.0',
+      version: '0.2.0',
       type: 'module',
       private: true,
       exports: {

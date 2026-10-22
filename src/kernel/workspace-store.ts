@@ -183,9 +183,10 @@ export class WorkspaceStore {
         new Date().toISOString(),
         JSON.stringify(object),
       )
-    this.database
-      .prepare('INSERT INTO notification_outbox(event_id) VALUES(?)')
-      .run(eventId)
+    if (type !== 'run.activity')
+      this.database
+        .prepare('INSERT INTO notification_outbox(event_id) VALUES(?)')
+        .run(eventId)
   }
 
   snapshot(): WorkspaceSnapshot {
@@ -204,7 +205,32 @@ export class WorkspaceStore {
         runs: this.list('runs', runSchema),
         deliveries: this.list('deliveries', deliverySchema),
         acceptances: this.list('acceptances', acceptanceSchema),
+        logs: this.activity(),
       }),
     )
+  }
+
+  activity(): {
+    runId: string
+    label: string
+    occurredAt: string
+    sequence: number
+  }[] {
+    return this.database
+      .prepare(
+        `SELECT aggregate_id AS runId, data, occurred_at AS occurredAt, sequence
+      FROM workspace_events WHERE type='run.activity' ORDER BY sequence DESC LIMIT 100`,
+      )
+      .all()
+      .reverse()
+      .map((row) => {
+        const data = JSON.parse(String(row.data)) as { label: string }
+        return {
+          runId: String(row.runId),
+          label: data.label,
+          occurredAt: String(row.occurredAt),
+          sequence: Number(row.sequence),
+        }
+      })
   }
 }

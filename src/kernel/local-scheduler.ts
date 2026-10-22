@@ -8,6 +8,7 @@ export class LocalScheduler {
     | { runId: string; controller: AbortController; finished: Promise<void> }
     | undefined
   private closing = false
+  private faulted = false
 
   constructor(
     private readonly options: {
@@ -25,16 +26,10 @@ export class LocalScheduler {
       store.transaction(() => {
         store.updateRun({
           ...run,
-          status: 'interrupted',
+          status: run.status,
           version: run.version + 1,
           processState: 'uncertain',
           failureCode: 'STATE_UNCERTAIN',
-        })
-        const task = store.get('tasks', run.taskId, taskSchema)
-        store.updateTask({
-          ...task,
-          version: task.version + 1,
-          status: 'ready',
         })
       })
     }
@@ -42,8 +37,14 @@ export class LocalScheduler {
   }
 
   kick(): void {
-    if (this.closing) return
+    if (this.closing || this.faulted) return
     const store = this.options.store
+    if (
+      store
+        .list('runs', runSchema)
+        .some((run) => run.processState === 'uncertain')
+    )
+      return
     if (this.active) {
       const current = store.get('runs', this.active.runId, runSchema)
       if (current.status === 'stopping') this.active.controller.abort()
@@ -70,6 +71,9 @@ export class LocalScheduler {
           this.options.execute,
         ),
       )
+      .catch(() => {
+        this.faulted = true
+      })
       .finally(() => {
         this.active = undefined
         this.kick()
@@ -81,6 +85,12 @@ export class LocalScheduler {
   async shutdown(): Promise<void> {
     this.closing = true
     const store = this.options.store
+    if (
+      store
+        .list('runs', runSchema)
+        .some((run) => run.processState === 'uncertain')
+    )
+      throw new Error('STATE_UNCERTAIN')
     for (const run of store.list('runs', runSchema)) {
       if (run.status === 'queued') this.cancelQueued(run.id)
       else if (run.status === 'running' || run.status === 'preparing') {
@@ -95,6 +105,13 @@ export class LocalScheduler {
     }
     this.active?.controller.abort()
     await this.active?.finished
+    if (
+      this.faulted ||
+      store
+        .list('runs', runSchema)
+        .some((run) => run.processState === 'uncertain')
+    )
+      throw new Error('STATE_UNCERTAIN')
   }
 
   private cancelQueued(runId: string): void {

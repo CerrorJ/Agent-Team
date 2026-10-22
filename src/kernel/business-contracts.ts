@@ -182,6 +182,16 @@ export const workspaceSnapshotSchema = z
     runs: z.array(runSchema),
     deliveries: z.array(deliverySchema),
     acceptances: z.array(acceptanceSchema),
+    logs: z.array(
+      z
+        .object({
+          runId: id,
+          label: z.string(),
+          occurredAt: z.string().datetime(),
+          sequence: z.number().int(),
+        })
+        .strict(),
+    ),
   })
   .strict()
 

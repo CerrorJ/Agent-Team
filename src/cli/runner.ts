@@ -1,4 +1,5 @@
-import { killCli, spawnCli } from './spawn-cli.js'
+import { spawnCli } from './spawn-cli.js'
+import { terminateCli } from './process-stop.js'
 import { armTimeout, envTimeoutMs } from './timeout.js'
 import { promptInputForPlatform } from './types.js'
 import { createInterface } from 'node:readline'
@@ -39,6 +40,7 @@ const toToolCalls = (calls: Map<string, CliToolCall>): CliToolCall[] =>
   }))
 
 export interface RunCliOptions {
+  onProcessStart?: (pid: number) => void
   adapter: CliAdapter
   prompt: string
   cwd: string
@@ -185,6 +187,13 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 
+    if (child.pid) options.onProcessStart?.(child.pid)
+    let termination: Promise<boolean> | undefined
+
+    const terminate = () => {
+      termination ??= terminateCli(child)
+    }
+
     // stdin 模式下把 prompt 写入子进程；否则 prompt 已在命令行参数里，stdin 直接收口。
     if (child.stdin) {
       if (useStdin) child.stdin.end(prompt, 'utf8')
@@ -192,7 +201,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
     }
     // spawn 的 signal 选项只杀直接子进程（cmd 外壳），Windows 下 claude.exe/codex.exe 会变孤儿；
     // 额外监听 abort 用 killCli 连进程树一起清。
-    const abort = () => killCli(child)
+    const abort = terminate
     signal?.addEventListener('abort', abort, { once: true })
     const lines = createInterface({ input: child.stdout })
     //记住最近一次出现的会话标识
@@ -213,7 +222,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
 
     const timer = armTimeout(() => {
       timedOut = true
-      killCli(child)
+      terminate()
     }, timeoutMs)
 
     const finish = () => {
@@ -270,7 +279,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
               toolName: event.toolName,
               input: event.input,
             }
-            killCli(child)
+            terminate()
           }
           continue
         }
@@ -306,7 +315,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
     })
 
     child.stderr.on('data', (chunk: Buffer | string) => {
-      stderr += chunk.toString()
+      stderr = (stderr + chunk.toString()).slice(-65_536)
     })
     child.once('error', (error) => {
       if (timedOut) {
@@ -319,8 +328,12 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
       }
       fail(error)
     })
-    child.once('close', (code) => {
+    child.once('close', async (code) => {
       if (settled) return
+      if (termination && !(await termination) && code !== 0) {
+        fail(new Error('STATE_UNCERTAIN'))
+        return
+      }
       if (stoppedByToolCall) {
         settled = true
         finish()

@@ -1,8 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 /** M1 新增表与旧生命周期事件分离，迁移只新增，不改写 M0 历史。 */
-export const initializeWorkspaceSchema = (database: DatabaseSync): void => {
-  database.exec(`
+const workspaceSchemaV2 = `
     PRAGMA foreign_keys=ON;
     BEGIN IMMEDIATE;
     CREATE TABLE IF NOT EXISTS projects (
@@ -41,9 +40,18 @@ export const initializeWorkspaceSchema = (database: DatabaseSync): void => {
     CREATE TABLE IF NOT EXISTS command_receipts (
       idempotency_key TEXT PRIMARY KEY, request_digest TEXT NOT NULL, response TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS execution_segments (
+      id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id),
+      pid INTEGER, started_at TEXT, ended_at TEXT, session_id TEXT,
+      status TEXT NOT NULL DEFAULT 'launching'
+    );
     CREATE TABLE IF NOT EXISTS notification_outbox (
       event_id TEXT PRIMARY KEY REFERENCES workspace_events(id), delivered INTEGER NOT NULL DEFAULT 0
     );
+    PRAGMA user_version=2;
     COMMIT;
-  `)
+`
+
+export const initializeWorkspaceSchema = (database: DatabaseSync): void => {
+  database.exec(workspaceSchemaV2)
 }

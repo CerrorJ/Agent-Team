@@ -6,6 +6,24 @@ import type { BusinessCommand } from './business-contracts.js'
 export class CommandLedger {
   constructor(private readonly store: WorkspaceStore) {}
 
+  find<T>(input: { key: string; command: BusinessCommand }): T | undefined {
+    const receipt = this.store.database
+      .prepare(
+        'SELECT request_digest,response FROM command_receipts WHERE idempotency_key=?',
+      )
+      .get(input.key)
+
+    if (!receipt) return undefined
+
+    const digest = createHash('sha256')
+      .update(JSON.stringify(input.command))
+      .digest('hex')
+
+    if (receipt.request_digest !== digest)
+      throw new Error('IDEMPOTENCY_CONFLICT: 同一命令键的内容不同')
+    return JSON.parse(String(receipt.response)) as T
+  }
+
   execute<T>(
     input: { key: string; command: BusinessCommand },
     operation: () => T,

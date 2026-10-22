@@ -15,46 +15,57 @@ const request = (method: KernelRequest['method']) => ({
   method,
 })
 
-test('无飞书配置创建，协议与真实运行时可查，未实现能力不伪装可用', () => {
+test('无飞书配置创建，协议与真实运行时可查，未实现能力不伪装可用', async () => {
   const directory = mkdtempSync(join(tmpdir(), '纬舟 kernel '))
   const kernel = createKernel({ dataDirectory: directory, sourceCommit })
   try {
-    const response = kernel.dispatch(request('kernel.handshake'))
+    const response = await kernel.dispatch(request('kernel.handshake'))
     assert.equal(response.status, 'completed')
     if (response.status !== 'completed') throw new Error('握手失败')
     const handshake = handshakeSchema.parse(response.result)
     assert.equal(handshake.sourceCommit, sourceCommit)
     assert.equal(handshake.runtime.node, process.versions.node)
-    assert.ok(handshake.unavailable.includes('tasks'))
+    assert.ok(handshake.unavailable.includes('feishu'))
     assert.equal(
-      kernel.dispatch({ ...request('kernel.health'), protocolVersion: 2 })
-        .status,
+      (
+        await kernel.dispatch({
+          ...request('kernel.health'),
+          protocolVersion: 2,
+        })
+      ).status,
       'rejected',
     )
     assert.equal(
-      kernel.dispatch({ ...request('kernel.health'), command: 'anything' })
-        .status,
+      (
+        await kernel.dispatch({
+          ...request('kernel.health'),
+          command: 'anything',
+        })
+      ).status,
       'rejected',
     )
   } finally {
-    kernel.shutdown()
+    await kernel.shutdown()
     rmSync(directory, { recursive: true, force: true })
   }
 })
 
-test('实例互斥、停止幂等、事件在重启后可补读', () => {
+test('实例互斥、停止幂等、事件在重启后可补读', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'weftpilot-recovery-'))
   const kernel = createKernel({ dataDirectory: directory, sourceCommit })
   try {
     assert.throws(() =>
       createKernel({ dataDirectory: directory, sourceCommit }),
     )
-    kernel.shutdown()
-    kernel.shutdown()
-    assert.equal(kernel.dispatch(request('kernel.health')).status, 'rejected')
+    await kernel.shutdown()
+    await kernel.shutdown()
+    assert.equal(
+      (await kernel.dispatch(request('kernel.health'))).status,
+      'rejected',
+    )
     const reopened = createKernel({ dataDirectory: directory, sourceCommit })
     try {
-      const result = reopened.dispatch({
+      const result = await reopened.dispatch({
         ...request('kernel.events'),
         after: 0,
       })
@@ -66,10 +77,10 @@ test('实例互斥、停止幂等、事件在重启后可补读', () => {
         ['kernel.started', 'kernel.stopped', 'kernel.started'],
       )
     } finally {
-      reopened.shutdown()
+      await reopened.shutdown()
     }
   } finally {
-    kernel.shutdown()
+    await kernel.shutdown()
     rmSync(directory, { recursive: true, force: true })
   }
 })

@@ -1,8 +1,10 @@
 import { z } from 'zod'
+import { businessCommandSchema } from './business-contracts.js'
+export * from './business-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.1.0'
-export const DATA_SCHEMA_VERSION = 1
+export const KERNEL_VERSION = '0.2.0'
+export const DATA_SCHEMA_VERSION = 2
 
 const requestBase = {
   protocolVersion: z.literal(PROTOCOL_VERSION),
@@ -13,6 +15,31 @@ const requestBase = {
 export const requestSchema = z.discriminatedUnion('method', [
   z.object({ ...requestBase, method: z.literal('kernel.handshake') }).strict(),
   z.object({ ...requestBase, method: z.literal('kernel.health') }).strict(),
+  z
+    .object({ ...requestBase, method: z.literal('workspace.snapshot') })
+    .strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('workspace.command'),
+      key: z.string().uuid(),
+      command: businessCommandSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('workspace.delivery'),
+      id: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('workspace.run'),
+      id: z.string().uuid(),
+    })
+    .strict(),
   z
     .object({
       ...requestBase,
@@ -40,7 +67,12 @@ export const handshakeSchema = z
     dataSchemaVersion: z.literal(DATA_SCHEMA_VERSION),
     sourceCommit: z.string().regex(/^[a-f0-9]{40}$/),
     capabilities: z.array(
-      z.enum(['health', 'persistent-events', 'graceful-shutdown']),
+      z.enum([
+        'health',
+        'persistent-events',
+        'graceful-shutdown',
+        'local-workflow',
+      ]),
     ),
     unavailable: z.array(z.string()),
     runtime: z
@@ -54,7 +86,7 @@ export const responseSchema = z.discriminatedUnion('status', [
     .object({
       protocolVersion: z.literal(PROTOCOL_VERSION),
       requestId: z.string().uuid(),
-      status: z.literal('completed'),
+      status: z.enum(['completed', 'accepted']),
       result: z.unknown(),
     })
     .strict(),
@@ -65,11 +97,7 @@ export const responseSchema = z.discriminatedUnion('status', [
       status: z.literal('rejected'),
       error: z
         .object({
-          code: z.enum([
-            'VALIDATION_FAILED',
-            'KERNEL_STOPPED',
-            'INTERNAL_ERROR',
-          ]),
+          code: z.string().regex(/^[A-Z_]+$/),
           message: z.string(),
           retryable: z.boolean(),
         })

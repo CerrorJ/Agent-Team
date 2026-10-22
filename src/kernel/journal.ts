@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
@@ -7,7 +7,7 @@ import { eventSchema, type KernelEvent } from './protocol.js'
 /** 独立锁库持有写事务，进程死亡由 OS 释放，不根据心跳猜测锁失效。 */
 export class KernelJournal {
   private readonly lock: DatabaseSync
-  private readonly database: DatabaseSync
+  readonly database: DatabaseSync
 
   constructor(dataDirectory: string) {
     mkdirSync(dataDirectory, { recursive: true })
@@ -15,19 +15,19 @@ export class KernelJournal {
     try {
       this.lock.exec('BEGIN EXCLUSIVE')
       this.database = new DatabaseSync(join(dataDirectory, 'kernel.sqlite'))
-      this.initialize()
+      this.initialize(dataDirectory)
     } catch (error) {
       this.lock.close()
       throw error
     }
   }
 
-  private initialize(): void {
+  private initialize(dataDirectory: string): void {
     const version = this.database
       .prepare('PRAGMA user_version')
       .get()?.user_version
 
-    if (version !== 0 && version !== 1) {
+    if (version !== 0 && version !== 1 && version !== 2) {
       this.database.close()
       throw new Error('数据版本不兼容，请使用匹配的内核或备份')
     }
@@ -39,8 +39,11 @@ export class KernelJournal {
         occurred_at TEXT NOT NULL,
         type TEXT NOT NULL
       );
-      PRAGMA user_version=1;
     `)
+    if (version === 0) this.database.exec('PRAGMA user_version=1')
+    const backup = join(dataDirectory, 'kernel.schema-1.backup.sqlite')
+    if (version === 1 && !existsSync(backup))
+      this.database.prepare('VACUUM INTO ?').run(backup)
   }
 
   append(type: KernelEvent['type']): KernelEvent {
