@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { runCli } from '../src/cli/runner.js'
 import type { CliAdapter, CliEvent } from '../src/cli/types.js'
+import type { ProcessStopReport } from '../src/cli/process-stop.js'
 
 test(
   '停止等待真实父子进程结束，不把 abort 请求作为停止证据',
@@ -13,6 +14,7 @@ test(
   async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'weftpilot-stop-'))
     const controller = new AbortController()
+    const reports: ProcessStopReport[] = []
     const childScript = `setInterval(()=>{},1000)`
 
     const script = `const cp=require('node:child_process'); const fs=require('node:fs');
@@ -38,6 +40,7 @@ test(
         cwd,
         prompt: 'fixture',
         signal: controller.signal,
+        onProcessStop: (report) => reports.push(report),
       })
 
       for (
@@ -53,6 +56,12 @@ test(
 
       controller.abort()
       await assert.rejects(executing, /取消/)
+      if (process.platform === 'win32') {
+        assert.equal(reports.length, 1)
+        assert.equal(reports[0]?.outcome, 'confirmed')
+        assert.equal(reports[0]?.exitCode, 0)
+        assert.ok((reports[0]?.durationMs ?? -1) >= 0)
+      }
       for (const pid of pids)
         assert.throws(() => process.kill(pid, 0), /ESRCH|找不到/)
     } finally {

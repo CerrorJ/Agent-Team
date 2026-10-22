@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CodexAdapter } from '../cli/codex-adapter.js'
 import { runCli, type RunCliOptions } from '../cli/runner.js'
+import type { ProcessStopReport } from '../cli/process-stop.js'
 import type { CliEvent, CliRunResult } from '../cli/types.js'
 import { projectSchema, runSchema, type Run } from './business-contracts.js'
 import { prepareRunWorktree } from './git-workspace.js'
@@ -43,6 +44,8 @@ export const executeQueuedRun = async (
         : {}),
       onEvent: (event) => recordActivity({ store, runId, event, controller }),
       onProcessStart: (pid) => recordProcess({ store, runId, pid, controller }),
+      onProcessStop: (report) =>
+        recordStop({ store, runId, controller, report }),
     })
 
     finishRun({ store, runId, result })
@@ -139,5 +142,26 @@ const recordActivity = (input: {
     )
   } catch {
     input.controller.abort()
+  }
+}
+
+const recordStop = (input: {
+  store: WorkspaceStore
+  runId: string
+  controller: AbortController
+  report: ProcessStopReport
+}): void => {
+  const { store, runId, report, controller } = input
+  try {
+    const run = store.get('runs', runId, runSchema)
+    store.transaction(() =>
+      store.event('run.activity', {
+        id: runId,
+        version: run.version,
+        label: `process_stop:${report.outcome}:${report.exitCode ?? report.errorCode ?? 'none'}:${report.durationMs}ms`,
+      }),
+    )
+  } catch {
+    controller.abort()
   }
 }
