@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readFileSync,
   writeFileSync,
+  existsSync,
   rmSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -33,6 +34,10 @@ test('中文空格路径的真实 worktree 保留主仓库文件，脏目录阻�
     }).trim()
 
   try {
+    assert.throws(
+      () => inspectProjectRepository({ repositoryPath, defaultBranch: 'main' }),
+      /GIT_ROOT_REQUIRED/,
+    )
     git(['init', '-b', 'main'])
     writeFileSync(join(repositoryPath, 'baseline.txt'), 'baseline')
     git(['add', '.'])
@@ -46,10 +51,38 @@ test('中文空格路径的真实 worktree 保留主仓库文件，脏目录阻�
       'baseline',
     ])
 
+    const hookDirectory = join(directory, 'hooks')
+    mkdirSync(hookDirectory)
+
+    const hookSentinel = join(directory, 'hook-executed.txt').replace(
+      /\\/g,
+      '/',
+    )
+
+    writeFileSync(
+      join(hookDirectory, 'post-checkout'),
+      `#!/bin/sh\nprintf unexpected > '${hookSentinel}'\n`,
+      { mode: 0o755 },
+    )
+    git(['config', 'core.hooksPath', hookDirectory])
+    git([
+      'remote',
+      'add',
+      'origin',
+      'https://synthetic-user:synthetic-secret@example.invalid/repository.git?token=synthetic',
+    ])
+    assert.throws(
+      () =>
+        inspectProjectRepository({ repositoryPath, defaultBranch: 'missing' }),
+      /GIT_BRANCH_INVALID/,
+    )
+
     const inspected = inspectProjectRepository({
       repositoryPath,
       defaultBranch: 'main',
     })
+
+    assert.equal(inspected.gitUrl, 'https://example.invalid/repository.git')
 
     const project: Project = {
       ...inspected,
@@ -82,6 +115,7 @@ test('中文空格路径的真实 worktree 保留主仓库文件，脏目录阻�
     } as Run
 
     prepareRunWorktree({ project, run, dataDirectory: directory })
+    assert.equal(existsSync(hookSentinel), false)
     writeFileSync(join(workDirectory, 'new.txt'), '交付文件')
     assert.ok(collectRunDelivery(run).diff.includes('交付文件'))
     assert.equal(git(['status', '--porcelain']), '')

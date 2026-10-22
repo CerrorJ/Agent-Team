@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path'
 
 interface CommandPlan {
@@ -58,7 +59,31 @@ const knownNpmCommand = (
   }
   if (command === 'codex') {
     const script = join(directory, 'node_modules/@openai/codex/bin/codex.js')
-    if (existsSync(script)) return { command: 'node.exe', prefix: [script] }
+    if (existsSync(script)) return codexNative(script)
+  }
+  return undefined
+}
+
+const codexNative = (script: string): CommandPlan | undefined => {
+  const architecture = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
+  const target = `${architecture}-pc-windows-msvc`
+  let packageRoot = resolve(dirname(script), '..')
+  try {
+    const packageName =
+      process.arch === 'arm64'
+        ? '@openai/codex-win32-arm64'
+        : '@openai/codex-win32-x64'
+
+    packageRoot = dirname(
+      createRequire(script).resolve(`${packageName}/package.json`),
+    )
+  } catch {
+    /* 旧 npm 安装把 vendor 放在主包中。 */
+  }
+  // 直接持有原生 CLI，避免 npm 包装进程在 taskkill 枚举途中提前退出，丢失树的根。
+  for (const binary of ['bin/codex.exe', 'codex/codex.exe']) {
+    const executable = join(packageRoot, 'vendor', target, binary)
+    if (existsSync(executable)) return { command: executable, prefix: [] }
   }
   return undefined
 }

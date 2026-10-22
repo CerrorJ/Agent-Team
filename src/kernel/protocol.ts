@@ -3,7 +3,7 @@ import { businessCommandSchema } from './business-contracts.js'
 export * from './business-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.2.1'
+export const KERNEL_VERSION = '0.2.2'
 export const DATA_SCHEMA_VERSION = 2
 
 const requestBase = {
