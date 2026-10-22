@@ -11,6 +11,10 @@ import {
 import type { FeishuTransportFactory } from './feishu-transport.js'
 import type { SkillFetch } from './skill-download.js'
 import {
+  WorkspaceMaintenance,
+  isMaintenanceRequest,
+} from './workspace-maintenance.js'
+import {
   DATA_SCHEMA_VERSION,
   KERNEL_VERSION,
   PROTOCOL_VERSION,
@@ -44,6 +48,7 @@ export class EmbeddedKernel {
   private readonly store: WorkspaceStore
   private readonly service: WorkspaceService
   private readonly feishu: FeishuRuntime
+  private readonly maintenance: WorkspaceMaintenance
   private stopped = false
   private stopping: Promise<{ state: 'stopped' }> | undefined
   readonly handshake: KernelHandshake
@@ -69,6 +74,12 @@ export class EmbeddedKernel {
         ...(options.feishuTransport
           ? { factory: options.feishuTransport }
           : {}),
+      })
+      this.maintenance = new WorkspaceMaintenance({
+        store: this.store,
+        service: this.service,
+        dataDirectory: options.dataDirectory,
+        sourceCommit: options.sourceCommit,
       })
       this.emit('kernel.started')
     } catch (error) {
@@ -104,9 +115,11 @@ export class EmbeddedKernel {
         protocolVersion: 1,
         requestId: request.requestId,
         status: 'completed',
-        result: await (request.method.startsWith('feishu.')
-          ? this.channelRequest(request)
-          : this.execute(request)),
+        result: await (isMaintenanceRequest(request)
+          ? this.maintenance.dispatch(request)
+          : request.method.startsWith('feishu.')
+            ? this.channelRequest(request)
+            : this.execute(request)),
       }
     } catch (error) {
       return this.reject(request.requestId, error)
@@ -210,6 +223,7 @@ const createHandshake = (sourceCommit: string): KernelHandshake => {
       'human-workflow',
       'feishu-channel',
       'skills',
+      'workspace-backup',
     ],
     unavailable: [],
     runtime: {

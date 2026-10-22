@@ -1,4 +1,12 @@
 const messages: Record<string, string> = {
+  BACKUP_INVALID: '备份清单或数据结构无效，当前数据未替换',
+  BACKUP_SIZE_LIMIT: '备份文件数量或大小超出恢复上限',
+  BACKUP_DIGEST_MISMATCH: '备份文件摘要不符，当前数据未替换',
+  BACKUP_VERSION_INCOMPATIBLE: '备份数据版本不兼容，请使用匹配内核',
+  BACKUP_WORKSPACE_BUSY:
+    '请先结束在途任务、人工等待与技能安装，并核对状态待确认执行',
+  BACKUP_TARGET_INVALID: '请选择数据目录与项目仓库之外的新备份位置',
+  BACKUP_RESTART_REQUIRED: '恢复数据已准备，需完成内核重启后继续操作',
   SKILL_PATH_INVALID: '技能包含不可移植路径、覆盖冲突或符号链接',
   SKILL_SOURCE_INVALID: '技能来源、固定提交、目录或许可证不完整',
   SKILL_METADATA_INVALID: 'SKILL.md元数据无效或与目录名称不符',

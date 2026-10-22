@@ -32,6 +32,7 @@ export class WorkspaceService {
   private readonly scheduler: LocalScheduler
   private readonly skills: SkillRuntime
   private closing = false
+  private restorePrepared = false
 
   constructor(
     private readonly options: {
@@ -56,6 +57,7 @@ export class WorkspaceService {
     actor: HumanActor = { channel: 'desktop', identity: 'local-owner' },
   ): CommandOutcome {
     if (this.closing) throw new Error('KERNEL_STOPPED: 内核正在退出')
+    if (this.restorePrepared) throw new Error('BACKUP_RESTART_REQUIRED')
     const previous = this.ledger.find<CommandOutcome>(input)
     if (previous) return previous
     expireHumanRequests(this.options.store)
@@ -92,6 +94,10 @@ export class WorkspaceService {
     this.closing = true
     await this.skills.shutdown()
     await this.scheduler.shutdown()
+  }
+
+  freezeForRestore(): void {
+    this.restorePrepared = true
   }
 
   private prepare(

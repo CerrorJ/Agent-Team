@@ -9,9 +9,10 @@ export * from './credential-contracts.js'
 export * from './human-contracts.js'
 export * from './feishu-contracts.js'
 export * from './skill-contracts.js'
+export * from './backup-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.5.2'
+export const KERNEL_VERSION = '0.5.3'
 export const DATA_SCHEMA_VERSION = 7
 
 const requestBase = {
@@ -26,6 +27,29 @@ export const requestSchema = z.discriminatedUnion('method', [
   z.object({ ...requestBase, method: z.literal('feishu.connect') }).strict(),
   z.object({ ...requestBase, method: z.literal('feishu.disconnect') }).strict(),
   z.object({ ...requestBase, method: z.literal('feishu.status') }).strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('workspace.backup'),
+      backupId: z.string().uuid(),
+      targetDirectory: z.string().min(1).max(4096),
+    })
+    .strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('workspace.backup.inspect'),
+      backupDirectory: z.string().min(1).max(4096),
+    })
+    .strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('workspace.restore'),
+      backupDirectory: z.string().min(1).max(4096),
+      targetDirectory: z.string().min(1).max(4096),
+    })
+    .strict(),
   z
     .object({ ...requestBase, method: z.literal('workspace.snapshot') })
     .strict(),
@@ -97,6 +121,7 @@ export const handshakeSchema = z
         'human-workflow',
         'feishu-channel',
         'skills',
+        'workspace-backup',
       ]),
     ),
     unavailable: z.array(z.string()),
