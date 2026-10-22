@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createKernel } from '../src/kernel/kernel.js'
+import { journalEventsSchema } from '../src/kernel/journal-schema.js'
+import { verifyBackupSchema } from '../src/kernel/backup-schema.js'
 
 test('schema5升级保留人工请求表，并在新增飞书投影前保存一致备份', async () => {
   const dataDirectory = mkdtempSync(join(tmpdir(), 'weftpilot-v6-migration-'))
@@ -139,9 +141,7 @@ test('schema 3 的产品对象在迁移前取得一致备份', async () => {
 test('M0 在一致备份后迁移到当前 schema，备份保留原生命周期事件', async () => {
   const dataDirectory = mkdtempSync(join(tmpdir(), 'weftpilot-migration-'))
   const database = new DatabaseSync(join(dataDirectory, 'kernel.sqlite'))
-  database.exec(
-    `CREATE TABLE events(sequence INTEGER PRIMARY KEY,event_id TEXT,occurred_at TEXT,type TEXT); PRAGMA user_version=1;`,
-  )
+  database.exec(`${journalEventsSchema} PRAGMA user_version=1;`)
   database
     .prepare('INSERT INTO events VALUES(?,?,?,?)')
     .run(1, randomUUID(), new Date().toISOString(), 'kernel.started')
@@ -149,6 +149,8 @@ test('M0 在一致备份后迁移到当前 schema，备份保留原生命周期�
   const kernel = createKernel({ dataDirectory, sourceCommit: 'a'.repeat(40) })
   try {
     assert.equal(kernel.handshake.dataSchemaVersion, 7)
+    // 此表定义与已交付M0提交8a1491a一致；迁移后仍可通过恢复白名单。
+    verifyCurrentBackupSchema(dataDirectory)
 
     const backup = new DatabaseSync(
       join(dataDirectory, 'kernel.schema-1.backup.sqlite'),
@@ -222,6 +224,19 @@ test('M1 schema 2 升级保留项目并生成独立一致备份，重新打开�
   new WorkspaceStore(reopened)
   assert.equal(reopened.prepare('PRAGMA foreign_keys').get()?.foreign_keys, 1)
   assert.equal(reopened.prepare('PRAGMA user_version').get()?.user_version, 7)
+  verifyBackupSchema(reopened)
   reopened.close()
   rmSync(dataDirectory, { recursive: true, force: true })
 })
+
+const verifyCurrentBackupSchema = (dataDirectory: string): void => {
+  const database = new DatabaseSync(join(dataDirectory, 'kernel.sqlite'), {
+    readOnly: true,
+  })
+
+  try {
+    verifyBackupSchema(database)
+  } finally {
+    database.close()
+  }
+}

@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { readFileSync, lstatSync, realpathSync, existsSync } from 'node:fs'
-import { dirname, resolve, join } from 'node:path'
+import { basename, dirname, resolve, join } from 'node:path'
 import {
   backupManifestSchema,
   type BackupManifest,
@@ -10,6 +10,7 @@ import { WorkspaceStore } from './workspace-store.js'
 import type { WorkspaceSnapshot } from './workspace-contracts.js'
 import { isPathInside, checkBackupFiles } from './backup-files.js'
 import { verifySkillDirectory } from './skill-files.js'
+import { verifyBackupSchema } from './backup-schema.js'
 
 export const assertBackupQuiescent = (snapshot: WorkspaceSnapshot): void => {
   const terminal = new Set([
@@ -41,10 +42,7 @@ export const validateBackupTarget = (input: {
 }): string => {
   const target = resolve(input.target)
   const parent = realpathSync(dirname(target))
-  if (
-    existsSync(target) ||
-    resolve(parent, target.slice(dirname(target).length + 1)) !== target
-  )
+  if (existsSync(target) || resolve(parent, basename(target)) !== target)
     throw new Error('BACKUP_TARGET_INVALID')
 
   const protectedPaths = [
@@ -96,6 +94,7 @@ export const inspectBackup = (
 
   try {
     database.exec('PRAGMA trusted_schema=OFF')
+    verifyBackupSchema(database)
     if (
       database.prepare('PRAGMA user_version').get()?.user_version !==
         DATA_SCHEMA_VERSION ||
