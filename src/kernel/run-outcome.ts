@@ -68,7 +68,7 @@ const saveDelivery = (input: {
 }): void => {
   input.store.addDelivery({
     id: randomUUID(),
-    version: 1,
+    version: input.run.attempt,
     runId: input.run.id,
     taskId: input.run.taskId,
     answer: input.result.answer.slice(0, 200_000),

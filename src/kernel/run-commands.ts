@@ -135,6 +135,7 @@ const stopRun = (
   const run = store.get('runs', command.runId, runSchema)
   if (run.version !== command.expectedVersion)
     throw new Error('VERSION_CONFLICT: 执行已改变')
+  if (run.processState === 'uncertain') throw new Error('STATE_UNCERTAIN')
   const status = run.status === 'queued' ? 'cancelled' : 'stopping'
   assertExecutionTransition(run.status, status)
   store.updateRun({
@@ -142,6 +143,7 @@ const stopRun = (
     status,
     version: run.version + 1,
     endedAt: status === 'cancelled' ? new Date().toISOString() : null,
+    processState: status === 'cancelled' ? 'confirmed_ended' : run.processState,
   })
   if (status === 'cancelled') {
     const task = store.get('tasks', run.taskId, taskSchema)

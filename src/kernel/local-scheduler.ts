@@ -123,6 +123,7 @@ export class LocalScheduler {
         status: 'cancelled',
         version: run.version + 1,
         endedAt: new Date().toISOString(),
+        processState: 'confirmed_ended',
       })
       const task = store.get('tasks', run.taskId, taskSchema)
       store.updateTask({ ...task, version: task.version + 1, status: 'ready' })

@@ -2,7 +2,7 @@ import { spawnCli } from './spawn-cli.js'
 import { terminateCli } from './process-stop.js'
 import { armTimeout, envTimeoutMs } from './timeout.js'
 import { promptInputForPlatform } from './types.js'
-import { createInterface } from 'node:readline'
+import { readBoundedLines } from './bounded-lines.js'
 import type {
   CliAdapter,
   CliEvent,
@@ -203,7 +203,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
     // 额外监听 abort 用 killCli 连进程树一起清。
     const abort = terminate
     signal?.addEventListener('abort', abort, { once: true })
-    const lines = createInterface({ input: child.stdout })
+    let outputOverflow = false
     //记住最近一次出现的会话标识
     let observedSessionId = sessionId
     let observedAnswer: string | undefined
@@ -237,7 +237,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
       reject(error)
     }
 
-    lines.on('line', (line) => {
+    const onLine = (line: string) => {
       // 遍历适配器翻译后的事件，先进入onEvent，再进入 Runner 原有会话，错误，最终结果
       for (const event of adapter.parseEvents(line)) {
         onEvent?.(event)
@@ -312,6 +312,15 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
           }
         }
       }
+    }
+
+    readBoundedLines({
+      stream: child.stdout,
+      onLine,
+      onOverflow: () => {
+        outputOverflow = true
+        terminate()
+      },
     })
 
     child.stderr.on('data', (chunk: Buffer | string) => {
@@ -334,6 +343,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
         fail(new Error('STATE_UNCERTAIN'))
         return
       }
+      if (outputOverflow) return fail(new Error('CLI_OUTPUT_LIMIT'))
       if (stoppedByToolCall) {
         settled = true
         finish()

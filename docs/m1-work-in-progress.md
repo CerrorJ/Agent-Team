@@ -1,30 +1,38 @@
-# M1 基础草稿（未交付）
+﻿# M1 开发与验证记录
 
-2026-10-22：纬舟 M0 的本机原生与打包验证通过后开始准备 M1。
-随后发现 Agent-Team 实际为私有仓库，纬舟远端 Windows/macOS CI 缺少跨仓读取凭据。
-当前先补齐 M0 授权接线，不宣布 M0 远端验收或 M1 通过。
+2026-10-23 更新。用户已要求将外部凭证和原生验收待办记录后继续开发；不等待 CI 凭据才能编写业务功能。
+早期 a62b780 草稿没有接入嵌入入口；b628ae3 已组装共享 WorkspaceService、调度器与协议，本文取代早期未接入描述。
 
-本分支保存已写的 M1 草稿，避免交接依赖未提交文件；**没有接入嵌入入口，不更新纬舟锁定产物**。
-纬舟仍消费 M0 源码提交 8a1491aeab5b6dd194083fb3b1e7a94afa1c3ce9。
+## 当前实际实现
 
-## 已有基础与验证
+- 内核 0.2.1、协议 1、schema 2，支持项目、不可变角色版本、Task/Run、交付与验收。
+- SQLite CAS、命令幂等回执、状态/事件/outbox 事务；M0 schema 迁移前生成一致备份。
+- 真实 Codex 受控权限和独立 Git worktree；拒绝脏主目录，保留用户文件，默认单执行槽。
+- 记录执行片段、PID、会话；停止等待进程树结束。重启遇到无结束证据的活动执行进入状态待确认，不自动重放或杀旧 PID。
+- 排队取消与完全退出确认未启动进程结束；未知状态拒绝停止决定和重试。
+- 日志仅保存归一化工具/事件类型，有数量上限；CLI 输出另有总量和单行上限。
+- 成功交付和人工验收分离；退回保留原因，重试创建新 Run 和新交付版本，旧交付不能改变新执行。
+- 原独立飞书入口及默认 CLI 行为保留，没有连接、替换在线服务或编辑生成 OpenWiki。
 
-- 项目、不可变角色版本、Task/Run、交付与验收的 Zod 合同。
-- 独立领域状态约束：停止请求不等于已停止，终态不重置，未知进程状态禁止重试。
-- SQLite 表、CAS、事务与命令幂等回执；状态、事件和 outbox 同事务提交。
-- Git/worktree 适配器，中文/空格/# 路径测试，脏主目录阻塞并保留既有文件。
-- CodexAdapter 新增显式受控策略，保留旧入口默认行为；新路径不 bypass，不写用户 MCP profile，忽略用户配置与规则文件。
-- CLI 现有代码补充可选字段省略与匹配组校验，使内核构建保持 exactOptionalPropertyTypes/noUncheckedIndexedAccess。
-- 当前 typecheck、lint、format:check、build:kernel 通过；41/41 默认测试通过。
-- 人工执行的独立、合成输入 CLI 探针：Windows MXC 只读连通成功；受控 workspace-write 在临时测试仓库生成指定 hello.txt，内容匹配，并实际收到 session/tool/result/stats 事件。未把探针当作产品任务闭环。
+## 已执行检查与限制
 
-## 尚未接入与已知待办
+- typecheck、lint、format:check、48/48 默认测试通过；包括真实 Git/worktree、真实父子进程终止、幂等、旧版本拒绝、迁移和 UTF-8/日志洪水。
+- local-workflow 测试注入执行端口，验证编排与持久化；不将它称作真实模型闭环。
+- Windows 受控 CLI 探针已使用合成临时仓库生成指定文件；桌面完整任务闭环、打包后的停止和重启验收仍需补齐。
+- 纬舟锁定的确切提交和产物摘要以其 config/kernel-lock.json 为准；未完成独立 Tester/Reviewer 前不宣布 M1 交付。
+- macOS、飞书专用测试租户、桌面跨仓 CI 读取凭据另列外部验收清单；不阻塞可独立开发的功能。
 
-- kernel/protocol 未暴露 M1 命令，createKernel 尚未组装 WorkspaceStore、调度器或执行用例；桌面没有业务页面。
-- LocalScheduler、run-execution、run-outcome 等是待完成的编排草稿，尚无完整集成测试和独立评审，不可作为已验证执行器发布。
-- 必须补持久进程/执行片段证据、停止等待与进程树终止验证、停止/启动竞争、日志上限和脱敏，以及失败恢复的集成验证。
-- 必须完善 schema 迁移/兼容握手，明确未实现/不支持能力，不让草稿表自动进入既有 M0 数据目录。
-- 还需接入角色就绪/试运行约束、任务启动、重试新 Run、验收/退回和桌面真实流程；不以存储单测代替这些验收。
-- M0 的专用 CI 凭据到位并完成远端验证后，再继续按阶段推进。M2—M4 未开始。
+## 复现
 
-生成的 OpenWiki、生产配置、原服务 .env、数据和在线服务均未改动。
+两仓使用独立测试数据。运行 pnpm install --frozen-lockfile 后：
+
+```sh
+pnpm typecheck
+pnpm lint
+pnpm format:check
+pnpm test
+pnpm build
+pnpm build:kernel
+```
+
+后续按交付计划推进 M2 对象与团队、M3 人工处理和飞书、M4 技能与发行。此处不提前宣布这些阶段完成。
