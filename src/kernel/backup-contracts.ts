@@ -24,3 +24,12 @@ export const backupManifestSchema = z
   })
   .strict()
 export type BackupManifest = z.infer<typeof backupManifestSchema>
+export const backupInspectionSchema = z
+  .object({
+    manifest: backupManifestSchema,
+    manifestDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    projects: z.number().int().nonnegative(),
+    tasks: z.number().int().nonnegative(),
+    skills: z.number().int().nonnegative(),
+  })
+  .strict()

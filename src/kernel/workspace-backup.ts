@@ -23,6 +23,7 @@ import {
   checkBackupFiles,
   copyBackupFiles,
   isPathInside,
+  backupManifestDigest,
 } from './backup-files.js'
 import {
   assertBackupQuiescent,
@@ -96,13 +97,18 @@ const copyResource = (input: {
   }
 }
 
-/** 恢复只写新目录，旧目录和项目不动；宿主确认旧内核退出后再原子切换位置指针。 */
-export const restoreWorkspaceBackup = (input: {
+interface RestoreBackupInput {
   store: WorkspaceStore
   dataDirectory: string
   backupDirectory: string
   targetDirectory: string
-}): {
+  expectedManifestDigest?: string
+}
+
+/** 恢复只写新目录，旧目录和项目不动；宿主确认旧内核退出后再原子切换位置指针。 */
+export const restoreWorkspaceBackup = (
+  input: RestoreBackupInput,
+): {
   id: string
   projects: number
   tasks: number
@@ -111,6 +117,11 @@ export const restoreWorkspaceBackup = (input: {
   const current = input.store.snapshot()
   assertBackupQuiescent(current)
   const { manifest, snapshot } = inspectBackup(input.backupDirectory)
+  if (
+    input.expectedManifestDigest &&
+    backupManifestDigest(manifest) !== input.expectedManifestDigest
+  )
+    throw new Error('BACKUP_PREVIEW_STALE')
 
   const target = validateBackupTarget({
     target: input.targetDirectory,

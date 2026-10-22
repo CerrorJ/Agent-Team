@@ -12,7 +12,7 @@ export * from './skill-contracts.js'
 export * from './backup-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.5.3'
+export const KERNEL_VERSION = '0.5.4'
 export const DATA_SCHEMA_VERSION = 7
 
 const requestBase = {
@@ -46,6 +46,7 @@ export const requestSchema = z.discriminatedUnion('method', [
     .object({
       ...requestBase,
       method: z.literal('workspace.restore'),
+      expectedManifestDigest: z.string().regex(/^[a-f0-9]{64}$/),
       backupDirectory: z.string().min(1).max(4096),
       targetDirectory: z.string().min(1).max(4096),
     })

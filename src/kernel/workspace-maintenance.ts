@@ -6,6 +6,7 @@ import {
 } from './workspace-backup.js'
 import { inspectBackup } from './backup-validation.js'
 import type { WorkspaceService } from './workspace-service.js'
+import { backupManifestDigest } from './backup-files.js'
 
 type MaintenanceRequest = Extract<
   KernelRequest,
@@ -50,6 +51,7 @@ export class WorkspaceMaintenance {
         const { manifest, snapshot } = inspectBackup(request.backupDirectory)
         return {
           manifest,
+          manifestDigest: backupManifestDigest(manifest),
           projects: snapshot.projects.length,
           tasks: snapshot.tasks.length,
           skills: snapshot.skills.length,
@@ -61,6 +63,7 @@ export class WorkspaceMaintenance {
           dataDirectory,
           backupDirectory: request.backupDirectory,
           targetDirectory: request.targetDirectory,
+          expectedManifestDigest: request.expectedManifestDigest,
         })
 
         // 飞书也经过同一service，准备恢复后不能绕过桌面门控继续提交业务。

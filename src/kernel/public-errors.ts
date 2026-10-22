@@ -1,4 +1,5 @@
 const messages: Record<string, string> = {
+  BACKUP_PREVIEW_STALE: '备份内容已变化，请重新选择并核对预览后恢复',
   BACKUP_INVALID: '备份清单或数据结构无效，当前数据未替换',
   BACKUP_SIZE_LIMIT: '备份文件数量或大小超出恢复上限',
   BACKUP_DIGEST_MISMATCH: '备份文件摘要不符，当前数据未替换',

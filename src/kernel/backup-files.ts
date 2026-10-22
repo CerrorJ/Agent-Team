@@ -13,7 +13,15 @@ import {
 import { resolve, relative, dirname, sep, isAbsolute } from 'node:path'
 import { z } from 'zod'
 import { validateSkillPath } from './skill-paths.js'
-import type { BackupManifest } from './backup-contracts.js'
+import {
+  backupManifestSchema,
+  type BackupManifest,
+} from './backup-contracts.js'
+
+export const backupManifestDigest = (manifest: BackupManifest): string =>
+  createHash('sha256')
+    .update(JSON.stringify(backupManifestSchema.parse(manifest)))
+    .digest('hex')
 
 export const backupFilePath = (root: string, path: string): string => {
   if (path === 'kernel.sqlite') return resolve(root, path)

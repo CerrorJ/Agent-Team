@@ -22,6 +22,7 @@ import {
 import { WorkspaceStore } from '../src/kernel/workspace-store.js'
 import { createKernel } from '../src/kernel/kernel.js'
 import { workspaceFixture } from './helpers/run-fixture.js'
+import { backupInspectionSchema } from '../src/kernel/backup-contracts.js'
 import { readSnapshot } from './helpers/local-kernel-fixture.js'
 import { setTimeout as delay } from 'node:timers/promises'
 import { skillFixtureFetch } from './helpers/skill-fixture.js'
@@ -222,6 +223,12 @@ test('备份协议边界与准备恢复共享内核，恢复准备后所有渠�
     })
 
     assert.equal(preview.status, 'completed')
+    if (preview.status !== 'completed') throw new Error('Inspection failed')
+
+    const expectedManifestDigest = backupInspectionSchema.parse(
+      preview.result,
+    ).manifestDigest
+
     await fixture.command({
       type: 'skill.source.save',
       expectedVersion: 0,
@@ -230,10 +237,30 @@ test('备份协议边界与准备恢复共享内核，恢复准备后所有渠�
       commit: 'c'.repeat(40),
     })
     const targetDirectory = join(fixture.directory, 'api-restored')
+    const manifestPath = join(backupDirectory, 'backup.json')
+    const originalManifest = readFileSync(manifestPath, 'utf8')
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({ ...JSON.parse(originalManifest), id: randomUUID() }),
+    )
+
+    const stale = await request({
+      method: 'workspace.restore',
+      expectedManifestDigest,
+      backupDirectory,
+      targetDirectory,
+    })
+
+    assert.equal(stale.status, 'rejected')
+    if (stale.status === 'rejected')
+      assert.equal(stale.error.code, 'BACKUP_PREVIEW_STALE')
+    assert.equal(existsSync(targetDirectory), false)
+    writeFileSync(manifestPath, originalManifest)
     assert.equal(
       (
         await request({
           method: 'workspace.restore',
+          expectedManifestDigest,
           backupDirectory,
           targetDirectory,
         })
