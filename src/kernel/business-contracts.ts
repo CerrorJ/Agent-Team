@@ -1,4 +1,12 @@
 import { z } from 'zod'
+import {
+  cliIdSchema,
+  modelProfileSchema,
+  requirementVersionSchema,
+  requirementRefSchema,
+} from './product-contracts.js'
+import { productCommandSchemas } from './product-command-contracts.js'
+import { roleCommandSchemas, roleTrialSchema } from './role-contracts.js'
 
 const id = z.string().uuid()
 const shortText = z.string().trim().min(1).max(200)
@@ -23,7 +31,8 @@ export const roleVersionSchema = z
     version,
     name: shortText,
     responsibility: longText,
-    cli: z.literal('codex'),
+    cli: cliIdSchema,
+    modelProfileSnapshot: modelProfileSchema.nullable().optional(),
     model: z.string().trim().max(200),
     permission: z.enum(['read-only', 'workspace-write']),
     skills: z.array(z.never()),
@@ -40,6 +49,8 @@ export const taskSchema = z
     title: shortText,
     goal: longText,
     acceptanceCriteria: longText,
+    requirementRef: requirementRefSchema.nullable().optional(),
+    purpose: z.enum(['task', 'role_trial', 'team_parent']).optional(),
     status: z.enum(['ready', 'in_progress', 'in_review', 'done']),
     createdAt: z.string().datetime(),
   })
@@ -71,6 +82,9 @@ export const runSchema = z
     acceptanceSnapshot: longText,
     goalSnapshot: longText,
     feedbackSnapshot: z.string().max(20_000).default(''),
+    requirementSnapshot: requirementVersionSchema.nullable().optional(),
+    purpose: z.enum(['task', 'role_trial']).optional(),
+    trial: roleTrialSchema.nullable().optional(),
     executionBranch: z.string(),
     workDirectory: z.string(),
     createdAt: z.string().datetime(),
@@ -127,7 +141,8 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
       expectedVersion: z.number().int().nonnegative(),
       name: shortText,
       responsibility: longText,
-      cli: z.literal('codex'),
+      cli: cliIdSchema,
+      modelProfileId: id.nullable().optional(),
       model: z.string().trim().max(200),
       permission: z.enum(['read-only', 'workspace-write']),
     })
@@ -140,6 +155,7 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
       title: shortText,
       goal: longText,
       acceptanceCriteria: longText,
+      requirementRef: requirementRefSchema.nullable().optional(),
     })
     .strict(),
   z
@@ -172,29 +188,9 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
       reason: z.string().trim().max(20_000),
     })
     .strict(),
+  ...productCommandSchemas,
+  ...roleCommandSchemas,
 ])
-
-export const workspaceSnapshotSchema = z
-  .object({
-    cursor: z.number().int().nonnegative(),
-    projects: z.array(projectSchema),
-    roles: z.array(roleVersionSchema),
-    tasks: z.array(taskSchema),
-    runs: z.array(runSchema),
-    deliveries: z.array(deliverySchema),
-    acceptances: z.array(acceptanceSchema),
-    logs: z.array(
-      z
-        .object({
-          runId: id,
-          label: z.string(),
-          occurredAt: z.string().datetime(),
-          sequence: z.number().int(),
-        })
-        .strict(),
-    ),
-  })
-  .strict()
 
 export type Project = z.infer<typeof projectSchema>
 export type RoleVersion = z.infer<typeof roleVersionSchema>
@@ -204,4 +200,3 @@ export type RunStatus = z.infer<typeof runStatusSchema>
 export type Delivery = z.infer<typeof deliverySchema>
 export type Acceptance = z.infer<typeof acceptanceSchema>
 export type BusinessCommand = z.infer<typeof businessCommandSchema>
-export type WorkspaceSnapshot = z.infer<typeof workspaceSnapshotSchema>

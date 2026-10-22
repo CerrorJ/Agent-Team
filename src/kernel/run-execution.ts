@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { CodexAdapter } from '../cli/codex-adapter.js'
+import { executionModel } from './model-runtime.js'
+import { prepareTrialInput, executionPrompt } from './role-trial-files.js'
 import { runCli, type RunCliOptions } from '../cli/runner.js'
 import type { CliEvent, CliRunResult } from '../cli/types.js'
 import { projectSchema, runSchema, type Run } from './business-contracts.js'
@@ -24,23 +25,25 @@ export const executeQueuedRun = async (
   try {
     if (!prepareState(store, runId)) return
     const run = store.get('runs', runId, runSchema)
+    const runtime = executionModel(run)
     const project = store.get('projects', run.projectId, projectSchema)
     prepareRunWorktree({ project, run, dataDirectory: input.dataDirectory })
+    prepareTrialInput(run)
     // M1 不加载项目自定义 CLI 扩展，避免外部 MCP/Hook 绕过既定工具权限。
-    if (existsSync(join(run.workDirectory, '.codex/config.toml')))
+    if (
+      run.roleSnapshot.cli === 'codex' &&
+      existsSync(join(run.workDirectory, '.codex/config.toml'))
+    )
       throw new Error('CAPABILITY_UNSUPPORTED')
     controller.signal.throwIfAborted()
     markRunning(store, run)
 
     const result = await execute({
-      adapter: new CodexAdapter({ permission: run.roleSnapshot.permission }),
+      ...runtime,
       cwd: run.workDirectory,
       signal: controller.signal,
       timeoutMs: 30 * 60_000,
-      prompt: `职责：${run.roleSnapshot.responsibility}\n任务：${run.goalSnapshot}\n验收条件：${run.acceptanceSnapshot}\n此前退回意见：${run.feedbackSnapshot || '无'}`,
-      ...(run.roleSnapshot.model
-        ? { env: { CODEX_MODEL: run.roleSnapshot.model } }
-        : {}),
+      prompt: executionPrompt(run),
       onEvent: (event) => recordActivity({ store, runId, event, controller }),
       onProcessStart: (pid) => recordProcess({ store, runId, pid, controller }),
     })

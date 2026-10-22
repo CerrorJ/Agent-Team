@@ -3,6 +3,8 @@ import { prepareCatalogCommand } from './catalog-commands.js'
 import { prepareRunCommand } from './run-commands.js'
 import { acceptDelivery } from './acceptance-command.js'
 import { LocalScheduler } from './local-scheduler.js'
+import { saveProductObject, isProductCommand } from './product-commands.js'
+import { prepareRoleCommand, isRoleLifecycleCommand } from './role-commands.js'
 import type { CliExecutionPort } from './run-execution.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import type { BusinessCommand } from './business-contracts.js'
@@ -38,9 +40,11 @@ export class WorkspaceService {
 
     const result = this.ledger.execute(input, () => ({
       ...operation(),
-      status: input.command.type.startsWith('run.')
-        ? ('accepted' as const)
-        : ('completed' as const),
+      status:
+        input.command.type.startsWith('run.') ||
+        input.command.type === 'role.trial'
+          ? ('accepted' as const)
+          : ('completed' as const),
     }))
 
     this.scheduler.kick()
@@ -54,6 +58,10 @@ export class WorkspaceService {
 
   private prepare(command: BusinessCommand): () => { id: string } {
     const { store, dataDirectory } = this.options
+    if (isProductCommand(command))
+      return () => saveProductObject({ store, command })
+    if (isRoleLifecycleCommand(command))
+      return prepareRoleCommand({ store, command, dataDirectory })
     switch (command.type) {
       case 'project.create':
       case 'role.save':

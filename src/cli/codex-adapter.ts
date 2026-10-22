@@ -181,6 +181,9 @@ export class CodexAdapter implements CliAdapter {
         promptInput,
         policy: this.controlledPolicy,
         ...(options?.model ? { model: options.model } : {}),
+        ...(options?.reasoningEffort
+          ? { reasoningEffort: options.reasoningEffort }
+          : {}),
       })
 
     const args = [
@@ -224,6 +227,9 @@ export class CodexAdapter implements CliAdapter {
         sessionId,
         policy: this.controlledPolicy,
         ...(options?.model ? { model: options.model } : {}),
+        ...(options?.reasoningEffort
+          ? { reasoningEffort: options.reasoningEffort }
+          : {}),
       })
 
     const args = [

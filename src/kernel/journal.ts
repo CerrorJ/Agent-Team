@@ -27,7 +27,7 @@ export class KernelJournal {
       .prepare('PRAGMA user_version')
       .get()?.user_version
 
-    if (version !== 0 && version !== 1 && version !== 2) {
+    if (version !== 0 && version !== 1 && version !== 2 && version !== 3) {
       this.database.close()
       throw new Error('数据版本不兼容，请使用匹配的内核或备份')
     }
@@ -41,8 +41,13 @@ export class KernelJournal {
       );
     `)
     if (version === 0) this.database.exec('PRAGMA user_version=1')
-    const backup = join(dataDirectory, 'kernel.schema-1.backup.sqlite')
-    if (version === 1 && !existsSync(backup))
+
+    const backup = join(
+      dataDirectory,
+      `kernel.schema-${String(version)}.backup.sqlite`,
+    )
+
+    if ((version === 1 || version === 2) && !existsSync(backup))
       this.database.prepare('VACUUM INTO ?').run(backup)
   }
 

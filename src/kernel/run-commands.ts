@@ -5,7 +5,6 @@ import {
 } from '../domain/run-state.js'
 import {
   projectSchema,
-  roleVersionSchema,
   runSchema,
   taskSchema,
   deliverySchema,
@@ -16,6 +15,9 @@ import {
 } from './business-contracts.js'
 import { projectBaseline, runWorkDirectory } from './git-workspace.js'
 import type { WorkspaceStore } from './workspace-store.js'
+import { captureTaskConfiguration } from './run-snapshots.js'
+import { assertRoleCanExecute } from './role-execution-guard.js'
+import { finishRoleTrial } from './role-trial-state.js'
 
 export type RunCommand = Extract<
   BusinessCommand,
@@ -33,7 +35,7 @@ export const prepareRunCommand = (input: {
   const project = store.get('projects', task.projectId, projectSchema)
   const baselineCommit = projectBaseline(project)
   return () =>
-    createRun({
+    createTaskRun({
       store,
       task,
       baselineCommit,
@@ -47,11 +49,14 @@ const taskForStart = (
 ): Task => {
   if (command.type === 'run.start') {
     const task = store.get('tasks', command.taskId, taskSchema)
+    if (task.purpose === 'role_trial' || task.purpose === 'team_parent')
+      throw new Error('TASK_NOT_EXECUTABLE')
     if (task.version !== command.expectedVersion)
       throw new Error('VERSION_CONFLICT: 任务已改变')
     return task
   }
   const run = store.get('runs', command.runId, runSchema)
+  if (run.purpose === 'role_trial') throw new Error('TASK_NOT_EXECUTABLE')
   if (run.version !== command.expectedVersion)
     throw new Error('VERSION_CONFLICT: 执行已改变')
   assertRetryableExecution({
@@ -68,7 +73,7 @@ const taskForStart = (
   return store.get('tasks', run.taskId, taskSchema)
 }
 
-const createRun = (input: {
+export const createTaskRun = (input: {
   store: WorkspaceStore
   task: Task
   baselineCommit: string
@@ -91,11 +96,9 @@ const createRun = (input: {
     attempt: previous.length + 1,
     retryOfRunId: previous.at(-1)?.id ?? null,
     status: 'queued',
-    roleSnapshot: store.get('role_versions', task.roleId, roleVersionSchema),
+    ...captureTaskConfiguration(store, task, id),
     baselineCommit: input.baselineCommit,
-    goalSnapshot: task.goal,
     feedbackSnapshot: retryFeedback(store, previous.at(-1)),
-    acceptanceSnapshot: task.acceptanceCriteria,
     executionBranch: `weftpilot/run-${id}`,
     workDirectory: runWorkDirectory({
       dataDirectory: input.dataDirectory,
@@ -139,6 +142,7 @@ const retryFeedback = (
 const assertTaskCanStart = (store: WorkspaceStore, task: Task): void => {
   if (task.status !== 'ready')
     throw new Error('TASK_NOT_READY: 任务尚不可执行；请先验收或退回交付')
+  if (task.purpose !== 'role_trial') assertRoleCanExecute(store, task.roleId)
 
   const uncertain = store
     .list('runs', runSchema)
@@ -168,6 +172,7 @@ const stopRun = (
     processState: status === 'cancelled' ? 'confirmed_ended' : run.processState,
   })
   if (status === 'cancelled') {
+    finishRoleTrial(store, run, false)
     const task = store.get('tasks', run.taskId, taskSchema)
     store.updateTask({ ...task, version: task.version + 1, status: 'ready' })
   }

@@ -1,3 +1,5 @@
+import { workspaceSnapshotSchema } from '../src/kernel/workspace-contracts.js'
+import { fulfillTrial } from './helpers/role-trial-fixture.js'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { execFileSync } from 'node:child_process'
@@ -7,10 +9,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createKernel, type EmbeddedKernel } from '../src/kernel/kernel.js'
-import {
-  workspaceSnapshotSchema,
-  type BusinessCommand,
-} from '../src/kernel/business-contracts.js'
+import { type BusinessCommand } from '../src/kernel/business-contracts.js'
 
 const command = async (
   kernel: EmbeddedKernel,
@@ -37,7 +36,47 @@ const snapshot = async (kernel: EmbeddedKernel) => {
   })
 
   if (response.status === 'rejected') throw new Error(response.error.code)
-  return workspaceSnapshotSchema.parse(response.result)
+  const state = workspaceSnapshotSchema.parse(response.result)
+  const runs = state.runs.filter((run) => run.purpose !== 'role_trial')
+  const runIds = new Set(runs.map((run) => run.id))
+  return {
+    ...state,
+    runs,
+    tasks: state.tasks.filter((task) => task.purpose !== 'role_trial'),
+    deliveries: state.deliveries.filter((delivery) =>
+      runIds.has(delivery.runId),
+    ),
+  }
+}
+
+const enableRoleVersion = async (
+  kernel: EmbeddedKernel,
+  ref: { roleId: string; version: number; projectId: string },
+) => {
+  await command(kernel, {
+    type: 'role.trial',
+    roleId: ref.roleId,
+    expectedRoleVersion: ref.version,
+    projectId: ref.projectId,
+  })
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const state = (await snapshot(kernel)).roleReadiness.find(
+      (item) => item.roleId === ref.roleId,
+    )
+
+    if (state?.state === 'ready') {
+      await command(kernel, {
+        type: 'role.setEnabled',
+        roleId: ref.roleId,
+        expectedRoleVersion: ref.version,
+        expectedReadinessVersion: state.version,
+        enabled: true,
+      })
+      return
+    }
+    await delay(20)
+  }
+  assert.fail('角色试运行未通过')
 }
 
 test('真实 Git + 端口集成：交付独立验收、幂等、退回重试、新版本快照与重启恢复', async () => {
@@ -63,7 +102,9 @@ test('真实 Git + 端口集成：交付独立验收、幂等、退回重试、�
   const options = {
     dataDirectory: join(directory, 'data'),
     sourceCommit: 'a'.repeat(40),
-    execute: async ({ cwd }: { cwd: string }) => {
+    execute: async ({ cwd, prompt }: { cwd: string; prompt: string }) => {
+      const trial = fulfillTrial({ cwd, prompt })
+      if (trial) return trial
       writeFileSync(join(cwd, 'hello.txt'), '交付内容')
       return { answer: '已写入文件；未自动验收' }
     },
@@ -89,6 +130,7 @@ test('真实 Git + 端口集成：交付独立验收、幂等、退回重试、�
     }
 
     const roleId = await command(kernel, roleInput)
+    await enableRoleVersion(kernel, { roleId, version: 1, projectId })
 
     const taskId = await command(kernel, {
       type: 'task.create',
@@ -119,6 +161,7 @@ test('真实 Git + 端口集成：交付独立验收、幂等、退回重试、�
       expectedVersion: 1,
       responsibility: '新职责',
     })
+    await enableRoleVersion(kernel, { roleId, version: 2, projectId })
     await command(kernel, {
       type: 'delivery.accept',
       deliveryId: delivery.id,

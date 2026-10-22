@@ -10,6 +10,7 @@ interface RunContext {
   createdAt: string
 }
 interface FixtureInput {
+  persistRun?: boolean
   repositoryPath?: string
   baselineCommit?: string
   dataDirectory?: string
@@ -91,7 +92,7 @@ export const workspaceFixture = (input: FixtureInput = {}) => {
       status: 'in_progress',
       createdAt,
     })
-    store.addRun(run)
+    if (input.persistRun !== false) store.addRun(run)
   })
   return { database, store, run }
 }

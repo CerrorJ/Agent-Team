@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { initializeProductSchema } from './product-schema.js'
 
 /** M1 新增表与旧生命周期事件分离，迁移只新增，不改写 M0 历史。 */
 const workspaceSchemaV2 = `
@@ -54,5 +55,12 @@ const workspaceSchemaV2 = `
 `
 
 export const initializeWorkspaceSchema = (database: DatabaseSync): void => {
-  database.exec(workspaceSchemaV2)
+  database.exec('PRAGMA foreign_keys=ON')
+
+  const version = Number(
+    database.prepare('PRAGMA user_version').get()?.user_version,
+  )
+
+  if (version < 2) database.exec(workspaceSchemaV2)
+  if (version < 3) initializeProductSchema(database)
 }

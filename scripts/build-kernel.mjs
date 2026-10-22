@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { mkdir, writeFile, copyFile, readFile } from 'node:fs/promises'
 import { build } from 'esbuild'
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
   encoding: 'utf8',
@@ -20,13 +22,16 @@ await build({
   format: 'esm',
   legalComments: 'eof',
 })
+const { KERNEL_VERSION, PROTOCOL_VERSION, DATA_SCHEMA_VERSION } = await import(
+  pathToFileURL(resolve(output, 'protocol.js')).href
+)
 await writeFile(
   `${output}/manifest.json`,
   JSON.stringify(
     {
-      kernelVersion: '0.2.3',
-      protocolVersion: 1,
-      dataSchemaVersion: 2,
+      kernelVersion: KERNEL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
+      dataSchemaVersion: DATA_SCHEMA_VERSION,
       sourceCommit,
       platform: 'any',
       arch: 'any',
@@ -41,7 +46,7 @@ await writeFile(
   JSON.stringify(
     {
       name: '@weftpilot/agent-team-kernel',
-      version: '0.2.3',
+      version: KERNEL_VERSION,
       type: 'module',
       private: true,
       exports: {

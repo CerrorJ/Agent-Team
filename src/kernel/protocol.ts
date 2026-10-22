@@ -2,10 +2,13 @@ import { z } from 'zod'
 import { businessCommandSchema } from './business-contracts.js'
 export * from './business-contracts.js'
 export * from './activity-contracts.js'
+export * from './product-contracts.js'
+export * from './role-contracts.js'
+export * from './workspace-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.2.3'
-export const DATA_SCHEMA_VERSION = 2
+export const KERNEL_VERSION = '0.3.0'
+export const DATA_SCHEMA_VERSION = 3
 
 const requestBase = {
   protocolVersion: z.literal(PROTOCOL_VERSION),

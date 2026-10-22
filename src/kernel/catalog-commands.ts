@@ -8,6 +8,12 @@ import {
 } from './business-contracts.js'
 import { inspectProjectRepository } from './git-workspace.js'
 import type { WorkspaceStore } from './workspace-store.js'
+import { ProductStore } from './product-store.js'
+import { RoleReadinessStore } from './role-readiness-store.js'
+import {
+  modelProfileSchema,
+  requirementVersionSchema,
+} from './product-contracts.js'
 
 export type CatalogCommand = Extract<
   BusinessCommand,
@@ -52,19 +58,32 @@ const saveRole = (
     throw new Error('VERSION_CONFLICT: 新角色的预期版本必须为零')
   const id = command.id ?? randomUUID()
 
+  const profile = command.modelProfileId
+    ? new ProductStore(store).get(
+        'model_profiles',
+        { id: command.modelProfileId },
+        modelProfileSchema,
+      )
+    : null
+
+  if (profile && profile.cli !== command.cli)
+    throw new Error('CLI_MODEL_MISMATCH')
+
   const role: RoleVersion = {
     id,
     version: command.expectedVersion + 1,
     name: command.name,
     responsibility: command.responsibility,
     cli: command.cli,
-    model: command.model,
+    model: profile?.model ?? command.model,
+    modelProfileSnapshot: profile,
     permission: command.permission,
     skills: [],
     createdAt: new Date().toISOString(),
   }
 
   store.addRole(role)
+  new RoleReadinessStore(store).reset(role)
   return { id }
 }
 
@@ -74,6 +93,16 @@ const createTask = (
 ) => {
   store.get('projects', command.projectId, projectSchema)
   store.get('role_versions', command.roleId, roleVersionSchema)
+  if (command.requirementRef) {
+    const requirement = new ProductStore(store).get(
+      'requirement_versions',
+      command.requirementRef,
+      requirementVersionSchema,
+    )
+
+    if (requirement.projectId !== command.projectId)
+      throw new Error('CROSS_PROJECT_REFERENCE')
+  }
 
   const task: Task = {
     id: randomUUID(),
@@ -83,6 +112,7 @@ const createTask = (
     title: command.title,
     goal: command.goal,
     acceptanceCriteria: command.acceptanceCriteria,
+    requirementRef: command.requirementRef ?? null,
     status: 'ready',
     createdAt: new Date().toISOString(),
   }

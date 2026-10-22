@@ -8,6 +8,7 @@ export default [
       'src/domain/**/*.ts',
       'src/cli/windows-command.ts',
       'src/cli/controlled-codex.ts',
+      'src/cli/controlled-claude.ts',
       'src/cli/bounded-lines.ts',
       'src/cli/process-stop.ts',
       'tests/helpers/**/*.ts',

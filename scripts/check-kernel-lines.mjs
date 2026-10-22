@@ -17,6 +17,7 @@ for (const directory of ['src/kernel', 'src/domain', 'tests', 'scripts'])
 for (const file of [
   'windows-command',
   'controlled-codex',
+  'controlled-claude',
   'bounded-lines',
   'process-stop',
 ])

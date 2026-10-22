@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+﻿import { randomUUID } from 'node:crypto'
 import { assertExecutionTransition } from '../domain/run-state.js'
 import type { CliRunResult } from '../cli/types.js'
 import {
@@ -8,14 +8,23 @@ import {
   type Run,
 } from './business-contracts.js'
 import { collectRunDelivery } from './git-workspace.js'
+import { trialSucceeded } from './role-trial-files.js'
+import { finishRoleTrial } from './role-trial-state.js'
 import type { WorkspaceStore } from './workspace-store.js'
 
-export const finishRun = (input: {
+interface RunOutcome {
   store: WorkspaceStore
   runId: string
   result?: CliRunResult
   failureCode?: string
-}): void => {
+}
+interface PreparedOutcome extends RunOutcome {
+  current: Run
+  stopped: boolean
+  delivery: ReturnType<typeof collectRunDelivery> | undefined
+}
+
+export const finishRun = (input: RunOutcome): void => {
   const current = input.store.get('runs', input.runId, runSchema)
   if (input.failureCode === 'STATE_UNCERTAIN') {
     markUncertain(input.store, current)
@@ -23,41 +32,61 @@ export const finishRun = (input: {
   }
   const stopped = current.status === 'stopping'
 
+  const effective =
+    !stopped && input.result && !trialSucceeded(current, input.result.answer)
+      ? {
+          store: input.store,
+          runId: input.runId,
+          failureCode: 'ROLE_TRIAL_OUTPUT_INVALID',
+        }
+      : input
+
   const delivery =
-    input.result && !stopped ? collectRunDelivery(current) : undefined
+    effective.result && !stopped ? collectRunDelivery(current) : undefined
 
-  input.store.transaction(() => {
-    input.store.database
-      .prepare(
-        "UPDATE execution_segments SET ended_at=?,status='ended' WHERE run_id=?",
-      )
-      .run(new Date().toISOString(), current.id)
-    const run = input.store.get('runs', input.runId, runSchema)
+  input.store.transaction(() =>
+    persistOutcome({ ...effective, current, stopped, delivery }),
+  )
+}
 
-    const status: RunStatus = stopped
-      ? 'stopped'
-      : input.result
-        ? 'succeeded'
-        : 'failed'
+const persistOutcome = (input: PreparedOutcome): void => {
+  const { store, stopped, current, delivery } = input
+  store.database
+    .prepare(
+      "UPDATE execution_segments SET ended_at=?,status='ended' WHERE run_id=?",
+    )
+    .run(new Date().toISOString(), current.id)
+  const run = store.get('runs', input.runId, runSchema)
 
-    assertExecutionTransition(run.status, status)
-    input.store.updateRun({
-      ...run,
-      status,
-      version: run.version + 1,
-      endedAt: new Date().toISOString(),
-      processState: 'confirmed_ended',
-      failureCode: stopped ? null : (input.failureCode ?? null),
-    })
-    const task = input.store.get('tasks', run.taskId, taskSchema)
-    input.store.updateTask({
-      ...task,
-      version: task.version + 1,
-      status: status === 'succeeded' ? 'in_review' : 'ready',
-    })
-    if (status === 'succeeded' && delivery && input.result)
-      saveDelivery({ store: input.store, run, result: input.result, delivery })
+  const status: RunStatus = stopped
+    ? 'stopped'
+    : input.result
+      ? 'succeeded'
+      : 'failed'
+
+  assertExecutionTransition(run.status, status)
+  store.updateRun({
+    ...run,
+    status,
+    version: run.version + 1,
+    endedAt: new Date().toISOString(),
+    processState: 'confirmed_ended',
+    failureCode: stopped ? null : (input.failureCode ?? null),
   })
+  const task = store.get('tasks', run.taskId, taskSchema)
+  const succeeded = status === 'succeeded'
+  store.updateTask({
+    ...task,
+    version: task.version + 1,
+    status: succeeded
+      ? run.purpose === 'role_trial'
+        ? 'done'
+        : 'in_review'
+      : 'ready',
+  })
+  finishRoleTrial(store, run, succeeded, input.failureCode)
+  if (succeeded && delivery && input.result)
+    saveDelivery({ store, run, result: input.result, delivery })
 }
 
 const saveDelivery = (input: {
@@ -71,7 +100,7 @@ const saveDelivery = (input: {
     version: input.run.attempt,
     runId: input.run.id,
     taskId: input.run.taskId,
-    answer: input.result.answer.slice(0, 200_000),
+    answer: input.result.answer.slice(0, 200000),
     ...input.delivery,
     createdAt: new Date().toISOString(),
   })

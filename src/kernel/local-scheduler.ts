@@ -1,6 +1,7 @@
 import { runSchema, taskSchema } from './business-contracts.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import { executeQueuedRun, type CliExecutionPort } from './run-execution.js'
+import { finishRoleTrial } from './role-trial-state.js'
 
 /** M1 单执行槽，确保工作目录不并发写；M2 再扩展团队与依赖调度。 */
 export class LocalScheduler {
@@ -126,6 +127,7 @@ export class LocalScheduler {
         processState: 'confirmed_ended',
       })
       const task = store.get('tasks', run.taskId, taskSchema)
+      finishRoleTrial(store, run, false)
       store.updateTask({ ...task, version: task.version + 1, status: 'ready' })
     })
   }

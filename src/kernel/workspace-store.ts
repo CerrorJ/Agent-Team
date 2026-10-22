@@ -1,3 +1,8 @@
+import {
+  workspaceSnapshotSchema,
+  type WorkspaceSnapshot,
+} from './workspace-contracts.js'
+import { RoleReadinessStore } from './role-readiness-store.js'
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { z } from 'zod'
@@ -8,16 +13,15 @@ import {
   roleVersionSchema,
   runSchema,
   taskSchema,
-  workspaceSnapshotSchema,
   type Acceptance,
   type Delivery,
   type Project,
   type RoleVersion,
   type Run,
   type Task,
-  type WorkspaceSnapshot,
 } from './business-contracts.js'
 import { initializeWorkspaceSchema } from './workspace-schema.js'
+import { ProductStore } from './product-store.js'
 
 export type ObjectTable =
   'projects' | 'role_versions' | 'tasks' | 'runs' | 'deliveries' | 'acceptances'
@@ -201,10 +205,14 @@ export class WorkspaceStore {
         ),
         projects: this.list('projects', projectSchema),
         roles: this.list('role_versions', roleVersionSchema),
+        roleReadiness: new RoleReadinessStore(this).snapshot(
+          this.list('role_versions', roleVersionSchema),
+        ),
         tasks: this.list('tasks', taskSchema),
         runs: this.list('runs', runSchema),
         deliveries: this.list('deliveries', deliverySchema),
         acceptances: this.list('acceptances', acceptanceSchema),
+        ...new ProductStore(this).snapshot(),
         logs: this.activity(),
       }),
     )

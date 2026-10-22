@@ -11,6 +11,7 @@ export const controlledCodexArgs = (input: {
   policy: ControlledCodexPolicy
   model?: string
   sessionId?: string
+  reasoningEffort?: string
 }): string[] => {
   const args = [
     '--sandbox',
@@ -26,6 +27,11 @@ export const controlledCodexArgs = (input: {
   if (input.sessionId) args.push('resume')
   args.push('--json', '--ignore-user-config', '--ignore-rules')
   if (input.model) args.push('--model', input.model)
+  if (input.reasoningEffort)
+    args.push(
+      '-c',
+      `model_reasoning_effort=${JSON.stringify(input.reasoningEffort)}`,
+    )
   if (input.sessionId) args.push(input.sessionId)
   args.push(input.promptInput === 'stdin' ? '-' : input.prompt)
   return args

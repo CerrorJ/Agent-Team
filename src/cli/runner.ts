@@ -162,7 +162,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
         env?.OPENAI_REASONING_EFFORT ??
         process.env.CODEX_REASONING_EFFORT ??
         process.env.OPENAI_REASONING_EFFORT)
-      : undefined
+      : (env?.CLAUDE_REASONING_EFFORT ?? process.env.CLAUDE_REASONING_EFFORT)
 
   const cliOptions =
     model || reasoningEffort

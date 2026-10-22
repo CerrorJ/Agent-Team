@@ -18,6 +18,14 @@ const messages: Record<string, string> = {
   REASON_REQUIRED: '退回必须填写原因',
   CAPABILITY_UNSUPPORTED: '当前配置包含尚不支持的能力',
   INTERNAL_ERROR: '操作未完成，请查看诊断；不要假定执行成功',
+  MODEL_CONFIG_INVALID: '模型配置与 CLI 或接口地址不兼容',
+  MODEL_CREDENTIAL_REQUIRED: '模型配置尚未提供可用的安全凭据',
+  CLI_MODEL_MISMATCH: '所选模型配置与角色 CLI 不兼容',
+  TEAM_CONFIG_INVALID: '团队成员必须唯一，协调者必须在成员中',
+  CROSS_PROJECT_REFERENCE: '需求或依赖必须属于同一项目',
+  ROLE_NOT_READY: '角色未通过本版本试运行或尚未启用',
+  ROLE_TRIAL_ACTIVE: '该角色已有在途或状态待确认的试运行',
+  TASK_NOT_EXECUTABLE: '此记录需要使用对应的试运行或团队入口',
 }
 
 /** 不把进程 stderr、SQL、配置或本机路径作为通用错误回传。 */

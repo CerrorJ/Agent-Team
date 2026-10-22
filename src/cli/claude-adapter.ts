@@ -1,4 +1,8 @@
 import { promptInputForPlatform } from './types.js'
+import {
+  controlledClaudeArgs,
+  type ControlledClaudePolicy,
+} from './controlled-claude.js'
 import { extractProviderErrorDetails } from '../core/provider-error.js'
 import type {
   CliAdapter,
@@ -146,20 +150,22 @@ const parseStats = (event: ClaudeEvent): CliRunStats | undefined => {
   const totalTokens = usageTokens(usage)
   const windowTokens = contextWindowTokens(event.modelUsage)
 
-  const stats: CliRunStats = {
-    durationMs: asNumber(event.duration_ms),
-    turns: asNumber(event.num_turns),
-    totalTokens,
-    inputTokens: asNumber(usage.input_tokens),
-    outputTokens: asNumber(usage.output_tokens),
-    cacheReadTokens: asNumber(usage.cache_read_input_tokens),
-    cacheCreationTokens: asNumber(usage.cache_creation_input_tokens),
-    contextWindowTokens: windowTokens,
-  }
+  const values: [keyof CliRunStats, number | undefined][] = [
+    ['durationMs', asNumber(event.duration_ms)],
+    ['turns', asNumber(event.num_turns)],
+    ['totalTokens', totalTokens],
+    ['inputTokens', asNumber(usage.input_tokens)],
+    ['outputTokens', asNumber(usage.output_tokens)],
+    ['cacheReadTokens', asNumber(usage.cache_read_input_tokens)],
+    ['cacheCreationTokens', asNumber(usage.cache_creation_input_tokens)],
+    ['contextWindowTokens', windowTokens],
+  ]
 
-  return Object.values(stats).some((value) => value !== undefined)
-    ? stats
-    : undefined
+  const stats: CliRunStats = {}
+  for (const [key, value] of values) {
+    if (value !== undefined) stats[key] = value
+  }
+  return Object.keys(stats).length ? stats : undefined
 }
 
 const outputArgs = (
@@ -180,6 +186,7 @@ const outputArgs = (
 }
 
 export class ClaudeAdapter implements CliAdapter {
+  constructor(private readonly controlledPolicy?: ControlledClaudePolicy) {}
   readonly id = 'claude' as const
   readonly command = 'claude'
   readonly displayName = 'Claude Code'
@@ -189,6 +196,13 @@ export class ClaudeAdapter implements CliAdapter {
     promptInput: CliPromptInput,
     options?: { model?: string; reasoningEffort?: string },
   ): string[] {
+    if (this.controlledPolicy)
+      return controlledClaudeArgs({
+        prompt,
+        promptInput,
+        policy: this.controlledPolicy,
+        ...options,
+      })
     return outputArgs(prompt, promptInput, options)
   }
 
@@ -198,6 +212,14 @@ export class ClaudeAdapter implements CliAdapter {
     promptInput: CliPromptInput,
     options?: { model?: string; reasoningEffort?: string },
   ): string[] {
+    if (this.controlledPolicy)
+      return controlledClaudeArgs({
+        prompt,
+        promptInput,
+        sessionId,
+        policy: this.controlledPolicy,
+        ...options,
+      })
     return ['--resume', sessionId, ...outputArgs(prompt, promptInput, options)]
   }
 
@@ -260,7 +282,7 @@ export class ClaudeAdapter implements CliAdapter {
           {
             type: 'error',
             message: text || String(event.error),
-            sessionId,
+            ...(sessionId ? { sessionId } : {}),
             details: extractProviderErrorDetails({
               error:
                 typeof event.error === 'string'
