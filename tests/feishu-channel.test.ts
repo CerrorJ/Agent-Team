@@ -18,7 +18,7 @@ import { humanRequestSchema } from '../src/kernel/human-contracts.js'
 const bindingCommand = () => ({
   type: 'feishu.save' as const,
   expectedVersion: 0,
-  appId: 'cli_test',
+  appId: 'cli_0123456789abcdef',
   tenantKey: 'synthetic-tenant',
   ownerOpenId: 'ou_owner',
   chatId: 'oc_test',
@@ -50,7 +50,7 @@ test('渠道端口集成：认证身份、同一人工用例、重复事件与�
     },
     {
       feishuCredentials: async (binding) => {
-        assert.equal(binding.appId, 'cli_test')
+        assert.equal(binding.appId, 'cli_0123456789abcdef')
         return 'synthetic-secret'
       },
       feishuTransport: (options) => {
@@ -104,7 +104,7 @@ test('渠道端口集成：认证身份、同一人工用例、重复事件与�
 
     const event = {
       event_id: 'synthetic-event',
-      app_id: 'cli_test',
+      app_id: 'cli_0123456789abcdef',
       tenant_key: 'synthetic-tenant',
       operator: { open_id: 'ou_owner', tenant_key: 'synthetic-tenant' },
       context: { open_chat_id: 'oc_test' },

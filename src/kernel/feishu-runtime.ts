@@ -6,6 +6,7 @@ import type {
   FeishuBinding,
 } from './feishu-contracts.js'
 import { z } from 'zod'
+import { feishuAppIdSchema } from './feishu-contracts.js'
 import {
   createFeishuTransport,
   type FeishuTransport,
@@ -41,7 +42,11 @@ export class FeishuRuntime {
   async connect(): Promise<void> {
     this.close()
     const binding = new FeishuStore(this.options.store).binding()
-    if (!binding?.enabled || !this.options.credentials)
+    if (
+      !binding?.enabled ||
+      !this.options.credentials ||
+      !feishuAppIdSchema.safeParse(binding.appId).success
+    )
       throw new Error('FEISHU_NOT_CONFIGURED')
     const generation = this.generation
     this.version = binding.version

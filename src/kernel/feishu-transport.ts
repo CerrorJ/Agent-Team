@@ -1,5 +1,6 @@
 import * as Lark from '@larksuiteoapi/node-sdk'
-import axios from 'axios'
+import { createFeishuHttp } from './feishu-http.js'
+import { z } from 'zod'
 import type { FeishuBinding } from './feishu-contracts.js'
 
 export interface FeishuTransport {
@@ -29,7 +30,7 @@ export const createFeishuTransport: FeishuTransportFactory = (options) => {
     appId: options.binding.appId,
     appSecret: options.secret,
     logger,
-    httpInstance: axios.create({ timeout: 15_000, maxRedirects: 0 }),
+    httpInstance: createFeishuHttp(),
   }
 
   const client = new Lark.Client(parameters)
@@ -62,9 +63,7 @@ export const createFeishuTransport: FeishuTransportFactory = (options) => {
         },
       })
 
-      if (result.code || !result.data?.message_id)
-        throw new Error('FEISHU_NETWORK_FAILED')
-      return result.data.message_id
+      return messageId(result)
     },
     update: async (input) => {
       const result = await client.im.v1.message.patch({
@@ -72,9 +71,21 @@ export const createFeishuTransport: FeishuTransportFactory = (options) => {
         data: { content: input.content },
       })
 
-      if (result.code) throw new Error('FEISHU_NETWORK_FAILED')
+      if (result.code !== 0) throw new Error('FEISHU_NETWORK_FAILED')
     },
   }
+}
+
+const messageId = (response: unknown): string => {
+  const parsed = z
+    .object({
+      code: z.literal(0),
+      data: z.object({ message_id: z.string().min(1).max(200) }),
+    })
+    .safeParse(response)
+
+  if (!parsed.success) throw new Error('FEISHU_NETWORK_FAILED')
+  return parsed.data.data.message_id
 }
 
 const silentLogger = {
