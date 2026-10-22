@@ -3,6 +3,7 @@ import { WorkspaceStore } from './workspace-store.js'
 import { WorkspaceService } from './workspace-service.js'
 import { publicError } from './public-errors.js'
 import type { CliExecutionPort } from './run-execution.js'
+import type { CredentialResolver } from './credential-contracts.js'
 import {
   DATA_SCHEMA_VERSION,
   KERNEL_VERSION,
@@ -22,6 +23,7 @@ export interface KernelOptions {
   sourceCommit: string
   onEvent?: (event: KernelEvent) => void
   execute?: CliExecutionPort
+  credentials?: CredentialResolver
 }
 
 /** 导入不读取 .env 或启动渠道；创建后仅恢复已授权的本机任务。 */
@@ -66,6 +68,7 @@ export class EmbeddedKernel {
         store: this.store,
         dataDirectory: options.dataDirectory,
         ...(options.execute ? { execute: options.execute } : {}),
+        ...(options.credentials ? { credentials: options.credentials } : {}),
       })
       this.emit('kernel.started')
     } catch (error) {

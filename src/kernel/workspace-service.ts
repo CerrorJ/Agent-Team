@@ -10,6 +10,7 @@ import { saveProductObject, isProductCommand } from './product-commands.js'
 import { prepareRoleCommand, isRoleLifecycleCommand } from './role-commands.js'
 import { prepareTeamCommand, isTeamCommand } from './team-commands.js'
 import type { CliExecutionPort } from './run-execution.js'
+import type { CredentialResolver } from './credential-contracts.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import type { BusinessCommand } from './business-contracts.js'
 
@@ -29,6 +30,7 @@ export class WorkspaceService {
       store: WorkspaceStore
       dataDirectory: string
       execute?: CliExecutionPort
+      credentials?: CredentialResolver
     },
   ) {
     this.ledger = new CommandLedger(options.store)

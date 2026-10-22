@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { createKernel } from './kernel.js'
+import { CredentialChannel } from './credential-channel.js'
 
 interface ParentPort {
   postMessage(message: unknown): void
@@ -18,13 +19,19 @@ const manifest = JSON.parse(
   readFileSync(new URL('./manifest.json', import.meta.url), 'utf8'),
 ) as { sourceCommit: string }
 
+const credentials = new CredentialChannel((message) =>
+  parentPort.postMessage(message),
+)
+
 const kernel = createKernel({
   dataDirectory,
   sourceCommit: manifest.sourceCommit,
+  credentials: credentials.resolve,
   onEvent: (event) => parentPort.postMessage({ kind: 'event', event }),
 })
 
 parentPort.on('message', async ({ data }) => {
+  if (credentials.receive(data)) return
   const response = await kernel.dispatch(data)
   parentPort.postMessage({ kind: 'response', response })
   if (response.status === 'completed' && kernelStateStopped(response.result)) {

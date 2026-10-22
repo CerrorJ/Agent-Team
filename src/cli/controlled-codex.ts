@@ -2,6 +2,7 @@ import type { CliPromptInput } from './types.js'
 
 export interface ControlledCodexPolicy {
   permission: 'read-only' | 'workspace-write'
+  providerBaseUrl?: string
 }
 
 /** 桌面执行明确权限，不继承旧飞书入口的 bypass，也不修改用户 CLI 配置。 */
@@ -23,6 +24,8 @@ export const controlledCodexArgs = (input: {
   ]
 
   if (process.platform === 'win32') args.push('-c', 'windows.sandbox="mxc"')
+  if (input.policy.providerBaseUrl)
+    args.push(...providerArgs(input.policy.providerBaseUrl))
   args.push('exec')
   if (input.sessionId) args.push('resume')
   args.push('--json', '--ignore-user-config', '--ignore-rules')
@@ -36,3 +39,14 @@ export const controlledCodexArgs = (input: {
   args.push(input.promptInput === 'stdin' ? '-' : input.prompt)
   return args
 }
+
+const providerArgs = (baseUrl: string): string[] => [
+  '-c',
+  'model_provider="weftpilot"',
+  '-c',
+  `model_providers.weftpilot={name="WeftPilot",base_url=${JSON.stringify(baseUrl)},env_key="WEFTPILOT_MODEL_SECRET",wire_api="responses",requires_openai_auth=false}`,
+  '-c',
+  'shell_environment_policy.filters={"WEFTPILOT_MODEL_SECRET"="exclude"}',
+  '-c',
+  'shell_environment_policy.ignore_default_excludes=false',
+]

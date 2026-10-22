@@ -14,6 +14,7 @@ import {
 } from './run-inputs.js'
 import { finishRun } from './run-outcome.js'
 import type { WorkspaceStore } from './workspace-store.js'
+import type { CredentialResolver } from './credential-contracts.js'
 
 export type CliExecutionPort = (options: RunCliOptions) => Promise<CliRunResult>
 
@@ -24,6 +25,7 @@ export const executeQueuedRun = async (
     runId: string
     dataDirectory: string
     controller: AbortController
+    credentials?: CredentialResolver
   },
   execute: CliExecutionPort = runCli,
 ): Promise<void> => {
@@ -31,7 +33,7 @@ export const executeQueuedRun = async (
   try {
     if (!prepareState(store, runId)) return
     let run = store.get('runs', runId, runSchema)
-    const runtime = executionModel(run)
+    const runtime = await executionModel(run, input.credentials)
     const project = store.get('projects', run.projectId, projectSchema)
     prepareRunWorktree({ project, run, dataDirectory: input.dataDirectory })
     run = prepareInputs(store, run)

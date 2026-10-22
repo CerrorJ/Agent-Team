@@ -1,4 +1,5 @@
 import { spawnCli } from './spawn-cli.js'
+import { cliEnvironment } from './execution-environment.js'
 import type { ChildProcess } from 'node:child_process'
 import { terminateCli, type ProcessStopReport } from './process-stop.js'
 import { armTimeout, envTimeoutMs } from './timeout.js'
@@ -41,6 +42,7 @@ const toToolCalls = (calls: Map<string, CliToolCall>): CliToolCall[] =>
   }))
 
 export interface RunCliOptions {
+  environment?: 'inherit' | 'isolated'
   onProcessStop?: (result: ProcessStopReport) => void
   /** 宿主可替换进程终止端口以验证系统失败；桌面生产路径始终使用默认实现。 */
   stopProcess?: (child: ChildProcess) => Promise<boolean>
@@ -187,7 +189,10 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
     const child = spawnCli(adapter.command, args, {
       cwd,
       signal,
-      env: env ? { ...process.env, ...env } : undefined,
+      env:
+        env || options.environment === 'isolated'
+          ? { ...cliEnvironment(options.environment), ...env }
+          : undefined,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 

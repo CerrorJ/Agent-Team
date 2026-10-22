@@ -11,6 +11,7 @@ export default [
       'src/cli/controlled-claude.ts',
       'src/cli/bounded-lines.ts',
       'src/cli/process-stop.ts',
+      'src/cli/execution-environment.ts',
       'tests/helpers/**/*.ts',
       'scripts/**/*.mjs',
     ],

@@ -30,7 +30,9 @@ export const backendScopeKey = (
   const credential =
     cliId === 'claude'
       ? effective.ANTHROPIC_AUTH_TOKEN || effective.ANTHROPIC_API_KEY
-      : effective.OPENAI_API_KEY || effective.CODEX_API_KEY
+      : effective.WEFTPILOT_MODEL_SECRET ||
+        effective.OPENAI_API_KEY ||
+        effective.CODEX_API_KEY
 
   const model =
     cliId === 'claude'

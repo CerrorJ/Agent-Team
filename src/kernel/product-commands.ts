@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { normalizeProviderUrl } from './credential-contracts.js'
 import {
   projectSchema,
   roleVersionSchema,
@@ -86,16 +87,7 @@ const validateModel = (
 
   if (command.provider !== provider) throw new Error('MODEL_CONFIG_INVALID')
   if (!command.model) throw new Error('MODEL_CONFIG_INVALID')
-  let url: URL
-  try {
-    url = new URL(command.baseUrl)
-  } catch {
-    throw new Error('MODEL_CONFIG_INVALID')
-  }
-  if (!['https:', 'http:'].includes(url.protocol))
-    throw new Error('MODEL_CONFIG_INVALID')
-  if ([url.username, url.password, url.search, url.hash].some(Boolean))
-    throw new Error('MODEL_CONFIG_INVALID')
+  normalizeProviderUrl(command.baseUrl)
 }
 
 const validateRequirement = (input: {

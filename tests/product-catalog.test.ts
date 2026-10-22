@@ -70,6 +70,23 @@ test('共享用例保存模型版本，角色固定确切模型配置，旧版�
       /VERSION_CONFLICT/,
     )
     assert.equal(products.list('model_profiles', modelProfileSchema).length, 2)
+
+    const oldFormRole = command({
+      type: 'role.save',
+      expectedVersion: 0,
+      name: '旧表单',
+      responsibility: '固定选中的模型版本',
+      cli: 'codex',
+      model: '',
+      modelProfileRef: { id, version: 1 },
+      permission: 'read-only',
+    })
+
+    assert.equal(
+      store.get('role_versions', oldFormRole, roleVersionSchema)
+        .modelProfileSnapshot?.version,
+      1,
+    )
     assert.throws(
       () =>
         command({

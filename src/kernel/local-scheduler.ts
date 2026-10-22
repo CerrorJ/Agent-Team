@@ -4,6 +4,7 @@ import { executeQueuedRun, type CliExecutionPort } from './run-execution.js'
 import { finishRoleTrial } from './role-trial-state.js'
 import { queueBlocker } from './queue-rules.js'
 import { refreshTeamProgress } from './team-progress.js'
+import type { CredentialResolver } from './credential-contracts.js'
 
 type ActiveExecution = { controller: AbortController; finished: Promise<void> }
 
@@ -18,6 +19,7 @@ export class LocalScheduler {
       store: WorkspaceStore
       dataDirectory: string
       execute?: CliExecutionPort
+      credentials?: CredentialResolver
     },
   ) {}
 
@@ -66,6 +68,9 @@ export class LocalScheduler {
             runId,
             dataDirectory: this.options.dataDirectory,
             controller,
+            ...(this.options.credentials
+              ? { credentials: this.options.credentials }
+              : {}),
           },
           this.options.execute,
         ),

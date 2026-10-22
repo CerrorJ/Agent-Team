@@ -46,3 +46,15 @@
 默认测试目前 64 项（此前完整 63/63 通过，新增 schema 3→4 专项 3/3 通过）；涵盖真实 Git 菱形依赖、贡献冲突、未验收不运行、循环依赖无部分创建、多项目两槽与项目/角色排队、停止后槽位释放。端口夹具仅证明编排，不能作为真实 CLI 团队验收。真实双 CLI 团队探针正在单独运行；第一次 Codex 未生成试运行输出而被正确拒绝为 ROLE_TRIAL_OUTPUT_INVALID，失败现场保留，没有伪造就绪。后续调整的是合成角色职责，未放宽文件挑战验证。
 
 仍需模型凭证与自定义提供方桥接、桌面 UI/客户端消费、锁定产物与真正打包双 CLI/团队验收、独立 Tester/Reviewer。没有声称 M2 完成。
+
+## 0.3.2 凭据端口与精确模型引用增量
+
+0.3.1/a0f90b5 已由纬舟 feat/product-teams 消费；桌面 74be0f7 完成真实对象/团队界面、中英文及主题。独立 Tester 用真实 Codex 完成上游交付、人工验收、下游读取已合成文件、父任务完成与重启持久化；Reviewer 对该增量批准，不代表整个 M2 封板。
+
+0.3.2 增加可信宿主私有凭据请求/回复，按 UUID 关联、限制并发和超时。提供方、规范化地址与引用共同绑定，密钥仅在执行前解析，不进入数据库事务、Run 快照或命令参数。自定义提供方隔离继承环境；CLI-managed 兼容原有登录。Codex 使用官方 env_key 和 Responses 提供方配置，工具环境明确排除密钥；Claude 使用官方 API Key/BASE_URL 环境变量。角色新增确切 modelProfileRef，保留旧 ID 字段兼容，避免旧表单静默绑定新模型版本。
+
+67/67 默认测试通过。真实原生 Codex 路由探针向本机测试 HTTP 接口发送带合成认证的请求，接口明确拒绝为 401；这只证明路由/认证边界，不证明模型执行成功。桌面加密存储和对应端到端验收在纬舟继续，真实自定义提供方凭据尚缺。
+
+Windows 在途工具停止回归再次出现 taskkill 返回 128：内核保持 STATE_UNCERTAIN，并保留执行段与现场，未把根进程消失当成整树结束。Claude 另一真实试运行虽生成匹配文件但没有及时退出，也不能判成功；其退出时同样遇到 128。停止根因、第二 CLI 完整闭环、打包验收与 macOS 原生验证仍未关闭。
+
+依据：[Codex 自定义提供方](https://learn.chatgpt.com/docs/config-file/config-advanced)、[Codex 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)、[Claude 环境变量](https://code.claude.com/docs/en/env-vars)。

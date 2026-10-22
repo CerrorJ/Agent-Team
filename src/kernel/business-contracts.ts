@@ -165,6 +165,7 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
       responsibility: longText,
       cli: cliIdSchema,
       modelProfileId: id.nullable().optional(),
+      modelProfileRef: requirementRefSchema.nullable().optional(),
       model: z.string().trim().max(200),
       permission: z.enum(['read-only', 'workspace-write']),
     })

@@ -58,16 +58,7 @@ const saveRole = (
     throw new Error('VERSION_CONFLICT: 新角色的预期版本必须为零')
   const id = command.id ?? randomUUID()
 
-  const profile = command.modelProfileId
-    ? new ProductStore(store).get(
-        'model_profiles',
-        { id: command.modelProfileId },
-        modelProfileSchema,
-      )
-    : null
-
-  if (profile && profile.cli !== command.cli)
-    throw new Error('CLI_MODEL_MISMATCH')
+  const profile = resolveRoleModel(store, command)
 
   const role: RoleVersion = {
     id,
@@ -85,6 +76,32 @@ const saveRole = (
   store.addRole(role)
   new RoleReadinessStore(store).reset(role)
   return { id }
+}
+
+const resolveRoleModel = (
+  store: WorkspaceStore,
+  command: Extract<BusinessCommand, { type: 'role.save' }>,
+) => {
+  if (command.modelProfileId && command.modelProfileRef)
+    throw new Error('MODEL_CONFIG_INVALID')
+
+  // 新客户端提交表单中看到的确切版本；旧 ID 字段仅保留协议兼容。
+  const reference =
+    command.modelProfileRef ??
+    (command.modelProfileId ? { id: command.modelProfileId } : null)
+
+  const profile = reference
+    ? new ProductStore(store).get(
+        'model_profiles',
+        reference,
+        modelProfileSchema,
+      )
+    : null
+
+  if (profile && profile.cli !== command.cli)
+    throw new Error('CLI_MODEL_MISMATCH')
+
+  return profile
 }
 
 const createTask = (

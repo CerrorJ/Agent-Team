@@ -31,10 +31,10 @@ test('受控 Claude 仅提供工作目录文件工具，不加载自定义工具
   )
 })
 
-test('CLI 来自角色快照，Claude 角色不会交给 Codex，也不注入空模型环境', () => {
+test('CLI 来自角色快照，Claude 角色不会交给 Codex，也不注入空模型环境', async () => {
   const { database, run } = workspaceFixture()
   try {
-    const runtime = executionModel({
+    const runtime = await executionModel({
       ...run,
       roleSnapshot: { ...run.roleSnapshot, cli: 'claude' },
     })
