@@ -13,7 +13,7 @@
 产物 `dist-kernel/` 包含无第三方运行时安装依赖的 ESM bundle、协议类型、
 来源 manifest 与许可说明；使用 Node 内建 SQLite，不引入额外原生 ABI 模块。
 运行时要求 Node >=22.13 且提供 node:sqlite，桌面打包测试必须验证内嵌版本。
-打包：`npm pack ./dist-kernel --pack-destination artifacts`（先创建 artifacts 目录）。
+打包：先创建 artifacts 目录，在 dist-kernel 中执行 `npm pack --pack-destination ../artifacts`，避免根工程的 pnpm devEngines 限制。
 正式消费必须从已提交的干净检出构建，锁定源提交和 tarball SHA-256。
 
 校验：`pnpm build`、`pnpm lint`、`pnpm format:check`、`pnpm test`。

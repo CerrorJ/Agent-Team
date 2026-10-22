@@ -68,7 +68,12 @@ export const spawnCli = ((
   // 随后 killCli 调用 taskkill /pid 时也会因 cmd.exe 已经死亡而无法顺着树杀死子孙进程。
   // 因此 Windows 下剔除 options.signal，完全交由上层 abort 事件监听器调用 killCli 进行整树杀死。
   const { signal: _signal, ...restOptions } = options
-  const plan = windowsCommand(command)
+
+  const plan = windowsCommand(command, {
+    env: restOptions.env,
+    cwd: typeof restOptions.cwd === 'string' ? restOptions.cwd : undefined,
+  })
+
   return spawn(plan.command, [...plan.prefix, ...args], {
     ...restOptions,
     shell: false,

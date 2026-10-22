@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, writeFile, copyFile } from 'node:fs/promises'
+import { mkdir, writeFile, copyFile, readFile } from 'node:fs/promises'
 import { build } from 'esbuild'
 
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
@@ -63,6 +63,7 @@ await copyFile('docs/embedded-kernel.md', `${output}/README.md`)
 await writeFile(
   `${output}/THIRD-PARTY-NOTICES.txt`,
   'Agent-Team: ISC (package.json), source https://github.com/CerrorJ/Agent-Team\n' +
-    'Zod: MIT, https://github.com/colinhacks/zod (license included in bundled JS)\n' +
-    'Node.js SQLite: supplied by host Node/Electron runtime; not vendored.\n',
+    'Node.js SQLite: supplied by host Node/Electron runtime; not vendored.\n\n' +
+    'Zod: https://github.com/colinhacks/zod\n' +
+    (await readFile('node_modules/zod/LICENSE', 'utf8')),
 )
