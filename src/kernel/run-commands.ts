@@ -8,6 +8,8 @@ import {
   roleVersionSchema,
   runSchema,
   taskSchema,
+  deliverySchema,
+  acceptanceSchema,
   type BusinessCommand,
   type Run,
   type Task,
@@ -92,6 +94,7 @@ const createRun = (input: {
     roleSnapshot: store.get('role_versions', task.roleId, roleVersionSchema),
     baselineCommit: input.baselineCommit,
     goalSnapshot: task.goal,
+    feedbackSnapshot: retryFeedback(store, previous.at(-1)),
     acceptanceSnapshot: task.acceptanceCriteria,
     executionBranch: `weftpilot/run-${id}`,
     workDirectory: runWorkDirectory({
@@ -112,6 +115,25 @@ const createRun = (input: {
     version: task.version + 1,
   })
   return { id }
+}
+
+const retryFeedback = (
+  store: WorkspaceStore,
+  previous: Run | undefined,
+): string => {
+  if (!previous) return ''
+
+  const delivery = store
+    .list('deliveries', deliverySchema)
+    .find((item) => item.runId === previous.id)
+
+  const acceptance =
+    delivery &&
+    store
+      .list('acceptances', acceptanceSchema)
+      .find((item) => item.deliveryId === delivery.id)
+
+  return acceptance?.reason || previous.feedbackSnapshot
 }
 
 const assertTaskCanStart = (store: WorkspaceStore, task: Task): void => {

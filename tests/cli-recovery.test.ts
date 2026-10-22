@@ -23,7 +23,10 @@ const fixture = async (events: CliEvent[][]) => {
     const n = fs.existsSync('attempt') ? Number(fs.readFileSync('attempt', 'utf8')) : 0;
     fs.writeFileSync('attempt', String(n + 1));
     const batches = ${JSON.stringify(events)};
-    for (const event of batches[Math.min(n, batches.length - 1)]) console.log(JSON.stringify(event));
+    const batch = batches[Math.min(n, batches.length - 1)];
+    for (const event of batch) console.log(JSON.stringify(event));
+    // 审批工具模拟等待结果的在途 CLI，终止证据必须来自真实结束而非自然退出码。
+    if (batch.some(event => event.type === 'tool_call' && event.toolName === 'request_approval')) setInterval(() => {}, 1000);
   `,
   ]
 

@@ -138,6 +138,8 @@ test('真实 Git + 端口集成：交付独立验收、幂等、退回重试、�
     state = await snapshot(kernel)
     assert.equal(state.runs[0]?.roleSnapshot.responsibility, '原职责')
     assert.equal(state.runs[1]?.roleSnapshot.responsibility, '新职责')
+    assert.equal(state.runs[0]?.feedbackSnapshot, '')
+    assert.equal(state.runs[1]?.feedbackSnapshot, '需要改进')
     assert.notEqual(state.runs[0]?.id, state.runs[1]?.id)
     assert.equal(state.acceptances[0]?.reason, '需要改进')
     await assert.rejects(

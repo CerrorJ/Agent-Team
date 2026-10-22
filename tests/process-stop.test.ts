@@ -61,3 +61,64 @@ test(
     }
   },
 )
+
+test(
+  '终止端口失败且根进程自然 exit 0，仍保留状态待确认而非谎报整棵树结束',
+  { timeout: 10000 },
+  async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'weftpilot-stop-failure-'))
+    const controller = new AbortController()
+    let descendant: number | undefined
+
+    const script = `const cp=require('node:child_process');const fs=require('node:fs');
+    const child=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});
+    fs.writeFileSync('descendant',String(child.pid));child.unref();
+    console.log(JSON.stringify({type:'session',sessionId:'failure-fixture'}));
+    setTimeout(()=>process.exit(0),250);`
+
+    const adapter: CliAdapter = {
+      id: 'codex',
+      command: process.execPath,
+      displayName: '终止失败夹具',
+      buildArgs: () => ['-e', script],
+      buildResumeArgs: () => ['-e', script],
+      parseEvents: (line) => [JSON.parse(line) as CliEvent],
+      buildCompactPlan: () => {
+        throw new Error('unused')
+      },
+    }
+
+    try {
+      await assert.rejects(
+        runCli({
+          adapter,
+          cwd,
+          prompt: 'fixture',
+          signal: controller.signal,
+          stopProcess: async () => false,
+          onEvent: () => controller.abort(),
+        }),
+        /STATE_UNCERTAIN/,
+      )
+      descendant = Number(readFileSync(join(cwd, 'descendant'), 'utf8'))
+      assert.doesNotThrow(() => process.kill(descendant ?? 0, 0))
+    } finally {
+      if (!descendant && existsSync(join(cwd, 'descendant')))
+        descendant = Number(readFileSync(join(cwd, 'descendant'), 'utf8'))
+      if (descendant) {
+        try {
+          process.kill(descendant)
+        } catch {
+          /* 只清理本测试创建并持有的进程。 */
+        }
+        await delay(100)
+      }
+      rmSync(cwd, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      })
+    }
+  },
+)

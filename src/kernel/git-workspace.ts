@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { relative, resolve, isAbsolute, join } from 'node:path'
 import type { Project, Run } from './business-contracts.js'
 
-const git = (cwd: string, args: string[]): string =>
-  execFileSync(
+const git = (cwd: string, args: string[], raw = false): string => {
+  const output = execFileSync(
     'git',
     ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args],
     {
@@ -17,7 +17,10 @@ const git = (cwd: string, args: string[]): string =>
       maxBuffer: 1_000_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     },
-  ).trim()
+  )
+
+  return raw ? output : output.trim()
+}
 
 export const inspectProjectRepository = (input: {
   repositoryPath: string
@@ -99,15 +102,19 @@ export const collectRunDelivery = (
 ): { diff: string; headCommit: string } => {
   git(run.workDirectory, ['add', '--intent-to-add', '--', '.'])
 
-  const diff = git(run.workDirectory, [
-    'diff',
-    '--no-ext-diff',
-    '--no-textconv',
-    '--binary',
-    'HEAD',
-    '--',
-    '.',
-  ])
+  const diff = git(
+    run.workDirectory,
+    [
+      'diff',
+      '--no-ext-diff',
+      '--no-textconv',
+      '--binary',
+      run.baselineCommit,
+      '--',
+      '.',
+    ],
+    true,
+  )
 
   if (diff.length > 500_000)
     throw new Error(

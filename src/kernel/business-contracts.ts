@@ -70,6 +70,7 @@ export const runSchema = z
     baselineCommit: z.string().regex(/^[a-f0-9]{40,64}$/),
     acceptanceSnapshot: longText,
     goalSnapshot: longText,
+    feedbackSnapshot: z.string().max(20_000).default(''),
     executionBranch: z.string(),
     workDirectory: z.string(),
     createdAt: z.string().datetime(),

@@ -1,9 +1,10 @@
 import { z } from 'zod'
 import { businessCommandSchema } from './business-contracts.js'
 export * from './business-contracts.js'
+export * from './activity-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.2.2'
+export const KERNEL_VERSION = '0.2.3'
 export const DATA_SCHEMA_VERSION = 2
 
 const requestBase = {
@@ -37,6 +38,13 @@ export const requestSchema = z.discriminatedUnion('method', [
     .object({
       ...requestBase,
       method: z.literal('workspace.run'),
+      id: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('workspace.activity'),
       id: z.string().uuid(),
     })
     .strict(),

@@ -118,6 +118,9 @@ export class EmbeddedKernel {
         return this.store.get('deliveries', request.id, deliverySchema)
       case 'workspace.run':
         return this.store.get('runs', request.id, runSchema)
+      case 'workspace.activity':
+        this.store.get('runs', request.id, runSchema)
+        return this.store.activity(request.id)
       case 'kernel.shutdown':
         return this.shutdown()
     }

@@ -37,6 +37,7 @@ const workspaceSchemaV2 = `
       aggregate_id TEXT NOT NULL, aggregate_version INTEGER NOT NULL,
       type TEXT NOT NULL, occurred_at TEXT NOT NULL, data TEXT NOT NULL
     );
+    CREATE INDEX IF NOT EXISTS activity_by_run ON workspace_events(aggregate_id,type,sequence);
     CREATE TABLE IF NOT EXISTS command_receipts (
       idempotency_key TEXT PRIMARY KEY, request_digest TEXT NOT NULL, response TEXT NOT NULL
     );

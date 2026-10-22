@@ -4,7 +4,7 @@
 其入口、配置及生产数据未迁移。嵌入入口不加载该配置，不提供飞书连接能力。
 
 `createKernel({dataDirectory, sourceCommit, onEvent})` 显式打开独立 SQLite 数据目录。
-协议 1、内核 0.2.0、schema 2；支持 handshake、health、events、shutdown，
+协议 1、schema 2（确切内核版本及提交见 manifest.json）；支持 handshake、health、events、shutdown，
 以及 workspace.snapshot / command / run / delivery。项目、角色版本、Task/Run、
 单 Codex 执行、隔离 worktree、停止/重试、交付/验收已经接入共享应用入口。
 团队、飞书和技能尚未接入，不在能力清单中。当前仍在桌面联调与阶段验收。

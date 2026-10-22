@@ -47,7 +47,7 @@ export const finishRun = (input: {
       version: run.version + 1,
       endedAt: new Date().toISOString(),
       processState: 'confirmed_ended',
-      failureCode: input.failureCode ?? null,
+      failureCode: stopped ? null : (input.failureCode ?? null),
     })
     const task = input.store.get('tasks', run.taskId, taskSchema)
     input.store.updateTask({

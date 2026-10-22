@@ -1,4 +1,5 @@
 import { spawnCli } from './spawn-cli.js'
+import type { ChildProcess } from 'node:child_process'
 import { terminateCli } from './process-stop.js'
 import { armTimeout, envTimeoutMs } from './timeout.js'
 import { promptInputForPlatform } from './types.js'
@@ -40,6 +41,8 @@ const toToolCalls = (calls: Map<string, CliToolCall>): CliToolCall[] =>
   }))
 
 export interface RunCliOptions {
+  /** 宿主可替换进程终止端口以验证系统失败；桌面生产路径始终使用默认实现。 */
+  stopProcess?: (child: ChildProcess) => Promise<boolean>
   onProcessStart?: (pid: number) => void
   adapter: CliAdapter
   prompt: string
@@ -191,7 +194,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
     let termination: Promise<boolean> | undefined
 
     const terminate = () => {
-      termination ??= terminateCli(child)
+      termination ??= (options.stopProcess ?? terminateCli)(child)
     }
 
     // stdin 模式下把 prompt 写入子进程；否则 prompt 已在命令行参数里，stdin 直接收口。
@@ -339,7 +342,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
     })
     child.once('close', async (code) => {
       if (settled) return
-      if (termination && !(await termination) && code !== 0) {
+      if (termination && !(await termination)) {
         fail(new Error('STATE_UNCERTAIN'))
         return
       }

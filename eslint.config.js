@@ -7,6 +7,10 @@ export default [
       'src/kernel/**/*.ts',
       'src/domain/**/*.ts',
       'src/cli/windows-command.ts',
+      'src/cli/controlled-codex.ts',
+      'src/cli/bounded-lines.ts',
+      'src/cli/process-stop.ts',
+      'tests/helpers/**/*.ts',
       'scripts/**/*.mjs',
     ],
     rules: {
@@ -21,6 +25,15 @@ export default [
       'max-depth': ['error', 3],
       complexity: ['error', 10],
       'max-params': ['error', 4],
+    },
+  },
+  {
+    files: ['tests/**/*.test.ts'],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 600, skipBlankLines: true, skipComments: true },
+      ],
     },
   },
   {

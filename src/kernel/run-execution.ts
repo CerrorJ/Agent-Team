@@ -37,7 +37,7 @@ export const executeQueuedRun = async (
       cwd: run.workDirectory,
       signal: controller.signal,
       timeoutMs: 30 * 60_000,
-      prompt: `职责：${run.roleSnapshot.responsibility}\n任务：${run.goalSnapshot}\n验收条件：${run.acceptanceSnapshot}`,
+      prompt: `职责：${run.roleSnapshot.responsibility}\n任务：${run.goalSnapshot}\n验收条件：${run.acceptanceSnapshot}\n此前退回意见：${run.feedbackSnapshot || '无'}`,
       ...(run.roleSnapshot.model
         ? { env: { CODEX_MODEL: run.roleSnapshot.model } }
         : {}),
@@ -48,8 +48,9 @@ export const executeQueuedRun = async (
     finishRun({ store, runId, result })
   } catch (error) {
     const failureCode =
-      error instanceof Error && /^[A-Z_]+$/.test(error.message)
-        ? error.message
+      error instanceof Error
+        ? (error.message.match(/^([A-Z][A-Z_]+)(?::|$)/)?.[1] ??
+          'CLI_EXECUTION_FAILED')
         : 'CLI_EXECUTION_FAILED'
 
     finishRun({ store, runId, failureCode })

@@ -210,18 +210,22 @@ export class WorkspaceStore {
     )
   }
 
-  activity(): {
+  activity(runId?: string): {
     runId: string
     label: string
     occurredAt: string
     sequence: number
   }[] {
+    const where = runId
+      ? "aggregate_id=? AND type='run.activity'"
+      : "type='run.activity'"
+
     return this.database
       .prepare(
         `SELECT aggregate_id AS runId, data, occurred_at AS occurredAt, sequence
-      FROM workspace_events WHERE type='run.activity' ORDER BY sequence DESC LIMIT 100`,
+      FROM workspace_events WHERE ${where} ORDER BY sequence DESC LIMIT 100`,
       )
-      .all()
+      .all(...(runId ? [runId] : []))
       .reverse()
       .map((row) => {
         const data = JSON.parse(String(row.data)) as { label: string }

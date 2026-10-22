@@ -118,6 +118,27 @@ test('中文空格路径的真实 worktree 保留主仓库文件，脏目录阻�
     assert.equal(existsSync(hookSentinel), false)
     writeFileSync(join(workDirectory, 'new.txt'), '交付文件')
     assert.ok(collectRunDelivery(run).diff.includes('交付文件'))
+    writeFileSync(join(workDirectory, 'new.txt'), '交付文件  \n\n')
+    execFileSync('git', ['add', '.'], { cwd: workDirectory, stdio: 'ignore' })
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=WeftPilot Test',
+        '-c',
+        'user.email=test@weftpilot.invalid',
+        'commit',
+        '-m',
+        'CLI commit',
+      ],
+      { cwd: workDirectory, stdio: 'ignore' },
+    )
+    writeFileSync(join(workDirectory, 'untracked.txt'), '尚未提交')
+    const complete = collectRunDelivery(run)
+    assert.notEqual(complete.headCommit, run.baselineCommit)
+    assert.ok(complete.diff.includes('+交付文件  \n'))
+    assert.ok(complete.diff.includes('尚未提交'))
+    assert.ok(complete.diff.endsWith('\n'))
     assert.equal(git(['status', '--porcelain']), '')
     assert.throws(
       () => prepareRunWorktree({ project, run, dataDirectory: directory }),
