@@ -9,7 +9,7 @@ export * from './credential-contracts.js'
 export * from './human-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.4.0'
+export const KERNEL_VERSION = '0.4.1'
 export const DATA_SCHEMA_VERSION = 5
 
 const requestBase = {

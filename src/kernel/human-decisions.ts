@@ -43,6 +43,12 @@ export const decidedRequest = (input: {
 })
 
 export const continuationPrompt = (request: HumanRequest): string => {
+  const prompt = formatContinuation(request)
+  if (prompt.length > 40_000) throw new Error('HUMAN_DECISION_INVALID')
+  return prompt
+}
+
+const formatContinuation = (request: HumanRequest): string => {
   const response = request.decision
   if (!response) throw new Error('HUMAN_DECISION_INVALID')
   if (response.decision === 'answered')

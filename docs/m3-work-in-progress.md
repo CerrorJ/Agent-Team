@@ -30,4 +30,6 @@ Claude 继续使用 restricted/safe-mode、空 MCP 和受限文件工具。它�
 
 本增量默认测试 77/77、typecheck、lint/规模、format、内核声明与 bundle 构建通过。额外使用已打包 Electron 42 可执行文件，以 ELECTRON_RUN_AS_NODE 运行开发 bundle 的 stdio MCP，实际完成协议握手与三个工具查询，无外部 Node 依赖；这是宿主兼容探针，不是完整桌面人工处理验收。后续先从本增量已提交干净源码装配，再实现桌面待处理入口并独立验收。
 
+0.4.1 在桌面消费前补齐续接文本边界：合法单条答案经 JSON 转义后可能超出 Run 的 40,000 字符限制，必须在事务内拒绝，回滚决定并保留 pending；Run 新建/更新均校验完整持久化 schema，避免提交无法再读取的状态。专项验证控制字符造成的超长文本与完整回滚。
+
 Windows 偶发 taskkill 128 的旧状态待确认现场保留；真实开发凭据、macOS 原生和跨仓 CI 仍在纬舟外部清单。

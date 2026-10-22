@@ -109,6 +109,7 @@ export class WorkspaceStore {
   }
 
   addRun(run: Run): void {
+    runSchema.parse(run)
     this.database
       .prepare(
         `INSERT INTO runs(id,task_id,project_id,attempt,role_id,role_version,state,version,data)
@@ -129,6 +130,8 @@ export class WorkspaceStore {
   }
 
   updateRun(run: Run): void {
+    runSchema.parse(run)
+
     const result = this.database
       .prepare(
         'UPDATE runs SET state=?,version=?,data=? WHERE id=? AND version=?',

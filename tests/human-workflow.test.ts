@@ -291,6 +291,11 @@ test('澄清拒绝缺题/重复题，不自动选推荐项，所有者自由文�
   try {
     assert.throws(() => respond('other', '错误题'), /HUMAN_DECISION_INVALID/)
     assert.equal(new HumanStore(store).get(request.id).status, 'pending')
+    assert.throws(
+      () => respond('format', '\u0000'.repeat(10000)),
+      /HUMAN_DECISION_INVALID/,
+    )
+    assert.equal(new HumanStore(store).get(request.id).status, 'pending')
     respond('format', '自定义格式')
     const resumed = store.get('runs', run.id, runSchema)
     assert.equal(resumed.status, 'queued')
