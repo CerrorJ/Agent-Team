@@ -11,6 +11,31 @@ import {
 } from '../src/kernel/skill-download.js'
 import { randomUUID } from 'node:crypto'
 import type { SkillSource } from '../src/kernel/skill-contracts.js'
+import { mkdtempSync, mkdirSync, symlinkSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { skillStoragePath } from '../src/kernel/skill-staging.js'
+
+test('技能存储祖先为junction或symlink时拒绝，不清理外部目录', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'weftpilot-skill-junction-'))
+  const data = join(directory, 'data')
+  const outside = join(directory, 'outside')
+  mkdirSync(data)
+  mkdirSync(outside)
+  symlinkSync(
+    outside,
+    join(data, 'skills'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  )
+  try {
+    assert.throws(
+      () => skillStoragePath(data, randomUUID(), 'staging'),
+      /SKILL_PATH_INVALID/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 test('技能可移植路径拒绝遍历、Windows别名、凭据、Unicode和大小写覆盖', () => {
   for (const path of [

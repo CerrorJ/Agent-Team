@@ -56,6 +56,7 @@ export const skillImportSchema = z
     source: skillSourceSchema,
     directory: skillPathSchema,
     licensePath: skillPathSchema,
+    comparisonPackageId: id.nullable().default(null),
     state: z.enum([
       'queued',
       'fetching',

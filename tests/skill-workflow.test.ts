@@ -21,6 +21,7 @@ import { verifySkillDirectory } from '../src/kernel/skill-files.js'
 import { runSkillDirectoryName } from '../src/kernel/run-skills.js'
 import type { SkillImport } from '../src/kernel/skill-contracts.js'
 import type { CliExecutionPort } from '../src/kernel/run-execution.js'
+import type { SkillFetch } from '../src/kernel/skill-download.js'
 
 const fakeCli: CliExecutionPort = async (options) => {
   const trial = /weftpilot-trial-[a-f0-9-]+\.input\.txt/.exec(
@@ -78,6 +79,51 @@ const importSkill = async (kernel: EmbeddedKernel) => {
   assert.equal(await issueCommand(kernel, command, key), id)
   return waitForImport(kernel, id, 'preview_ready')
 }
+
+test('退出取消正在下载的网络，重启重做原下载意图而不自动安装', async () => {
+  const blocked: SkillFetch = async (_url, init) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener(
+        'abort',
+        () => reject(new DOMException('Aborted', 'AbortError')),
+        { once: true },
+      )
+    })
+
+  const fixture = await localKernelFixture(fakeCli, { skillFetch: blocked })
+  let restarted: EmbeddedKernel | undefined
+  try {
+    const sourceId = await fixture.command({
+      type: 'skill.source.save',
+      expectedVersion: 0,
+      name: '取消下载',
+      repository: 'https://github.com/example/skills',
+      commit: 'd'.repeat(40),
+    })
+
+    const id = await fixture.command({
+      type: 'skill.import',
+      sourceId,
+      sourceVersion: 1,
+      directory: 'skills/test-skill',
+      licensePath: 'LICENSE',
+    })
+
+    await waitForImport(fixture.kernel, id, 'fetching')
+    await fixture.kernel.shutdown()
+    restarted = createKernel({
+      dataDirectory: fixture.dataDirectory,
+      sourceCommit: 'a'.repeat(40),
+      skillFetch: skillFixtureFetch(),
+    })
+    await waitForImport(restarted, id, 'preview_ready')
+    assert.equal((await readSnapshot(restarted)).skills.length, 0)
+    assert.equal((await readSnapshot(restarted)).skillImports.length, 1)
+  } finally {
+    await restarted?.shutdown()
+    await fixture.cleanup()
+  }
+})
 
 test('技能预览不自动安装；原子激活、固定角色/Run、卸载保留历史，技能不混入交付', async () => {
   const fixture = await localKernelFixture(fakeCli, {
@@ -170,6 +216,21 @@ test('技能预览不自动安装；原子激活、固定角色/Run、卸载保�
     assert.doesNotMatch(
       delivery.diff,
       /weftpilot-skills|SKILL.md|manifest.json/,
+    )
+    const upgrade = await importSkill(fixture.kernel)
+    assert.equal(upgrade.comparisonPackageId, skill.id)
+    await fixture.command({
+      type: 'skill.activate',
+      id: upgrade.id,
+      expectedVersion: upgrade.version,
+      digest: upgrade.package!.digest,
+    })
+    await waitForImport(fixture.kernel, upgrade.id, 'installed')
+    assert.equal(
+      (await fixture.snapshot()).skillImports.find(
+        (item) => item.id === preview.id,
+      )?.comparisonPackageId,
+      null,
     )
     await fixture.command({
       type: 'skill.uninstall',

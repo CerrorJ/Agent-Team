@@ -153,6 +153,14 @@ export class SkillStore {
       source,
       directory: command.directory,
       licensePath: command.licensePath,
+      comparisonPackageId:
+        this.list('skill_packages', skillPackageSchema)
+          .filter(
+            (skill) =>
+              skill.directory === command.directory &&
+              skill.source.repository === source.repository,
+          )
+          .at(-1)?.id ?? null,
       state: 'queued',
       package: null,
       failureCode: null,

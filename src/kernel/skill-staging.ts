@@ -4,6 +4,8 @@ import {
   existsSync,
   renameSync,
   rmSync,
+  lstatSync,
+  readFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -26,7 +28,18 @@ export const skillStoragePath = (
   dataDirectory: string,
   id: string,
   area: 'staging' | 'versions',
-): string => join(dataDirectory, 'skills', area, z.string().uuid().parse(id))
+): string => {
+  const base = join(dataDirectory, 'skills')
+  const target = join(base, area, z.string().uuid().parse(id))
+  for (const path of [base, join(base, area), target]) {
+    if (
+      existsSync(path) &&
+      (lstatSync(path).isSymbolicLink() || !lstatSync(path).isDirectory())
+    )
+      throw new Error('SKILL_PATH_INVALID')
+  }
+  return target
+}
 
 /** staging按导入意图独占；网络中断可清理重做，永不覆盖已安装的版本目录。 */
 export const stageSkill = async (input: {
@@ -65,7 +78,7 @@ export const stageSkill = async (input: {
 
     const path = ownedSkillPath(root, blob.path)
     mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
-    writeFileSync(path, bytes, { flag: 'wx', mode: 0o600 })
+    writeFileSync(path, bytes, { flag: 'wx', mode: 0o600, flush: true })
     manifest.push({
       path: blob.path,
       size: bytes.length,
@@ -107,12 +120,11 @@ const finishStaging = (input: {
   writeFileSync(join(root, 'manifest.json'), JSON.stringify(skill), {
     flag: 'wx',
     mode: 0o600,
+    flush: true,
   })
   verifySkillDirectory(root, skill)
   return skill
 }
-
-import { readFileSync } from 'node:fs'
 
 const readText = (root: string, path: string): string => {
   const bytes = readFileSync(ownedSkillPath(root, path))
