@@ -134,6 +134,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.30.0(zod@4.4.3)
+      axios:
+        specifier: 1.18.1
+        version: 1.18.1(debug@4.4.3)
       cac:
         specifier: ^6.7.14
         version: 6.7.14

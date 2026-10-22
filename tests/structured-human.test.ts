@@ -17,6 +17,10 @@ test('Claude人工请求保留安全模式，以实际结构化结果产生请�
   assert.ok(args.includes('--safe-mode'))
   assert.ok(args.includes('--restricted'))
   assert.equal(args[args.indexOf('--json-schema') + 1], humanOutputJsonSchema())
+  assert.match(
+    args[args.indexOf('--append-system-prompt') + 1]!,
+    /根对象必须包含 outcome/,
+  )
   assert.equal(args[args.indexOf('--mcp-config') + 1], '{"mcpServers":{}}')
   const payload = { kind: 'plan', title: '受控方案', summary: '仅本次计划' }
 

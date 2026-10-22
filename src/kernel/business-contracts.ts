@@ -10,6 +10,7 @@ import {
 import { productCommandSchemas } from './product-command-contracts.js'
 import { roleCommandSchemas, roleTrialSchema } from './role-contracts.js'
 import { humanCommandSchemas } from './human-contracts.js'
+import { feishuCommandSchema } from './feishu-contracts.js'
 
 const id = z.string().uuid()
 const shortText = z.string().trim().min(1).max(200)
@@ -227,6 +228,7 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
     .strict(),
   ...productCommandSchemas,
   ...roleCommandSchemas,
+  feishuCommandSchema,
 ])
 
 export type Project = z.infer<typeof projectSchema>

@@ -16,6 +16,7 @@ import type { BusinessCommand } from './business-contracts.js'
 import { resolveHumanRequest } from './human-commands.js'
 import type { HumanActor } from './human-contracts.js'
 import { expireHumanRequests } from './human-expiration.js'
+import { FeishuStore } from './feishu-store.js'
 
 export interface CommandOutcome {
   id: string
@@ -86,6 +87,8 @@ export class WorkspaceService {
     command: Exclude<BusinessCommand, { type: 'human.resolve' }>,
   ): () => { id: string } {
     const { store, dataDirectory } = this.options
+    if (command.type === 'feishu.save')
+      return () => new FeishuStore(store).save(command)
     if (isProductCommand(command))
       return () => saveProductObject({ store, command })
     if (isRoleLifecycleCommand(command))

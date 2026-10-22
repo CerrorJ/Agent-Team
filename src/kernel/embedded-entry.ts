@@ -27,6 +27,7 @@ const kernel = createKernel({
   dataDirectory,
   sourceCommit: manifest.sourceCommit,
   credentials: credentials.resolve,
+  feishuCredentials: credentials.resolveFeishu,
   onEvent: (event) => parentPort.postMessage({ kind: 'event', event }),
 })
 

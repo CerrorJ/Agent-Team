@@ -1,5 +1,6 @@
 import type { CliPromptInput } from './types.js'
 import { humanOutputJsonSchema } from './structured-human-output.js'
+import { humanOutputInstructions } from './human-output-instructions.js'
 
 export interface ControlledClaudePolicy {
   permission: 'read-only' | 'workspace-write'
@@ -40,7 +41,12 @@ export const controlledClaudeArgs = (input: {
   ]
 
   if (input.policy.humanRequests)
-    args.push('--json-schema', humanOutputJsonSchema())
+    args.push(
+      '--json-schema',
+      humanOutputJsonSchema(),
+      '--append-system-prompt',
+      humanOutputInstructions,
+    )
   if (input.model) args.push('--model', input.model)
   if (input.reasoningEffort) args.push('--effort', input.reasoningEffort)
   if (input.sessionId) args.push('--resume', input.sessionId)

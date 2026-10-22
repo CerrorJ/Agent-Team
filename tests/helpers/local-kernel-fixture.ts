@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
-import { createKernel, type EmbeddedKernel } from '../../src/kernel/kernel.js'
+import {
+  createKernel,
+  type EmbeddedKernel,
+  type KernelOptions,
+} from '../../src/kernel/kernel.js'
 import { workspaceSnapshotSchema } from '../../src/kernel/workspace-contracts.js'
 import type { BusinessCommand } from '../../src/kernel/business-contracts.js'
 import type { CliExecutionPort } from '../../src/kernel/run-execution.js'
@@ -54,7 +58,15 @@ export const waitForRun = async (kernel: EmbeddedKernel, runId: string) => {
   throw new Error('测试执行未结束')
 }
 
-export const localKernelFixture = async (execute: CliExecutionPort) => {
+type TestKernelOptions = Omit<
+  KernelOptions,
+  'dataDirectory' | 'sourceCommit' | 'execute'
+>
+
+export const localKernelFixture = async (
+  execute: CliExecutionPort,
+  options: TestKernelOptions = {},
+) => {
   const directory = mkdtempSync(join(tmpdir(), 'weftpilot-role-lifecycle-'))
   const repositoryPath = join(directory, 'repository')
   mkdirSync(repositoryPath)
@@ -78,6 +90,7 @@ export const localKernelFixture = async (execute: CliExecutionPort) => {
   )
 
   const kernel = createKernel({
+    ...options,
     dataDirectory: join(directory, 'data'),
     sourceCommit: 'a'.repeat(40),
     execute,

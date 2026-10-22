@@ -14,6 +14,7 @@ export default [
       'src/cli/execution-environment.ts',
       'src/cli/trusted-app-tools.ts',
       'src/cli/structured-human-output.ts',
+      'src/cli/human-output-instructions.ts',
       'src/cli/claude-json-schema.ts',
       'tests/helpers/**/*.ts',
       'scripts/**/*.mjs',

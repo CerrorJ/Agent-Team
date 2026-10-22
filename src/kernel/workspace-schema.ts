@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { initializeProductSchema } from './product-schema.js'
 import { initializeHumanSchema } from './human-schema.js'
+import { initializeFeishuSchema } from './feishu-schema.js'
 
 /** M1 新增表与旧生命周期事件分离，迁移只新增，不改写 M0 历史。 */
 const workspaceSchemaV2 = `
@@ -67,4 +68,5 @@ export const initializeWorkspaceSchema = (database: DatabaseSync): void => {
   // v4 固定团队依赖输入与贡献补丁的 JSON 契约，旧内核必须拒绝打开。
   if (version < 4) database.exec('PRAGMA user_version=4')
   if (version < 5) initializeHumanSchema(database)
+  if (version < 6) initializeFeishuSchema(database)
 }

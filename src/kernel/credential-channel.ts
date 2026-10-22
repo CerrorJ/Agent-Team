@@ -2,8 +2,12 @@ import { randomUUID } from 'node:crypto'
 import {
   credentialBindingSchema,
   credentialResponseSchema,
+  hostCredentialBindingSchema,
+  type HostCredentialBinding,
   type CredentialResolver,
 } from './credential-contracts.js'
+import { feishuCredentialBindingSchema } from './feishu-contracts.js'
+import type { FeishuCredentialResolver } from './feishu-runtime.js'
 
 /** 仅供内核和可信宿主使用的短期通道；没有读取凭据的渲染进程接口。 */
 export class CredentialChannel {
@@ -17,8 +21,20 @@ export class CredentialChannel {
   >()
   constructor(private readonly send: (value: unknown) => void) {}
 
-  readonly resolve: CredentialResolver = async (binding) => {
-    const validated = credentialBindingSchema.parse(binding)
+  readonly resolve: CredentialResolver = (binding) =>
+    this.request(credentialBindingSchema.parse(binding))
+  readonly resolveFeishu: FeishuCredentialResolver = async (binding) => {
+    try {
+      return await this.request(feishuCredentialBindingSchema.parse(binding))
+    } catch {
+      throw new Error('FEISHU_NOT_CONFIGURED')
+    }
+  }
+
+  private readonly request = async (
+    binding: HostCredentialBinding,
+  ): Promise<string> => {
+    const validated = hostCredentialBindingSchema.parse(binding)
     if (this.pending.size >= 8) throw new Error('MODEL_CREDENTIAL_REQUIRED')
     const id = randomUUID()
     return new Promise<string>((resolve, reject) => {

@@ -24,6 +24,7 @@ import { initializeWorkspaceSchema } from './workspace-schema.js'
 import { ProductStore } from './product-store.js'
 import { projectQueue } from './queue-rules.js'
 import { HumanStore } from './human-store.js'
+import { FeishuStore } from './feishu-store.js'
 
 export type ObjectTable =
   'projects' | 'role_versions' | 'tasks' | 'runs' | 'deliveries' | 'acceptances'
@@ -220,6 +221,7 @@ export class WorkspaceStore {
         ...new ProductStore(this).snapshot(),
         logs: this.activity(),
         humanRequests: new HumanStore(this).list(),
+        feishuBinding: new FeishuStore(this).binding(),
       }),
     )
   }

@@ -48,5 +48,18 @@ const licenseText = async (root) => {
       if (error.code !== 'ENOENT') throw error
     }
   }
+  // 两个锁定旧包将完整 MIT 文本放在 README，未附独立 LICENSE；不对任意依赖宽泛兜底。
+  if (root.endsWith('/agent-base') || root.endsWith('/https-proxy-agent')) {
+    const metadata = JSON.parse(await readFile(`${root}/package.json`, 'utf8'))
+    const readme = await readFile(`${root}/README.md`, 'utf8')
+    if (
+      { 'agent-base': '6.0.2', 'https-proxy-agent': '5.0.1' }[metadata.name] ===
+        metadata.version &&
+      metadata.license === 'MIT' &&
+      readme.includes('Permission is hereby granted, free of charge') &&
+      readme.includes("THE SOFTWARE IS PROVIDED 'AS IS'")
+    )
+      return readme
+  }
   throw new Error(`缺少捆绑依赖许可：${root}`)
 }

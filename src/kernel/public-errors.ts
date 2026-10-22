@@ -1,4 +1,9 @@
 const messages: Record<string, string> = {
+  FEISHU_NOT_CONFIGURED: '请先填写并启用专用开发飞书应用绑定',
+  FEISHU_IDENTITY_MISMATCH: '飞书应用、租户、所有者、会话或绑定版本不匹配',
+  FEISHU_NETWORK_FAILED: '飞书连接或消息请求未完成，业务状态已保留',
+  FEISHU_DELIVERY_UNCERTAIN:
+    '消息首次发送结果待确认，已停止超过去重期限的自动重发',
   HUMAN_REQUEST_EXPIRED: '人工请求已经过期，不能继续放行',
   HUMAN_REQUEST_NOT_PENDING: '人工请求已经处理或撤销',
   HUMAN_DECISION_INVALID: '决定与本次请求类型或题目不匹配',

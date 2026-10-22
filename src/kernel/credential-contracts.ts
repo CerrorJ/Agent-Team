@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { feishuCredentialBindingSchema } from './feishu-contracts.js'
 
 /** 凭据必须绑定提供方和规范化地址，不能凭一个旧引用将密钥发送给新地址。 */
 export const normalizeProviderUrl = (input: string): string => {
@@ -32,12 +33,18 @@ export const credentialBindingSchema = z
       }),
   })
   .strict()
+export const hostCredentialBindingSchema = z.union([
+  credentialBindingSchema,
+  feishuCredentialBindingSchema,
+])
+export type HostCredentialBinding = z.infer<typeof hostCredentialBindingSchema>
+
 export const credentialRequestSchema = z
   .object({
     protocolVersion: z.literal(1),
     kind: z.literal('host.credential.request'),
     id: z.string().uuid(),
-    binding: credentialBindingSchema,
+    binding: hostCredentialBindingSchema,
   })
   .strict()
 export const credentialResponseSchema = z

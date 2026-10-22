@@ -24,8 +24,14 @@ const result = await build({
   entryPoints: {
     'embedded-entry': 'src/kernel/embedded-entry.ts',
     kernel: 'src/kernel/kernel.ts',
-    protocol: 'src/kernel/protocol.ts',
   },
+  banner: {
+    js: 'import { createRequire as bundleRequire } from "node:module"; const require = bundleRequire(import.meta.url);',
+  },
+})
+const contract = await build({
+  ...options,
+  entryPoints: { protocol: 'src/kernel/protocol.ts' },
 })
 const mcp = await build({
   ...options,
@@ -87,6 +93,12 @@ await writeFile(
 )
 await copyFile('docs/embedded-kernel.md', `${output}/README.md`)
 await writeKernelNotices(
-  { inputs: { ...result.metafile.inputs, ...mcp.metafile.inputs } },
+  {
+    inputs: {
+      ...result.metafile.inputs,
+      ...contract.metafile.inputs,
+      ...mcp.metafile.inputs,
+    },
+  },
   output,
 )

@@ -5,6 +5,11 @@ import { publicError } from './public-errors.js'
 import type { CliExecutionPort } from './run-execution.js'
 import type { CredentialResolver } from './credential-contracts.js'
 import {
+  FeishuRuntime,
+  type FeishuCredentialResolver,
+} from './feishu-runtime.js'
+import type { FeishuTransportFactory } from './feishu-transport.js'
+import {
   DATA_SCHEMA_VERSION,
   KERNEL_VERSION,
   PROTOCOL_VERSION,
@@ -24,6 +29,8 @@ export interface KernelOptions {
   onEvent?: (event: KernelEvent) => void
   execute?: CliExecutionPort
   credentials?: CredentialResolver
+  feishuCredentials?: FeishuCredentialResolver
+  feishuTransport?: FeishuTransportFactory
 }
 
 /** 导入不读取 .env 或启动渠道；创建后仅恢复已授权的本机任务。 */
@@ -34,6 +41,7 @@ export class EmbeddedKernel {
   private readonly journal: KernelJournal
   private readonly store: WorkspaceStore
   private readonly service: WorkspaceService
+  private readonly feishu: FeishuRuntime
   private stopped = false
   private stopping: Promise<{ state: 'stopped' }> | undefined
   readonly handshake: KernelHandshake
@@ -54,8 +62,9 @@ export class EmbeddedKernel {
         'team-workflow',
         'codex-and-claude',
         'human-workflow',
+        'feishu-channel',
       ],
-      unavailable: ['feishu', 'skills'],
+      unavailable: ['skills'],
       runtime: {
         node: process.versions.node,
         platform: process.platform,
@@ -70,6 +79,16 @@ export class EmbeddedKernel {
         dataDirectory: options.dataDirectory,
         ...(options.execute ? { execute: options.execute } : {}),
         ...(options.credentials ? { credentials: options.credentials } : {}),
+      })
+      this.feishu = new FeishuRuntime({
+        store: this.store,
+        service: this.service,
+        ...(options.feishuCredentials
+          ? { credentials: options.feishuCredentials }
+          : {}),
+        ...(options.feishuTransport
+          ? { factory: options.feishuTransport }
+          : {}),
       })
       this.emit('kernel.started')
     } catch (error) {
@@ -92,6 +111,8 @@ export class EmbeddedKernel {
     try {
       if (request.method === 'workspace.command') {
         const outcome = this.service.command(request)
+        if (request.command.type === 'feishu.save')
+          this.feishu.reconcileBinding()
         return {
           protocolVersion: 1,
           requestId: request.requestId,
@@ -103,7 +124,9 @@ export class EmbeddedKernel {
         protocolVersion: 1,
         requestId: request.requestId,
         status: 'completed',
-        result: await this.execute(request),
+        result: await (request.method.startsWith('feishu.')
+          ? this.channelRequest(request)
+          : this.execute(request)),
       }
     } catch (error) {
       return this.reject(request.requestId, error)
@@ -134,6 +157,20 @@ export class EmbeddedKernel {
     }
   }
 
+  private channelRequest(request: KernelRequest): unknown {
+    switch (request.method) {
+      case 'feishu.connect':
+        return this.feishu.connect().then(() => this.feishu.status())
+      case 'feishu.disconnect':
+        this.feishu.close()
+        return this.feishu.status()
+      case 'feishu.status':
+        return this.feishu.status()
+      default:
+        throw new Error('VALIDATION_FAILED')
+    }
+  }
+
   /** 等待 CLI 执行/停止结果落盘后才确认关闭，超时由宿主显示状态待确认。 */
   shutdown(): Promise<{ state: 'stopped' }> {
     if (this.stopping) return this.stopping
@@ -146,7 +183,9 @@ export class EmbeddedKernel {
 
   private async close(): Promise<{ state: 'stopped' }> {
     if (!this.stopped) {
+      this.feishu.close()
       await this.service.shutdown()
+      await this.feishu.drain()
       this.emit('kernel.stopped')
       this.journal.close()
       this.stopped = true

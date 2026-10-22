@@ -1,0 +1,118 @@
+import type { Task, Run } from './business-contracts.js'
+import type { HumanRequest } from './human-contracts.js'
+
+const text = (content: string) => ({
+  tag: 'plain_text',
+  content: content.slice(0, 4000),
+})
+
+const paragraph = (content: string) => ({ tag: 'div', text: text(content) })
+
+/** 卡片是共享快照的投影；回调只能引用确切请求版本，不携带任意业务命令。 */
+export const taskStatusCard = (input: {
+  task: Task
+  run?: Run
+  request?: HumanRequest
+  bindingVersion: number
+}) => ({
+  schema: '2.0',
+  config: { update_multi: true },
+  header: { title: text(`纬舟 · ${input.task.title}`), template: 'blue' },
+  body: {
+    elements: [
+      paragraph(
+        `任务状态：${input.task.status}\n执行状态：${input.run?.status ?? '未执行'}\n任务 ID：${input.task.id}`,
+      ),
+      ...requestElements(input.request, input.bindingVersion),
+      paragraph('执行成功与验收分开。完整日志、交付与验收请在纬舟桌面查看。'),
+    ],
+  },
+})
+
+const requestElements = (
+  request: HumanRequest | undefined,
+  bindingVersion: number,
+): unknown[] => {
+  if (!request) return []
+
+  const summary =
+    request.payload.kind === 'clarification'
+      ? request.payload.request.title
+      : request.payload.kind === 'plan'
+        ? `${request.payload.title}\n${request.payload.summary}`
+        : `${request.payload.request.operation}\n${request.payload.request.detail}\n影响：${request.payload.request.impact}\n回滚：${request.payload.request.rollback}`
+
+  const content: unknown[] = [
+    paragraph(
+      `${summary}\n请求状态：${request.status}\n有效期：${request.expiresAt}`,
+    ),
+  ]
+
+  if (request.status !== 'pending') return content
+  content.push(answerForm(request, bindingVersion), {
+    tag: 'form',
+    name: 'reject_request',
+    elements: [
+      inputField('reason', '拒绝原因（必填）'),
+      button(request, bindingVersion, 'rejected'),
+    ],
+  })
+  return content
+}
+
+const answerForm = (request: HumanRequest, bindingVersion: number) => ({
+  tag: 'form',
+  name: 'resolve_request',
+  elements:
+    request.payload.kind === 'clarification'
+      ? [
+          ...request.payload.request.questions.flatMap((question) => [
+            paragraph(
+              `${question.prompt}\n${question.options.map((option) => `${option.id}：${option.label}`).join('\n')}`,
+            ),
+            inputField(`answer_${question.id}`, '填写自己的答案或选项文字'),
+          ]),
+          button(request, bindingVersion, 'answered'),
+        ]
+      : [button(request, bindingVersion, 'approved')],
+})
+
+const inputField = (name: string, label: string) => ({
+  tag: 'input',
+  name,
+  required: true,
+  input_type: 'multiline_text',
+  max_length: 1000,
+  placeholder: text(label),
+  label: text(label),
+})
+
+const button = (
+  request: HumanRequest,
+  bindingVersion: number,
+  decision: 'approved' | 'rejected' | 'answered',
+) => ({
+  tag: 'button',
+  name: `decision_${decision}`,
+  form_action_type: 'submit',
+  type: 'default',
+  text: text(
+    decision === 'rejected'
+      ? '拒绝并结束'
+      : decision === 'answered'
+        ? '提交回答并继续'
+        : '确认本次请求',
+  ),
+  behaviors: [
+    {
+      type: 'callback',
+      value: {
+        bindingVersion,
+        requestId: request.id,
+        expectedVersion: request.version,
+        expectedDigest: request.digest,
+        decision,
+      },
+    },
+  ],
+})

@@ -15,6 +15,7 @@ import {
 import { roleReadinessSchema } from './role-contracts.js'
 import { activitySchema } from './activity-contracts.js'
 import { humanRequestSchema } from './human-contracts.js'
+import { feishuBindingSchema } from './feishu-contracts.js'
 
 export const workspaceSnapshotSchema = z
   .object({
@@ -30,6 +31,7 @@ export const workspaceSnapshotSchema = z
     teams: z.array(teamVersionSchema).default([]),
     roleReadiness: z.array(roleReadinessSchema).default([]),
     humanRequests: z.array(humanRequestSchema).default([]),
+    feishuBinding: feishuBindingSchema.nullable().default(null),
     logs: z.array(activitySchema),
   })
   .strict()
