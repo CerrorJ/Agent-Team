@@ -12,7 +12,7 @@ export * from './skill-contracts.js'
 export * from './backup-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.5.4'
+export const KERNEL_VERSION = '0.5.5'
 export const DATA_SCHEMA_VERSION = 7
 
 const requestBase = {
@@ -90,8 +90,22 @@ export const requestSchema = z.discriminatedUnion('method', [
       after: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     })
     .strict(),
-  z.object({ ...requestBase, method: z.literal('kernel.shutdown') }).strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('kernel.shutdown'),
+      acknowledgeExit: z.literal(true).optional(),
+    })
+    .strict(),
 ])
+
+/** 仅供嵌入式宿主确认已收到停机结果；不能触发或替代业务停机。 */
+export const shutdownAcknowledgementSchema = z
+  .object({
+    kind: z.literal('shutdown-ack'),
+    ...requestBase,
+  })
+  .strict()
 
 export const eventSchema = z
   .object({

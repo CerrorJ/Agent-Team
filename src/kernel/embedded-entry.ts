@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createKernel } from './kernel.js'
 import { CredentialChannel } from './credential-channel.js'
+import { ShutdownExit } from './shutdown-exit.js'
 
 interface ParentPort {
   postMessage(message: unknown): void
@@ -31,18 +32,12 @@ const kernel = createKernel({
   onEvent: (event) => parentPort.postMessage({ kind: 'event', event }),
 })
 
+const shutdownExit = new ShutdownExit((code) => process.exit(code))
+
 parentPort.on('message', async ({ data }) => {
+  if (shutdownExit.receive(data)) return
   if (credentials.receive(data)) return
   const response = await kernel.dispatch(data)
   parentPort.postMessage({ kind: 'response', response })
-  if (response.status === 'completed' && kernelStateStopped(response.result)) {
-    process.exitCode = 0
-    setImmediate(() => process.exit(0))
-  }
+  shutdownExit.responded(data, response)
 })
-
-const kernelStateStopped = (result: unknown): boolean =>
-  typeof result === 'object' &&
-  result !== null &&
-  'state' in result &&
-  result.state === 'stopped'
