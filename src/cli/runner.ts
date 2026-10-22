@@ -86,7 +86,11 @@ export const runCli = async (options: RunCliOptions): Promise<CliRunResult> => {
     if (remaining <= 0)
       throw new Error(`${options.adapter.displayName} 执行超时`)
     try {
-      return await runCliOnce({ ...options, sessionId, timeoutMs: remaining })
+      return await runCliOnce({
+        ...options,
+        ...(sessionId ? { sessionId } : {}),
+        timeoutMs: remaining,
+      })
     } catch (error) {
       if (!(error instanceof ProviderCliError) || options.signal?.aborted)
         throw error
@@ -291,9 +295,10 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
           if (event.answer) observedAnswer = event.answer
           if (event.stats) observedStats = event.stats
           if (!observedAnswer) continue
+          const resultSessionId = event.sessionId ?? observedSessionId
           finalResult = {
             answer: observedAnswer,
-            sessionId: event.sessionId ?? observedSessionId,
+            ...(resultSessionId ? { sessionId: resultSessionId } : {}),
             ...(observedStats ? { stats: observedStats } : {}),
           }
         }
@@ -321,7 +326,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
         finish()
         resolve({
           answer: observedAnswer ?? '',
-          sessionId: observedSessionId,
+          ...(observedSessionId ? { sessionId: observedSessionId } : {}),
           toolCalls: [stoppedByToolCall],
         })
         return

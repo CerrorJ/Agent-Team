@@ -213,7 +213,7 @@ export const parseResetDurationMs = (
       text.trim(),
     )
 
-  if (relative) {
+  if (relative?.[1] && relative[2]) {
     const unit = relative[2].toLowerCase()
     return (
       Number(relative[1]) *
@@ -265,7 +265,7 @@ export const parseResetDurationMs = (
 
 const textRetryDelay = (text: string, now: number): number | undefined => {
   const header = /retry-after\s*[=:]\s*([^\r\n]+)/i.exec(text)
-  if (header) {
+  if (header?.[1]) {
     const delay = parseRetryAfter(header[1].trim(), now)
     if (delay !== undefined) return delay
   }
@@ -275,7 +275,7 @@ const textRetryDelay = (text: string, now: number): number | undefined => {
       text,
     ) ?? /(\d+(?:\.\d+)?\s*(?:秒|分钟|小时))后(?:重试|恢复|重置)/.exec(text)
 
-  if (relative) {
+  if (relative?.[1]) {
     const milliseconds = /^(\d+(?:\.\d+)?)\s*(?:milliseconds?|ms)$/i.exec(
       relative[1],
     )
@@ -285,7 +285,7 @@ const textRetryDelay = (text: string, now: number): number | undefined => {
       : parseResetDurationMs(relative[1], new Date(now))
   }
   const reset = /resets\s+([^\r\n·]+)/i.exec(text)
-  return reset
+  return reset?.[1]
     ? parseResetDurationMs(reset[1].trim(), new Date(now))
     : undefined
 }
@@ -342,12 +342,16 @@ export const classifyProviderError = (
 ): ProviderFailure => {
   const structured = extractProviderErrorDetails(input.message, now)
   const details = { ...structured, ...input }
-  details.status ??=
+
+  const inferredStatus =
     Number(
       /(?:HTTP(?:\/\d(?:\.\d)?)?|API Error|status(?: code)?|状态码)\s*[:=]?\s*(\d{3})\b/i.exec(
         input.message,
       )?.[1],
     ) || undefined
+
+  if (details.status === undefined && inferredStatus !== undefined)
+    details.status = inferredStatus
 
   const matches = (pattern: string | undefined, value: string) =>
     pattern === undefined || new RegExp(pattern, 'i').test(value)
@@ -410,7 +414,7 @@ export const classifyProviderError = (
     message: input.message,
     scope: rule?.scope ?? (type === 'configuration' ? 'model' : 'account'),
     retryable: type === 'rate_limit' || type === 'service_unavailable',
-    retryAfterMs,
+    ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
     cooldownMs:
       type === 'unknown'
         ? 0

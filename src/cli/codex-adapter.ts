@@ -1,4 +1,8 @@
 import { readFileSync } from 'node:fs'
+import {
+  controlledCodexArgs,
+  type ControlledCodexPolicy,
+} from './controlled-codex.js'
 import { extractProviderErrorDetails } from '../core/provider-error.js'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -136,10 +140,10 @@ const parseStats = (usage: unknown): CliRunStats | undefined => {
       : (inputTokens ?? 0) + (outputTokens ?? 0)
 
   const stats: CliRunStats = {
-    totalTokens,
-    inputTokens,
-    outputTokens,
-    cacheReadTokens,
+    ...(totalTokens !== undefined ? { totalTokens } : {}),
+    ...(inputTokens !== undefined ? { inputTokens } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(cacheReadTokens !== undefined ? { cacheReadTokens } : {}),
   }
 
   return Object.values(stats).some((value) => value !== undefined)
@@ -159,6 +163,8 @@ const isValidCodexReasoningEffort = (value: string): boolean =>
   (CODEX_REASONING_EFFORTS as readonly string[]).includes(value)
 
 export class CodexAdapter implements CliAdapter {
+  constructor(private readonly controlledPolicy?: ControlledCodexPolicy) {}
+
   readonly id = 'codex' as const
   readonly command = 'codex'
   readonly displayName = 'Codex'
@@ -169,6 +175,14 @@ export class CodexAdapter implements CliAdapter {
     promptInput: CliPromptInput,
     options?: { model?: string; reasoningEffort?: string },
   ): string[] {
+    if (this.controlledPolicy)
+      return controlledCodexArgs({
+        prompt,
+        promptInput,
+        policy: this.controlledPolicy,
+        ...(options?.model ? { model: options.model } : {}),
+      })
+
     const args = [
       ...codexAppToolArgs(),
       'exec',
@@ -203,6 +217,15 @@ export class CodexAdapter implements CliAdapter {
     promptInput: CliPromptInput,
     options?: { model?: string; reasoningEffort?: string },
   ): string[] {
+    if (this.controlledPolicy)
+      return controlledCodexArgs({
+        prompt,
+        promptInput,
+        sessionId,
+        policy: this.controlledPolicy,
+        ...(options?.model ? { model: options.model } : {}),
+      })
+
     const args = [
       ...codexAppToolArgs(),
       'exec',
@@ -256,7 +279,11 @@ export class CodexAdapter implements CliAdapter {
       typeof event.thread_id === 'string'
     ) {
       const reportedModel = asModelName(event.model)
-      const model = reportedModel ?? configuredCodexModel()
+
+      const model =
+        reportedModel ??
+        (this.controlledPolicy ? undefined : configuredCodexModel())
+
       return [
         ...(model
           ? [

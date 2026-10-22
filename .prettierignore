@@ -11,3 +11,4 @@ pnpm-lock.yaml
 .env.*
 dist-kernel/
 artifacts/
+.tmp/

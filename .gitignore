@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-kernel/
 artifacts/
+.tmp/
 .env
 data/
 *.log

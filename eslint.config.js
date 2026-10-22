@@ -5,6 +5,7 @@ export default [
   {
     files: [
       'src/kernel/**/*.ts',
+      'src/domain/**/*.ts',
       'src/cli/windows-command.ts',
       'scripts/**/*.mjs',
     ],
@@ -26,6 +27,7 @@ export default [
     ignores: [
       'dist/**',
       'dist-kernel/**',
+      '.tmp/**',
       'data/**',
       'node_modules/**',
       'ao-31-deploy/**',

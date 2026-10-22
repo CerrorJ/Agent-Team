@@ -70,8 +70,8 @@ export const spawnCli = ((
   const { signal: _signal, ...restOptions } = options
 
   const plan = windowsCommand(command, {
-    env: restOptions.env,
-    cwd: typeof restOptions.cwd === 'string' ? restOptions.cwd : undefined,
+    ...(restOptions.env ? { env: restOptions.env } : {}),
+    ...(typeof restOptions.cwd === 'string' ? { cwd: restOptions.cwd } : {}),
   })
 
   return spawn(plan.command, [...plan.prefix, ...args], {
