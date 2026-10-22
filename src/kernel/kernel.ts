@@ -2,6 +2,7 @@ import { KernelJournal } from './journal.js'
 import { WorkspaceStore } from './workspace-store.js'
 import { WorkspaceService } from './workspace-service.js'
 import { publicError } from './public-errors.js'
+import { inspectWorkspaceEnvironment } from './workspace-diagnostics.js'
 import type { CliExecutionPort } from './run-execution.js'
 import type { CredentialResolver } from './credential-contracts.js'
 import {
@@ -134,6 +135,11 @@ export class EmbeddedKernel {
         return this.handshake
       case 'kernel.health':
         return { state: 'running' }
+      case 'kernel.diagnostics':
+        return inspectWorkspaceEnvironment({
+          store: this.store,
+          dataDirectory: this.options.dataDirectory,
+        })
       case 'kernel.events':
         return this.journal.read(request.after)
       case 'workspace.snapshot':
@@ -224,6 +230,7 @@ const createHandshake = (sourceCommit: string): KernelHandshake => {
       'feishu-channel',
       'skills',
       'workspace-backup',
+      'environment-diagnostics',
     ],
     unavailable: [],
     runtime: {

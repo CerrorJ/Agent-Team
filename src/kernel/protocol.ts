@@ -10,9 +10,10 @@ export * from './human-contracts.js'
 export * from './feishu-contracts.js'
 export * from './skill-contracts.js'
 export * from './backup-contracts.js'
+export * from './diagnostic-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.5.5'
+export const KERNEL_VERSION = '0.5.6'
 export const DATA_SCHEMA_VERSION = 7
 
 const requestBase = {
@@ -24,6 +25,9 @@ const requestBase = {
 export const requestSchema = z.discriminatedUnion('method', [
   z.object({ ...requestBase, method: z.literal('kernel.handshake') }).strict(),
   z.object({ ...requestBase, method: z.literal('kernel.health') }).strict(),
+  z
+    .object({ ...requestBase, method: z.literal('kernel.diagnostics') })
+    .strict(),
   z.object({ ...requestBase, method: z.literal('feishu.connect') }).strict(),
   z.object({ ...requestBase, method: z.literal('feishu.disconnect') }).strict(),
   z.object({ ...requestBase, method: z.literal('feishu.status') }).strict(),
@@ -137,6 +141,7 @@ export const handshakeSchema = z
         'feishu-channel',
         'skills',
         'workspace-backup',
+        'environment-diagnostics',
       ]),
     ),
     unavailable: z.array(z.string()),
