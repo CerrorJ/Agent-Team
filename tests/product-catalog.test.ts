@@ -1,5 +1,7 @@
 ﻿import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { captureTaskConfiguration } from '../src/kernel/run-snapshots.js'
+import { executionPrompt } from '../src/kernel/role-trial-files.js'
 import { randomUUID } from 'node:crypto'
 import { workspaceFixture } from './helpers/run-fixture.js'
 import { WorkspaceService } from '../src/kernel/workspace-service.js'
@@ -126,6 +128,16 @@ test('需求版本不改写既有任务引用；跨项目需求拒绝，团队�
       '原始需求',
     )
     assert.equal(store.snapshot().tasks.at(-1)?.requirementRef?.version, 1)
+
+    const configuration = captureTaskConfiguration(
+      store,
+      store.snapshot().tasks.at(-1)!,
+      run.id,
+    )
+
+    const prompt = executionPrompt({ ...run, ...configuration })
+    assert.match(prompt, /原始需求/)
+    assert.doesNotMatch(prompt, /新版需求/)
     const otherProject = randomUUID()
     store.transaction(() =>
       store.addProject({
