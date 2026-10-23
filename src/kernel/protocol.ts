@@ -13,7 +13,7 @@ export * from './backup-contracts.js'
 export * from './diagnostic-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.5.8'
+export const KERNEL_VERSION = '0.5.9'
 export const DATA_SCHEMA_VERSION = 7
 
 const requestBase = {

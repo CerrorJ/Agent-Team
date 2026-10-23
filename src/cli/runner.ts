@@ -214,6 +214,8 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
     // 额外监听 abort 用 killCli 连进程树一起清。
     const abort = terminate
     signal?.addEventListener('abort', abort, { once: true })
+    // 开始回调（例如持久化PID失败）可能已经取消；AbortSignal不会重放过去的事件。
+    if (signal?.aborted) terminate()
     let outputOverflow = false
     //记住最近一次出现的会话标识
     let observedSessionId = sessionId
