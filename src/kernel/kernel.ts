@@ -4,6 +4,7 @@ import { WorkspaceService } from './workspace-service.js'
 import { publicError } from './public-errors.js'
 import { inspectWorkspaceEnvironment } from './workspace-diagnostics.js'
 import { inspectTaskPreflight } from './task-preflight.js'
+import { CliInspection } from './cli-inspection.js'
 import type { CliExecutionPort } from './run-execution.js'
 import type { CredentialResolver } from './credential-contracts.js'
 import {
@@ -51,12 +52,14 @@ export class EmbeddedKernel {
   private readonly service: WorkspaceService
   private readonly feishu: FeishuRuntime
   private readonly maintenance: WorkspaceMaintenance
+  private readonly cliInspection: CliInspection
   private stopped = false
   private stopping: Promise<{ state: 'stopped' }> | undefined
   readonly handshake: KernelHandshake
 
   constructor(private readonly options: KernelOptions) {
     this.handshake = createHandshake(options.sourceCommit)
+    this.cliInspection = new CliInspection({ cwd: options.dataDirectory })
     this.journal = new KernelJournal(options.dataDirectory)
     try {
       this.store = new WorkspaceStore(this.journal.database)
@@ -130,6 +133,8 @@ export class EmbeddedKernel {
     if (isMaintenanceRequest(request)) return this.maintenance.dispatch(request)
     if (request.method === 'workspace.preflight')
       return inspectTaskPreflight(this.store, request.input)
+    if (request.method === 'kernel.cliCheck')
+      return this.cliInspection.inspect(request.input)
     if (request.method.startsWith('feishu.'))
       return this.channelRequest(request)
     return this.execute(request)
@@ -192,6 +197,7 @@ export class EmbeddedKernel {
     if (!this.stopped) {
       this.feishu.close()
       await this.service.shutdown()
+      await this.cliInspection.shutdown()
       await this.feishu.drain()
       this.emit('kernel.stopped')
       this.journal.close()
@@ -241,6 +247,7 @@ const createHandshake = (sourceCommit: string): KernelHandshake => {
       'skills',
       'workspace-backup',
       'environment-diagnostics',
+      'cli-checks',
     ],
     unavailable: [],
     runtime: {

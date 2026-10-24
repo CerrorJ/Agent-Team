@@ -36,6 +36,7 @@ const messages: Record<string, string> = {
   DEPENDENCY_PATCH_CONFLICT: '上游代码贡献存在冲突，执行目录已保留，未启动 CLI',
   VALIDATION_FAILED: '输入格式或协议版本不兼容',
   KERNEL_STOPPED: '内核正在停止或已停止',
+  CLI_CHECK_BUSY: '该CLI已有检查或尚未确认结束的检查进程，请稍后重试',
   VERSION_CONFLICT: '数据已变化，请刷新后操作',
   PREFLIGHT_CHANGED: '预检后配置或执行条件已变化，请重新检查并确认启动',
   IDEMPOTENCY_CONFLICT: '同一命令键对应了不同内容',
