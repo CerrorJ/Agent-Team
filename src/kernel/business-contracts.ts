@@ -8,7 +8,11 @@ import {
   teamVersionSchema,
 } from './product-contracts.js'
 import { productCommandSchemas } from './product-command-contracts.js'
-import { roleCommandSchemas, roleTrialSchema } from './role-contracts.js'
+import {
+  roleCommandSchemas,
+  roleTrialSchema,
+  roleConfigurationFields,
+} from './role-contracts.js'
 import { humanCommandSchemas } from './human-contracts.js'
 import { feishuCommandSchema } from './feishu-contracts.js'
 import { skillCommandSchemas, skillReferenceSchema } from './skill-contracts.js'
@@ -36,6 +40,7 @@ export const roleVersionSchema = z
     version,
     name: shortText,
     responsibility: longText,
+    ...roleConfigurationFields,
     cli: cliIdSchema,
     modelProfileSnapshot: modelProfileSchema.nullable().optional(),
     model: z.string().trim().max(200),
@@ -179,6 +184,7 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
       expectedVersion: z.number().int().nonnegative(),
       name: shortText,
       responsibility: longText,
+      ...roleConfigurationFields,
       cli: cliIdSchema,
       modelProfileId: id.nullable().optional(),
       modelProfileRef: requirementRefSchema.nullable().optional(),

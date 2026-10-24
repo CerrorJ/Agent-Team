@@ -2,7 +2,11 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { eventSchema, type KernelEvent } from './protocol.js'
+import {
+  DATA_SCHEMA_VERSION,
+  eventSchema,
+  type KernelEvent,
+} from './protocol.js'
 import { journalEventsSchema } from './journal-schema.js'
 
 /** 独立锁库持有写事务，进程死亡由 OS 释放，不根据心跳猜测锁失效。 */
@@ -28,7 +32,11 @@ export class KernelJournal {
       .prepare('PRAGMA user_version')
       .get()?.user_version
 
-    if (![0, 1, 2, 3, 4, 5, 6, 7].includes(Number(version))) {
+    if (
+      !Number.isInteger(Number(version)) ||
+      Number(version) < 0 ||
+      Number(version) > DATA_SCHEMA_VERSION
+    ) {
       this.database.close()
       throw new Error('数据版本不兼容，请使用匹配的内核或备份')
     }
@@ -40,7 +48,11 @@ export class KernelJournal {
       `kernel.schema-${String(version)}.backup.sqlite`,
     )
 
-    if ([1, 2, 3, 4, 5, 6].includes(Number(version)) && !existsSync(backup))
+    if (
+      Number(version) > 0 &&
+      Number(version) < DATA_SCHEMA_VERSION &&
+      !existsSync(backup)
+    )
       this.database.prepare('VACUUM INTO ?').run(backup)
   }
 

@@ -32,8 +32,12 @@ export type ObjectTable =
 
 /** 单连接事务中提交状态、事件、outbox 和命令回执；事务内不做 Git/CLI/网络操作。 */
 export class WorkspaceStore {
-  constructor(readonly database: DatabaseSync) {
-    initializeWorkspaceSchema(database)
+  constructor(
+    readonly database: DatabaseSync,
+    options: { initialize?: boolean } = {},
+  ) {
+    // 仅已核对版本/完整schema的只读备份投影跳过迁移；业务实例始终初始化。
+    if (options.initialize !== false) initializeWorkspaceSchema(database)
   }
 
   transaction<T>(operation: () => T): T {

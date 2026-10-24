@@ -1,7 +1,7 @@
 import { runSchema, taskSchema, type Run } from './business-contracts.js'
 import type { WorkspaceStore } from './workspace-store.js'
 
-/** 固定两槽、每角色一槽、每项目一位写者；未知进程仅封锁所属项目。 */
+/** 本机两槽、角色固定快照限定并发、每项目一位写者；未知进程封锁所属项目。 */
 export const queueBlocker = (input: {
   store: WorkspaceStore
   run: Run
@@ -33,8 +33,18 @@ export const queueBlocker = (input: {
 
   if (active.some((item) => item.projectId === run.projectId))
     return 'project_busy'
-  if (active.some((item) => item.roleSnapshot.id === run.roleSnapshot.id))
-    return 'role_busy'
+
+  const sameRole = active.filter(
+    (item) => item.roleSnapshot.id === run.roleSnapshot.id,
+  )
+
+  // 新角色版本不能扩大仍在执行的旧Run所固定的并发边界。
+  const roleLimit = Math.min(
+    run.roleSnapshot.maxConcurrency ?? 1,
+    ...sameRole.map((item) => item.roleSnapshot.maxConcurrency ?? 1),
+  )
+
+  if (sameRole.length >= roleLimit) return 'role_busy'
   return active.length >= 2 ? 'capacity' : undefined
 }
 

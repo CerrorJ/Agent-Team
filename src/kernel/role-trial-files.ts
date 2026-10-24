@@ -1,6 +1,6 @@
 import { lstatSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Run } from './business-contracts.js'
+import type { Run, RoleVersion } from './business-contracts.js'
 
 /** 随机挑战仅写入本次拥有的 worktree，不放入模型提示，验证确实读写而非口头宣称成功。 */
 export const prepareTrialInput = (run: Run): void => {
@@ -37,5 +37,16 @@ export const executionPrompt = (run: Run): string => {
     ? `\n固定需求 ${requirement.title} / v${requirement.version}：\n${requirement.body}\n需求验收条件：${requirement.acceptanceCriteria}`
     : ''
 
-  return `职责：${run.roleSnapshot.responsibility}\n任务：${goal}${context}`
+  const role = run.roleSnapshot
+
+  const requirements = trial ? '' : roleExpectations(role)
+
+  return `职责：${role.responsibility}${requirements}\n任务：${goal}${context}`
 }
+
+/** 仅注入该快照明确保存的要求；旧Run缺省字段时保持原提示，不补造配置。 */
+const roleExpectations = (role: RoleVersion): string =>
+  [
+    role.inputRequirements ? `\n输入要求：${role.inputRequirements}` : '',
+    role.deliveryRequirements ? `\n交付要求：${role.deliveryRequirements}` : '',
+  ].join('')

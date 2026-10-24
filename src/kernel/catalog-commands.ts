@@ -11,6 +11,7 @@ import type { WorkspaceStore } from './workspace-store.js'
 import { ProductStore } from './product-store.js'
 import { RoleReadinessStore } from './role-readiness-store.js'
 import { SkillStore } from './skill-store.js'
+import { resolveRoleConfiguration } from './role-configuration.js'
 import {
   modelProfileSchema,
   requirementVersionSchema,
@@ -58,12 +59,14 @@ const saveRole = (
   if (!command.id && command.expectedVersion !== 0)
     throw new Error('VERSION_CONFLICT: 新角色的预期版本必须为零')
   const id = command.id ?? randomUUID()
+  const configuration = resolveRoleConfiguration({ store, command, id })
 
   const profile = resolveRoleModel(store, command)
   const skills = command.skills ?? []
   new SkillStore(store).resolve(skills)
 
   const role: RoleVersion = {
+    ...configuration,
     id,
     version: command.expectedVersion + 1,
     name: command.name,

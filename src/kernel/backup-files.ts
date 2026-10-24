@@ -55,6 +55,26 @@ export const backupFileDigest = (path: string): string => {
   }
 }
 
+/** VACUUM INTO产物必须是独立快照；拒绝WAL头，避免只读SQLite预览在原备份旁创建sidecar。 */
+export const assertPortableDatabase = (path: string): void => {
+  const descriptor = openSync(path, 'r')
+  const header = Buffer.alloc(100)
+  try {
+    const size = readSync(descriptor, header, 0, header.length, 0)
+    // SQLite官方格式：18/19字节为读写版本，1表示独立回滚日志格式，2表示WAL。
+    // https://www.sqlite.org/fileformat.html#vnums
+    if (
+      size !== 100 ||
+      header.subarray(0, 16).toString('ascii') !== 'SQLite format 3\0' ||
+      header[18] !== 1 ||
+      header[19] !== 1
+    )
+      throw new Error('BACKUP_INVALID')
+  } finally {
+    closeSync(descriptor)
+  }
+}
+
 export const enumerateBackupFiles = (root: string): string[] => {
   if (lstatSync(root).isSymbolicLink()) throw new Error('BACKUP_INVALID')
   const canonical = realpathSync(root)

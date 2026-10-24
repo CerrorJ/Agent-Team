@@ -1,6 +1,20 @@
 import { z } from 'zod'
 
 const id = z.string().uuid()
+
+/** 新字段允许旧配置缺省；旧Run快照读取时不补写这些字段。 */
+export const roleConfigurationFields = {
+  slug: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .optional(),
+  inputRequirements: z.string().trim().max(20_000).optional(),
+  deliveryRequirements: z.string().trim().max(20_000).optional(),
+  maxConcurrency: z.number().int().min(1).max(2).optional(),
+}
 export const roleReadinessSchema = z
   .object({
     roleId: id,

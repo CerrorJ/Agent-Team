@@ -60,6 +60,8 @@ const messages: Record<string, string> = {
   CROSS_PROJECT_REFERENCE: '需求或依赖必须属于同一项目',
   ROLE_NOT_READY: '角色未通过本版本试运行或尚未启用',
   ROLE_TRIAL_ACTIVE: '该角色已有在途或状态待确认的试运行',
+  ROLE_IDENTIFIER_TAKEN: '角色标识已被其他角色占用，请使用另一个标识',
+  ROLE_IDENTIFIER_IMMUTABLE: '已保存的角色标识不能修改，请仅调整名称和配置',
   TASK_NOT_EXECUTABLE: '此记录需要使用对应的试运行或团队入口',
 }
 

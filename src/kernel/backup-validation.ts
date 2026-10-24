@@ -8,7 +8,11 @@ import {
 import { DATA_SCHEMA_VERSION } from './protocol.js'
 import { WorkspaceStore } from './workspace-store.js'
 import type { WorkspaceSnapshot } from './workspace-contracts.js'
-import { isPathInside, checkBackupFiles } from './backup-files.js'
+import {
+  isPathInside,
+  checkBackupFiles,
+  assertPortableDatabase,
+} from './backup-files.js'
 import { verifySkillDirectory } from './skill-files.js'
 import { verifyBackupSchema } from './backup-schema.js'
 
@@ -71,7 +75,10 @@ export const readBackupManifest = (directory: string): BackupManifest => {
     JSON.parse(readFileSync(path, 'utf8')),
   )
 
-  if (!parsed.success || parsed.data.dataSchemaVersion !== DATA_SCHEMA_VERSION)
+  if (
+    !parsed.success ||
+    ![7, DATA_SCHEMA_VERSION].includes(parsed.data.dataSchemaVersion)
+  )
     throw new Error('BACKUP_VERSION_INCOMPATIBLE')
   return parsed.data
 }
@@ -86,6 +93,7 @@ export const inspectBackup = (
   checkBackupFiles(directory, manifest)
   if (!manifest.files.some((file) => file.path === 'kernel.sqlite'))
     throw new Error('BACKUP_INVALID')
+  assertPortableDatabase(join(directory, 'kernel.sqlite'))
 
   const database = new DatabaseSync(join(directory, 'kernel.sqlite'), {
     readOnly: true,
@@ -97,12 +105,16 @@ export const inspectBackup = (
     verifyBackupSchema(database)
     if (
       database.prepare('PRAGMA user_version').get()?.user_version !==
-        DATA_SCHEMA_VERSION ||
+        manifest.dataSchemaVersion ||
       database.prepare('PRAGMA quick_check').get()?.quick_check !== 'ok' ||
       database.prepare('PRAGMA foreign_key_check').all().length
     )
       throw new Error('BACKUP_INVALID')
-    const snapshot = new WorkspaceStore(database).snapshot()
+
+    const snapshot = new WorkspaceStore(database, {
+      initialize: false,
+    }).snapshot()
+
     assertBackupQuiescent(snapshot)
     verifyBackupSkills(directory, snapshot)
     return { manifest, snapshot }
