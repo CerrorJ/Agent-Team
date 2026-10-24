@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { businessCommandSchema } from './business-contracts.js'
+import { preflightInputSchema } from './preflight-contracts.js'
+export * from './preflight-contracts.js'
 export * from './business-contracts.js'
 export * from './activity-contracts.js'
 export * from './product-contracts.js'
@@ -13,7 +15,7 @@ export * from './backup-contracts.js'
 export * from './diagnostic-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.6.0'
+export const KERNEL_VERSION = '0.7.0'
 export const DATA_SCHEMA_VERSION = 8
 
 const requestBase = {
@@ -57,6 +59,13 @@ export const requestSchema = z.discriminatedUnion('method', [
     .strict(),
   z
     .object({ ...requestBase, method: z.literal('workspace.snapshot') })
+    .strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('workspace.preflight'),
+      input: preflightInputSchema,
+    })
     .strict(),
   z
     .object({
@@ -136,6 +145,7 @@ export const handshakeSchema = z
         'product-catalog',
         'role-trials',
         'role-configuration',
+        'task-preflight',
         'team-workflow',
         'codex-and-claude',
         'human-workflow',

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { configurationFingerprintSchema } from './preflight-fingerprint.js'
 
 const id = z.string().uuid()
 const text = z.string().trim().min(1).max(20_000)
@@ -37,6 +38,8 @@ export const teamCommandSchemas = [
       type: z.literal('team.start'),
       taskId: id,
       expectedVersion: z.number().int().positive(),
+      expectedConfigurationFingerprint:
+        configurationFingerprintSchema.optional(),
     })
     .strict(),
 ] as const

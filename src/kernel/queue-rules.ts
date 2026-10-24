@@ -1,10 +1,29 @@
-import { runSchema, taskSchema, type Run } from './business-contracts.js'
+import {
+  runSchema,
+  taskSchema,
+  type Run,
+  type RoleVersion,
+} from './business-contracts.js'
 import type { WorkspaceStore } from './workspace-store.js'
 
 /** 本机两槽、角色固定快照限定并发、每项目一位写者；未知进程封锁所属项目。 */
 export const queueBlocker = (input: {
   store: WorkspaceStore
   run: Run
+  reservedIds?: Set<string>
+}): Run['waitingReason'] => {
+  const task = input.store.get('tasks', input.run.taskId, taskSchema)
+  return executionQueueBlocker({
+    ...input,
+    dependencyTaskIds: task.dependencyTaskIds ?? [],
+  })
+}
+
+/** 预检没有 Run；只读取相同的调度上下文，不用伪造 Run 参与判断。 */
+export const executionQueueBlocker = (input: {
+  store: WorkspaceStore
+  run: { id?: string; projectId: string; roleSnapshot: RoleVersion }
+  dependencyTaskIds: string[]
   reservedIds?: Set<string>
 }): Run['waitingReason'] => {
   const { store, run, reservedIds } = input
@@ -16,9 +35,8 @@ export const queueBlocker = (input: {
     )
   )
     return 'uncertain_project'
-  const task = store.get('tasks', run.taskId, taskSchema)
   if (
-    task.dependencyTaskIds?.some(
+    input.dependencyTaskIds.some(
       (id) => store.get('tasks', id, taskSchema).status !== 'done',
     )
   )

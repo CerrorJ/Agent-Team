@@ -3,6 +3,7 @@ import { WorkspaceStore } from './workspace-store.js'
 import { WorkspaceService } from './workspace-service.js'
 import { publicError } from './public-errors.js'
 import { inspectWorkspaceEnvironment } from './workspace-diagnostics.js'
+import { inspectTaskPreflight } from './task-preflight.js'
 import type { CliExecutionPort } from './run-execution.js'
 import type { CredentialResolver } from './credential-contracts.js'
 import {
@@ -116,15 +117,22 @@ export class EmbeddedKernel {
         protocolVersion: 1,
         requestId: request.requestId,
         status: 'completed',
-        result: await (isMaintenanceRequest(request)
-          ? this.maintenance.dispatch(request)
-          : request.method.startsWith('feishu.')
-            ? this.channelRequest(request)
-            : this.execute(request)),
+        result: await this.query(request),
       }
     } catch (error) {
       return this.reject(request.requestId, error)
     }
+  }
+
+  private query(
+    request: Exclude<KernelRequest, { method: 'workspace.command' }>,
+  ): unknown {
+    if (isMaintenanceRequest(request)) return this.maintenance.dispatch(request)
+    if (request.method === 'workspace.preflight')
+      return inspectTaskPreflight(this.store, request.input)
+    if (request.method.startsWith('feishu.'))
+      return this.channelRequest(request)
+    return this.execute(request)
   }
 
   private execute(
@@ -225,6 +233,7 @@ const createHandshake = (sourceCommit: string): KernelHandshake => {
       'product-catalog',
       'role-trials',
       'role-configuration',
+      'task-preflight',
       'team-workflow',
       'codex-and-claude',
       'human-workflow',

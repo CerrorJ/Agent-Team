@@ -37,6 +37,7 @@ const messages: Record<string, string> = {
   VALIDATION_FAILED: '输入格式或协议版本不兼容',
   KERNEL_STOPPED: '内核正在停止或已停止',
   VERSION_CONFLICT: '数据已变化，请刷新后操作',
+  PREFLIGHT_CHANGED: '预检后配置或执行条件已变化，请重新检查并确认启动',
   IDEMPOTENCY_CONFLICT: '同一命令键对应了不同内容',
   NOT_FOUND: '对象不存在',
   GIT_DIRTY: '仓库存在未提交改动，请先保留并处理已有文件',

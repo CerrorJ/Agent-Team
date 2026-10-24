@@ -57,6 +57,33 @@ export const projectBaseline = (project: Project): string => {
   return inspected.baselineCommit
 }
 
+/** 展示当前工作区与默认执行基线的区别；分离头指针用 null，不猜测分支。 */
+export const inspectProjectExecution = (project: Project) => {
+  const baselineCommit = projectBaseline(project)
+  let currentBranch: string | null = null
+  try {
+    currentBranch = git(project.repositoryPath, [
+      'symbolic-ref',
+      '--quiet',
+      '--short',
+      'HEAD',
+    ])
+  } catch (error) {
+    // 仅状态1表示detached HEAD；其他Git故障不能冒充正常的分离头指针。
+    if (!(error instanceof Error) || !('status' in error) || error.status !== 1)
+      throw error
+  }
+  return {
+    baselineCommit,
+    currentBranch,
+    currentCommit: git(project.repositoryPath, [
+      'rev-parse',
+      '--verify',
+      'HEAD^{commit}',
+    ]),
+  }
+}
+
 export const runWorkDirectory = (input: {
   dataDirectory: string
   runId: string

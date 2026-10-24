@@ -1,22 +1,23 @@
 import { randomUUID } from 'node:crypto'
-import {
-  assertRetryableExecution,
-  assertExecutionTransition,
-} from '../domain/run-state.js'
+import { assertExecutionTransition } from '../domain/run-state.js'
 import {
   projectSchema,
   runSchema,
   taskSchema,
-  deliverySchema,
-  acceptanceSchema,
   type BusinessCommand,
   type Run,
   type Task,
 } from './business-contracts.js'
-import { projectBaseline, runWorkDirectory } from './git-workspace.js'
+import {
+  projectBaseline,
+  runWorkDirectory,
+  inspectProjectExecution,
+} from './git-workspace.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import { captureTaskConfiguration } from './run-snapshots.js'
-import { assertRoleCanExecute } from './role-execution-guard.js'
+import { assertTaskCanStart, taskForStart } from './execution-eligibility.js'
+import { retryFeedback } from './run-feedback.js'
+import { assertExecutionFingerprint } from './execution-plan.js'
 import { finishRoleTrial } from './role-trial-state.js'
 import { stopWaitingRun } from './human-stop.js'
 
@@ -34,53 +35,21 @@ export const prepareRunCommand = (input: {
   if (command.type === 'run.stop') return () => stopRun(store, command)
   const task = taskForStart(store, command)
   const project = store.get('projects', task.projectId, projectSchema)
-  const baselineCommit = projectBaseline(project)
-  return () =>
-    createTaskRun({
+
+  const repository = command.expectedConfigurationFingerprint
+    ? inspectProjectExecution(project)
+    : undefined
+
+  const baselineCommit = repository?.baselineCommit ?? projectBaseline(project)
+  return () => {
+    assertExecutionFingerprint(store, command, repository)
+    return createTaskRun({
       store,
       task,
       baselineCommit,
       dataDirectory: input.dataDirectory,
     })
-}
-
-const taskForStart = (
-  store: WorkspaceStore,
-  command: Exclude<RunCommand, { type: 'run.stop' }>,
-): Task => {
-  if (command.type === 'run.start') {
-    const task = store.get('tasks', command.taskId, taskSchema)
-    assertTeamStarted(store, task)
-    if (task.purpose === 'role_trial' || task.purpose === 'team_parent')
-      throw new Error('TASK_NOT_EXECUTABLE')
-    if (task.version !== command.expectedVersion)
-      throw new Error('VERSION_CONFLICT: 任务已改变')
-    return task
   }
-  const run = store.get('runs', command.runId, runSchema)
-  if (run.purpose === 'role_trial') throw new Error('TASK_NOT_EXECUTABLE')
-  if (run.version !== command.expectedVersion)
-    throw new Error('VERSION_CONFLICT: 执行已改变')
-  assertRetryableExecution({
-    state: run.status,
-    processState: run.processState,
-  })
-
-  const latest = store
-    .list('runs', runSchema)
-    .filter((item) => item.taskId === run.taskId)
-    .at(-1)
-
-  if (latest?.id !== run.id) throw new Error('STALE_RUN: 请从最新一次执行重试')
-  return store.get('tasks', run.taskId, taskSchema)
-}
-
-const assertTeamStarted = (store: WorkspaceStore, task: Task): void => {
-  if (
-    task.parentTaskId &&
-    store.get('tasks', task.parentTaskId, taskSchema).status === 'ready'
-  )
-    throw new Error('TEAM_NOT_STARTED')
 }
 
 export const createTaskRun = (input: {
@@ -128,40 +97,6 @@ export const createTaskRun = (input: {
     version: task.version + 1,
   })
   return { id }
-}
-
-const retryFeedback = (
-  store: WorkspaceStore,
-  previous: Run | undefined,
-): string => {
-  if (!previous) return ''
-
-  const delivery = store
-    .list('deliveries', deliverySchema)
-    .find((item) => item.runId === previous.id)
-
-  const acceptance =
-    delivery &&
-    store
-      .list('acceptances', acceptanceSchema)
-      .find((item) => item.deliveryId === delivery.id)
-
-  return acceptance?.reason || previous.feedbackSnapshot
-}
-
-const assertTaskCanStart = (store: WorkspaceStore, task: Task): void => {
-  if (task.status !== 'ready')
-    throw new Error('TASK_NOT_READY: 任务尚不可执行；请先验收或退回交付')
-  if (task.purpose !== 'role_trial') assertRoleCanExecute(store, task.roleId)
-
-  const uncertain = store
-    .list('runs', runSchema)
-    .some(
-      (run) =>
-        run.projectId === task.projectId && run.processState === 'uncertain',
-    )
-
-  if (uncertain) throw new Error('STATE_UNCERTAIN: 项目存在状态待确认的旧执行')
 }
 
 const stopRun = (

@@ -7,8 +7,10 @@ import {
 } from './business-contracts.js'
 import { teamVersionSchema } from './product-contracts.js'
 import { ProductStore } from './product-store.js'
-import { projectBaseline } from './git-workspace.js'
+import { projectBaseline, inspectProjectExecution } from './git-workspace.js'
 import { createTaskRun } from './run-commands.js'
+import { teamForStart } from './execution-eligibility.js'
+import { assertExecutionFingerprint } from './execution-plan.js'
 import type { WorkspaceStore } from './workspace-store.js'
 
 type TeamCommand = Extract<
@@ -31,22 +33,19 @@ export const prepareTeamCommand = (input: {
   const { store, command } = input
   if (command.type === 'team.createTask')
     return () => createTeamTask(store, command)
-  const parent = store.get('tasks', command.taskId, taskSchema)
-  if (parent.purpose !== 'team_parent') throw new Error('TASK_NOT_TEAM')
-  if (parent.version !== command.expectedVersion)
-    throw new Error('VERSION_CONFLICT')
-  if (parent.status !== 'ready') throw new Error('TASK_NOT_READY')
+  const { parent } = teamForStart(store, command)
 
-  const baselineCommit = projectBaseline(
-    store.get('projects', parent.projectId, projectSchema),
-  )
+  const project = store.get('projects', parent.projectId, projectSchema)
+
+  const repository = command.expectedConfigurationFingerprint
+    ? inspectProjectExecution(project)
+    : undefined
+
+  const baselineCommit = repository?.baselineCommit ?? projectBaseline(project)
 
   return () => {
-    const children = store
-      .list('tasks', taskSchema)
-      .filter((task) => task.parentTaskId === parent.id)
-
-    if (!children.length) throw new Error('TEAM_PLAN_INVALID')
+    assertExecutionFingerprint(store, command, repository)
+    const { children } = teamForStart(store, command)
     for (const task of children)
       createTaskRun({
         store,

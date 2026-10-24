@@ -5,14 +5,28 @@ import { requirementVersionSchema } from './product-contracts.js'
 import { randomUUID } from 'node:crypto'
 
 /** 同一命令事务内捕获确切需求和角色版本；之后编辑只追加新版本。 */
+export const captureBusinessConfiguration = (
+  store: WorkspaceStore,
+  task: Task,
+) => ({
+  roleSnapshot: store.get('role_versions', task.roleId, roleVersionSchema),
+  goalSnapshot: task.goal,
+  acceptanceSnapshot: task.acceptanceCriteria,
+  requirementSnapshot: task.requirementRef
+    ? new ProductStore(store).get(
+        'requirement_versions',
+        task.requirementRef,
+        requirementVersionSchema,
+      )
+    : null,
+})
+
 export const captureTaskConfiguration = (
   store: WorkspaceStore,
   task: Task,
   runId: string,
 ) => ({
-  roleSnapshot: store.get('role_versions', task.roleId, roleVersionSchema),
-  goalSnapshot: task.goal,
-  acceptanceSnapshot: task.acceptanceCriteria,
+  ...captureBusinessConfiguration(store, task),
   purpose:
     task.purpose === 'role_trial' ? ('role_trial' as const) : ('task' as const),
   trial:
@@ -27,11 +41,4 @@ export const captureTaskConfiguration = (
               : null,
         }
       : null,
-  requirementSnapshot: task.requirementRef
-    ? new ProductStore(store).get(
-        'requirement_versions',
-        task.requirementRef,
-        requirementVersionSchema,
-      )
-    : null,
 })

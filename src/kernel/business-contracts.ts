@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { configurationFingerprintSchema } from './preflight-fingerprint.js'
 import { teamCommandSchemas } from './team-contracts.js'
 import {
   cliIdSchema,
@@ -209,6 +210,8 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
       type: z.literal('run.start'),
       taskId: id,
       expectedVersion: version,
+      expectedConfigurationFingerprint:
+        configurationFingerprintSchema.optional(),
     })
     .strict(),
   z
@@ -216,6 +219,8 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
       type: z.literal('run.retry'),
       runId: id,
       expectedVersion: version,
+      expectedConfigurationFingerprint:
+        configurationFingerprintSchema.optional(),
     })
     .strict(),
   z
