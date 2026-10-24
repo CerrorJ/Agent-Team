@@ -42,6 +42,15 @@ export const roleTrialSchema = z
 export const roleCommandSchemas = [
   z
     .object({
+      type: z.literal('role.copy'),
+      sourceRoleId: id,
+      expectedSourceVersion: z.number().int().positive(),
+      name: z.string().trim().min(1).max(200),
+      slug: roleConfigurationFields.slug.unwrap(),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('role.trial'),
       roleId: id,
       expectedRoleVersion: z.number().int().positive(),

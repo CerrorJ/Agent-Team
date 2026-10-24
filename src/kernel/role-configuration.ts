@@ -55,12 +55,24 @@ const resolveIdentifier = (input: {
   if (saved && command.slug && saved !== command.slug)
     throw new Error('ROLE_IDENTIFIER_IMMUTABLE')
   const slug = saved ?? command.slug ?? `role-${id.replaceAll('-', '')}`
-  // 历史标识也保留占用，避免旧Run或渠道引用被新角色重新认领。
+  assertRoleIdentifierAvailable({ store, id, slug })
+  return slug
+}
+
+/** 历史标识也保留占用；调用者必须在配置写事务内执行，复制角色共用此不变量。 */
+export const assertRoleIdentifierAvailable = ({
+  store,
+  id,
+  slug,
+}: {
+  store: WorkspaceStore
+  id: string
+  slug: string
+}): void => {
   if (
     store
       .list('role_versions', roleVersionSchema)
       .some((role) => role.id !== id && role.slug === slug)
   )
     throw new Error('ROLE_IDENTIFIER_TAKEN')
-  return slug
 }

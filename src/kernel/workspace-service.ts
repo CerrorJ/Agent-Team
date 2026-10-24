@@ -129,6 +129,7 @@ export class WorkspaceService {
     switch (command.type) {
       case 'project.create':
       case 'role.save':
+      case 'role.copy':
       case 'task.create':
         return prepareCatalogCommand({ store, command })
       case 'run.start':

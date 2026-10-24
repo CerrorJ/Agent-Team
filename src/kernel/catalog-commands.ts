@@ -12,6 +12,7 @@ import { ProductStore } from './product-store.js'
 import { RoleReadinessStore } from './role-readiness-store.js'
 import { SkillStore } from './skill-store.js'
 import { resolveRoleConfiguration } from './role-configuration.js'
+import { copyRole } from './role-copy.js'
 import {
   modelProfileSchema,
   requirementVersionSchema,
@@ -19,7 +20,7 @@ import {
 
 export type CatalogCommand = Extract<
   BusinessCommand,
-  { type: 'project.create' | 'role.save' | 'task.create' }
+  { type: 'project.create' | 'role.save' | 'role.copy' | 'task.create' }
 >
 
 /** Git 只读预检在事务外完成；返回的闭包只执行本地业务写入。 */
@@ -47,6 +48,8 @@ export const prepareCatalogCommand = (input: {
     }
     case 'role.save':
       return () => saveRole(store, command)
+    case 'role.copy':
+      return () => copyRole({ store, command })
     case 'task.create':
       return () => createTask(store, command)
   }
