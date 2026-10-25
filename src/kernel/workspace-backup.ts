@@ -5,6 +5,7 @@ import {
   copyFileSync,
   statSync,
   existsSync,
+  realpathSync,
 } from 'node:fs'
 import { join, dirname, basename } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -129,8 +130,9 @@ export const restoreWorkspaceBackup = (
     snapshot: current,
   })
 
-  if (isPathInside(input.backupDirectory, target))
-    throw new Error('BACKUP_TARGET_INVALID')
+  // 清单/链接检查先完成，再冻结物理源根；短名或父目录别名不能绕过源备份保护。
+  const sourceRoot = realpathSync.native(input.backupDirectory)
+  if (isPathInside(sourceRoot, target)) throw new Error('BACKUP_TARGET_INVALID')
 
   const staged = join(
     dirname(target),
@@ -139,7 +141,7 @@ export const restoreWorkspaceBackup = (
 
   mkdirSync(staged, { mode: 0o700 })
   copyBackupFiles({
-    source: input.backupDirectory,
+    source: sourceRoot,
     target: staged,
     files: manifest.files,
   })

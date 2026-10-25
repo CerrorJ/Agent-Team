@@ -3,8 +3,8 @@ import { fulfillTrial } from './helpers/role-trial-fixture.js'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { ownedTempDirectory } from './helpers/owned-temp-directory.js'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -80,7 +80,8 @@ const enableRoleVersion = async (
 }
 
 test('真实 Git + 端口集成：交付独立验收、幂等、退回重试、新版本快照与重启恢复', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'weftpilot-workflow-'))
+  const temporary = ownedTempDirectory('weftpilot-workflow-')
+  const directory = temporary.directory
   const repositoryPath = join(directory, 'repository')
   mkdirSync(repositoryPath)
 
@@ -211,6 +212,6 @@ test('真实 Git + 端口集成：交付独立验收、幂等、退回重试、�
     assert.equal((await snapshot(kernel)).runs.length, 2)
   } finally {
     await kernel.shutdown()
-    rmSync(directory, { recursive: true, force: true })
+    temporary.remove()
   }
 })

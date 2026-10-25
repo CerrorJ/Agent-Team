@@ -1,21 +1,16 @@
 ﻿import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { execFileSync } from 'node:child_process'
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
-  rmSync,
-} from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { ownedTempDirectory } from './helpers/owned-temp-directory.js'
 import { join } from 'node:path'
 import { workspaceFixture } from './helpers/run-fixture.js'
 import { executeQueuedRun } from '../src/kernel/run-execution.js'
 import { runSchema } from '../src/kernel/business-contracts.js'
 
 test('已有执行目录的带前缀异常保留状态待确认，不启动CLI或覆盖文件', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'weftpilot-recovery-boundary-'))
+  const temporary = ownedTempDirectory('weftpilot-recovery-boundary-')
+  const directory = temporary.directory
   const repositoryPath = join(directory, 'repository')
   mkdirSync(repositoryPath)
   execFileSync('git', ['init', '-b', 'main'], {
@@ -70,6 +65,6 @@ test('已有执行目录的带前缀异常保留状态待确认，不启动CLI�
     )
   } finally {
     database.close()
-    rmSync(directory, { recursive: true, force: true })
+    temporary.remove()
   }
 })

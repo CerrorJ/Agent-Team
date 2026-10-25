@@ -1,6 +1,6 @@
 ﻿import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync } from 'node:fs'
+import { ownedTempDirectory } from './owned-temp-directory.js'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -67,7 +67,8 @@ export const localKernelFixture = async (
   execute: CliExecutionPort,
   options: TestKernelOptions = {},
 ) => {
-  const directory = mkdtempSync(join(tmpdir(), 'weftpilot-role-lifecycle-'))
+  const temporary = ownedTempDirectory('weftpilot-role-lifecycle-')
+  const directory = temporary.directory
   const repositoryPath = join(directory, 'repository')
   initializeRepository(repositoryPath)
 
@@ -95,7 +96,7 @@ export const localKernelFixture = async (
     snapshot: () => readSnapshot(kernel),
     cleanup: async () => {
       await kernel.shutdown()
-      rmSync(directory, { recursive: true, force: true })
+      temporary.remove()
     },
   }
 }

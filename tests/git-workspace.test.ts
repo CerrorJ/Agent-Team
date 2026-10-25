@@ -2,14 +2,13 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { execFileSync } from 'node:child_process'
 import {
-  mkdtempSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
   existsSync,
   rmSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { ownedTempDirectory } from './helpers/owned-temp-directory.js'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
@@ -22,7 +21,8 @@ import {
 import type { Project, Run } from '../src/kernel/business-contracts.js'
 
 test('中文空格路径的真实 worktree 保留主仓库文件，脏目录阻止启动', () => {
-  const directory = mkdtempSync(join(tmpdir(), '纬舟 Git # '))
+  const temporary = ownedTempDirectory('纬舟 Git # ')
+  const directory = temporary.directory
   const repositoryPath = join(directory, '项目仓库')
   mkdirSync(repositoryPath)
 
@@ -170,6 +170,6 @@ test('中文空格路径的真实 worktree 保留主仓库文件，脏目录阻�
       /STATE_UNCERTAIN/,
     )
   } finally {
-    rmSync(directory, { recursive: true, force: true })
+    temporary.remove()
   }
 })

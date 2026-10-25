@@ -14,7 +14,7 @@ import {
 
 // 受控就绪证明只用于状态/事务测试，不作为真实 CLI 认证或角色试运行证据。
 export const preflightFixture = () => {
-  const directory = realpathSync(
+  const directory = realpathSync.native(
     mkdtempSync(join(tmpdir(), 'weftpilot-preflight-')),
   )
 
@@ -102,7 +102,7 @@ const fixtureCleanup = (
   return () => {
     f.database.close()
     if (
-      realpathSync(directory) !== directory ||
+      realpathSync.native(directory) !== directory ||
       dirname(directory) !== parent ||
       !basename(directory).startsWith('weftpilot-preflight-')
     )

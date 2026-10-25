@@ -2,15 +2,13 @@ import assert from 'node:assert/strict'
 import { createHash, randomUUID } from 'node:crypto'
 import {
   readdirSync,
-  mkdtempSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
-  rmSync,
   existsSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { join } from 'node:path'
+import { ownedTempDirectory } from './helpers/owned-temp-directory.js'
 import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
 import { WorkspaceStore } from '../src/kernel/workspace-store.js'
@@ -58,12 +56,6 @@ const legacyDatabase = (
   }
 }
 
-const cleanup = (directory: string) => {
-  assert.equal(dirname(resolve(directory)), resolve(tmpdir()))
-  assert.ok(basename(directory).startsWith('weftpilot-role-schema-'))
-  rmSync(directory, { recursive: true, force: true })
-}
-
 const writeLegacyManifest = (directory: string) => {
   const data = readFileSync(join(directory, 'kernel.sqlite'))
 
@@ -85,7 +77,8 @@ const writeLegacyManifest = (directory: string) => {
 }
 
 test('schema7迁移先保存一致备份，升到8但不重写旧角色JSON；重启仍可读取', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'weftpilot-role-schema-'))
+  const temporary = ownedTempDirectory('weftpilot-role-schema-')
+  const directory = temporary.directory
   const data = join(directory, 'legacy-data')
   const role = legacyDatabase(data)
   let kernel = createKernel({
@@ -131,12 +124,13 @@ test('schema7迁移先保存一致备份，升到8但不重写旧角色JSON；�
     assert.deepEqual((await readSnapshot(kernel)).roles[0], role)
   } finally {
     await kernel.shutdown()
-    cleanup(directory)
+    temporary.remove()
   }
 })
 
 test('schema7备份只读预览与恢复到新目录，原备份字节不变，恢复后才迁移到8', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'weftpilot-role-schema-'))
+  const temporary = ownedTempDirectory('weftpilot-role-schema-')
+  const directory = temporary.directory
   const backup = join(directory, 'v7-backup')
   const role = legacyDatabase(backup, { archive: true })
   const data = readFileSync(join(backup, 'kernel.sqlite'))
@@ -183,12 +177,13 @@ test('schema7备份只读预览与恢复到新目录，原备份字节不变，�
     )
   } finally {
     database.close()
-    cleanup(directory)
+    temporary.remove()
   }
 })
 
 test('拒绝WAL主库伪装的便携备份，预览不会在源目录创建wal/shm文件', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'weftpilot-role-schema-'))
+  const temporary = ownedTempDirectory('weftpilot-role-schema-')
+  const directory = temporary.directory
   try {
     const backup = join(directory, 'wal-archive')
     legacyDatabase(backup)
@@ -205,6 +200,6 @@ test('拒绝WAL主库伪装的便携备份，预览不会在源目录创建wal/s
       digest(data),
     )
   } finally {
-    cleanup(directory)
+    temporary.remove()
   }
 })

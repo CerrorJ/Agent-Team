@@ -45,7 +45,7 @@ export const validateBackupTarget = (input: {
   snapshot: WorkspaceSnapshot
 }): string => {
   const target = resolve(input.target)
-  const parent = realpathSync(dirname(target))
+  const parent = realpathSync.native(dirname(target))
   if (existsSync(target) || resolve(parent, basename(target)) !== target)
     throw new Error('BACKUP_TARGET_INVALID')
 
@@ -57,7 +57,7 @@ export const validateBackupTarget = (input: {
   if (
     protectedPaths.some((path) =>
       isPathInside(
-        existsSync(path) ? realpathSync(path) : resolve(path),
+        existsSync(path) ? realpathSync.native(path) : resolve(path),
         target,
       ),
     )

@@ -63,14 +63,14 @@ export const verifySkillDirectory = (
 
 const listRegularFiles = (root: string): string[] => {
   if (lstatSync(root).isSymbolicLink()) throw new Error('SKILL_PATH_INVALID')
-  const canonical = realpathSync(root)
+  const canonical = realpathSync.native(root)
   const results: string[] = []
   const pending = [root]
   while (pending.length) {
     const directory = pending.pop()!
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = resolve(directory, entry.name)
-      const local = relative(canonical, realpathSync(path))
+      const local = relative(canonical, realpathSync.native(path))
       if (entry.isSymbolicLink() || isAbsolute(local) || local.startsWith('..'))
         throw new Error('SKILL_PATH_INVALID')
       if (entry.isDirectory()) pending.push(path)

@@ -179,12 +179,14 @@ export const validateRunContinuation = (input: {
   dataDirectory: string
 }): void => {
   const { project, run, dataDirectory } = input
-  const base = realpathSync(join(dataDirectory, 'worktrees'))
-  const actual = realpathSync(run.workDirectory)
+  const base = realpathSync.native(join(dataDirectory, 'worktrees'))
+  const actual = realpathSync.native(run.workDirectory)
   if (relative(join(base, run.id), actual)) throw new Error('INVALID_WORKSPACE')
 
   const common = (cwd: string) =>
-    realpathSync(resolve(cwd, git(cwd, ['rev-parse', '--git-common-dir'])))
+    realpathSync.native(
+      resolve(cwd, git(cwd, ['rev-parse', '--git-common-dir'])),
+    )
 
   if (
     common(actual) !== common(project.repositoryPath) ||
@@ -215,9 +217,10 @@ const repositoryRoot = (
   query: (cwd: string, args: string[]) => string,
 ) => {
   try {
-    const repositoryPath = realpathSync(path)
+    // Windows普通realpathSync可能保留8.3短名；native与Git返回的物理长路径对齐。
+    const repositoryPath = realpathSync.native(path)
 
-    const root = realpathSync(
+    const root = realpathSync.native(
       query(repositoryPath, ['rev-parse', '--show-toplevel']),
     )
 

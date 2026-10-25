@@ -77,7 +77,7 @@ export const assertPortableDatabase = (path: string): void => {
 
 export const enumerateBackupFiles = (root: string): string[] => {
   if (lstatSync(root).isSymbolicLink()) throw new Error('BACKUP_INVALID')
-  const canonical = realpathSync(root)
+  const canonical = realpathSync.native(root)
   const result: string[] = []
   const pending = [canonical]
   while (pending.length) {
