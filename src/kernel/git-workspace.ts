@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { runGitCommand } from './git-command.js'
 import { existsSync, realpathSync, mkdtempSync, rmdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { relative, resolve, isAbsolute, join } from 'node:path'
@@ -11,37 +11,28 @@ const git = (
   raw = false,
   input?: string,
 ): string => {
-  const output = execFileSync(
-    'git',
-    ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args],
-    {
-      cwd,
-      encoding: 'utf8',
-      shell: false,
-      windowsHide: true,
-      timeout: 15_000,
-      maxBuffer: 1_000_000,
-      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
-      ...(input === undefined ? {} : { input }),
-    },
-  )
-
-  return raw ? output : output.trim()
+  return runGitCommand(cwd, args, {
+    raw,
+    ...(input === undefined ? {} : { input }),
+  })
 }
 
-export const inspectProjectRepository = (input: {
-  repositoryPath: string
-  defaultBranch: string
-}) => {
-  const { repositoryPath, root } = repositoryRoot(input.repositoryPath)
+export const inspectProjectRepository = (
+  input: {
+    repositoryPath: string
+    defaultBranch: string
+  },
+  query: (cwd: string, args: string[]) => string = git,
+) => {
+  const { repositoryPath, root } = repositoryRoot(input.repositoryPath, query)
 
   if (relative(repositoryPath, root))
     throw new Error('GIT_ROOT_REQUIRED: 请选择仓库根目录')
-  const baselineCommit = branchCommit(root, input.defaultBranch)
+  const baselineCommit = branchCommit(root, input.defaultBranch, query)
 
   let gitUrl = ''
   try {
-    gitUrl = redactGitUrl(git(root, ['config', '--get', 'remote.origin.url']))
+    gitUrl = redactGitUrl(query(root, ['config', '--get', 'remote.origin.url']))
   } catch {
     /* 本地仓库可以没有 origin，不制造地址。 */
   }
@@ -219,12 +210,15 @@ export const applyRunInputPatches = (run: Run, patches: string[]): string => {
   return git(run.workDirectory, ['write-tree'])
 }
 
-const repositoryRoot = (path: string) => {
+const repositoryRoot = (
+  path: string,
+  query: (cwd: string, args: string[]) => string,
+) => {
   try {
     const repositoryPath = realpathSync(path)
 
     const root = realpathSync(
-      git(repositoryPath, ['rev-parse', '--show-toplevel']),
+      query(repositoryPath, ['rev-parse', '--show-toplevel']),
     )
 
     return { repositoryPath, root }
@@ -240,10 +234,14 @@ const repositoryRoot = (path: string) => {
   }
 }
 
-const branchCommit = (root: string, branch: string) => {
+const branchCommit = (
+  root: string,
+  branch: string,
+  query: (cwd: string, args: string[]) => string,
+) => {
   try {
-    git(root, ['check-ref-format', '--branch', branch])
-    return git(root, ['rev-parse', '--verify', `${branch}^{commit}`])
+    query(root, ['check-ref-format', '--branch', branch])
+    return query(root, ['rev-parse', '--verify', `${branch}^{commit}`])
   } catch {
     throw new Error('GIT_BRANCH_INVALID')
   }

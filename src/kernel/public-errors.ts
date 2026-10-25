@@ -43,6 +43,8 @@ const messages: Record<string, string> = {
   IDEMPOTENCY_CONFLICT: '同一命令键对应了不同内容',
   NOT_FOUND: '对象不存在',
   GIT_DIRTY: '仓库存在未提交改动，请先保留并处理已有文件',
+  GIT_INSPECTION_FAILED:
+    'Git检查未完成，请核对仓库后重新检查；不能据此启动执行',
   GIT_ROOT_REQUIRED: '请选择有效 Git 仓库的根目录',
   GIT_UNAVAILABLE: '未找到 Git，请安装并重启应用',
   GIT_BRANCH_INVALID: '默认分支无效或没有提交，请检查分支名称',

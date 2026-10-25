@@ -4,6 +4,7 @@ import { WorkspaceService } from './workspace-service.js'
 import { publicError } from './public-errors.js'
 import { inspectWorkspaceEnvironment } from './workspace-diagnostics.js'
 import { inspectTaskPreflight } from './task-preflight.js'
+import { inspectProject } from './project-inspection.js'
 import { CliInspection } from './cli-inspection.js'
 import type { CliExecutionPort } from './run-execution.js'
 import type { CredentialResolver } from './credential-contracts.js'
@@ -133,6 +134,8 @@ export class EmbeddedKernel {
     if (isMaintenanceRequest(request)) return this.maintenance.dispatch(request)
     if (request.method === 'workspace.preflight')
       return inspectTaskPreflight(this.store, request.input)
+    if (request.method === 'workspace.project.inspect')
+      return inspectProject(this.store, request.input.projectId)
     if (request.method === 'kernel.cliCheck')
       return this.cliInspection.inspect(request.input)
     if (request.method.startsWith('feishu.'))
@@ -249,6 +252,7 @@ const createHandshake = (sourceCommit: string): KernelHandshake => {
       'workspace-backup',
       'environment-diagnostics',
       'cli-checks',
+      'project-inspection',
     ],
     unavailable: [],
     runtime: {

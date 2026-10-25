@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { businessCommandSchema } from './business-contracts.js'
 import { preflightInputSchema } from './preflight-contracts.js'
 import { cliCheckInputSchema } from './cli-check-contracts.js'
+import { projectInspectionInputSchema } from './project-inspection-contracts.js'
+export * from './project-inspection-contracts.js'
 export * from './cli-check-contracts.js'
 export * from './preflight-contracts.js'
 export * from './business-contracts.js'
@@ -17,7 +19,7 @@ export * from './backup-contracts.js'
 export * from './diagnostic-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.9.1'
+export const KERNEL_VERSION = '0.9.2'
 export const DATA_SCHEMA_VERSION = 8
 
 const requestBase = {
@@ -29,6 +31,13 @@ const requestBase = {
 export const requestSchema = z.discriminatedUnion('method', [
   z.object({ ...requestBase, method: z.literal('kernel.handshake') }).strict(),
   z.object({ ...requestBase, method: z.literal('kernel.health') }).strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('workspace.project.inspect'),
+      input: projectInspectionInputSchema,
+    })
+    .strict(),
   z
     .object({
       ...requestBase,
@@ -164,6 +173,7 @@ export const handshakeSchema = z
         'workspace-backup',
         'environment-diagnostics',
         'cli-checks',
+        'project-inspection',
       ]),
     ),
     unavailable: z.array(z.string()),
