@@ -1,5 +1,7 @@
 # CLI 输入与取消生命周期（0.9.1 内核）
 
+2026-10-25关联更新：内核源`aaeeeb41990920f3223f32a94b2c6e86ef7719a4`已先行推送，0.9.1/p1/schema8/128文件；tar SHA-256 `fcf11983a4b83918d0d9ee01a0deabd10107a1973be79125b58bf3ab0a6c3688`。纬舟独立检出重建一致，桌面本地提交`b75660ba6043de96812442ba200ed8cd9dd3e833`：43单元/7装配、实际Windows包36通过16跳过、真实Codex文件M1及独立Claude唯一trial/显式启用/正常退出通过，桌面Tester9断言PASS、Reviewer APPROVE。当前桌面Git传输失败，备用连接器写入403，远端仍26f；本增量无新远端CI/Mac实际CLI/安装器结论。后续仅记录关联的文档提交不是新内核产物，客户端仍锁定源aaee。下方拟版本/待接入为源提交时历史记录。
+
 从干净`d86d0c6`（仅090关联文档，实际内核源码fb313df）在`fix/cli-stdin-lifecycle`继续。Windows真实本机Node探针：256KiB合成stdin、开始回调立即取消，触发Socket未捕获`write EOF`，执行宿主exit1。子进程有3秒自然结束上限、不派生后代、不调用模型，原失败日志/元信息在忽略的`.tmp/stdin-cancel-probe.*`保留，原PID已不在；没有接管旧255/128现场。
 
 新输入模块在发送前监听管道error并捕获同步异常，只报告一次，不记录正文或原始系统错误。argv模式只空收口，断管不会伪装为未交付正文；已有取消不再写入正文。以Writable.writableFinished为正文写完证明，晚到的断管不反写为未送达；但工具请求本身不是输入送达证据。真实输入失败会请求终止，并拒绝CLI的result或人工工具请求。停止确认后为CLI_INPUT_FAILED；终止端口false/抛错均STATE_UNCERTAIN，根自然结束不构成整树已结束证明，不自动重试或生成交付。
