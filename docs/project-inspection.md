@@ -6,4 +6,4 @@ Git检查在业务事务外，只读不写项目/Run/游标/回执。与原工�
 
 根代理4项真实Git/协议专项、157项完整、strict/lint/规模/格式及原独立飞书服务/内核构建通过；首次新增测试有TS断言缩窄后的冗余分支，已删除后全量157通过。最终改用单调时钟后根4专项/lint通过，独立Tester与Reviewer分别12项专项/类型/规模/格式通过，最终PASS/APPROVE，无新增P0—P3；157属于时钟修改前，不冒称最终全量重跑。独立真实文件SQLite多项目22表、Git全文件/索引SHA保持不变；真实Git期间墙钟±1h不影响预算递减，受控HEAD/默认变化不形成verified，真实有界Node超时及实际构建embedded入口IPC查询/ACK/stopped/exit0均分别留证，受控端口不冒充真实Git整树终止证明。
 
-下一步从干净提交形成092锁定产物再验收桌面；本增量尚无远端CI。本机Git传输/备用连接器写权限阻塞沿用[091记录](cli-input-lifecycle.md)，继续本地开发不将其写成新设备可获取或发行成功。Windows专项和受控Git端口不是macOS用户设备或真实CLI证明。复现`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm test`、`pnpm build`、`pnpm build:kernel`；定向`node --import tsx --test tests/project-inspection.test.ts tests/task-preflight.test.ts tests/project-preflight-edges.test.ts`（以仓库实际用例文件为准）。
+下一步从干净提交形成092锁定产物再验收桌面；本增量尚无远端CI。本机Git传输/备用连接器写权限阻塞沿用[091记录](cli-input-lifecycle.md)，继续本地开发不将其写成新设备可获取或发行成功。Windows专项和受控Git端口不是macOS用户设备或真实CLI证明。复现`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm test`、`pnpm build`、`pnpm build:kernel`；定向`node --import tsx --test tests/project-inspection.test.ts tests/task-preflight.test.ts`。
