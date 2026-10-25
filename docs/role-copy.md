@@ -1,4 +1,12 @@
-# 复制角色（开发中）
+# 复制角色 0.9.0
+
+2026-10-25交付关联：内核源码产物固定`fb313df324527426197e293831f61278860ef1e8`、0.9.0/protocol1/schema8、127文件，tar SHA-256 `069c951171a899567362a4bc7d08a803984d47ed0dc87e2311a0b7ca47dd1ac9`。此文档更新不改产物版本或要求客户端追随本分支HEAD。
+
+桌面[4fdd9fe](https://github.com/CerrorJ/weftpilot/commit/4fdd9fe607e2943fd9360f110e0bef9e050ae1b5)已消费该固定产物，独立Tester/Reviewer通过；[CI 40171628155](https://github.com/CerrorJ/weftpilot/actions/runs/40171628155)Windows/macOS均成功，各36单元/6装配，开发及实际包34通过16跳过、未签名原生安装包装配通过。另一个真实Codex用例实际分别运行来源/副本的trial，证明副本不会继承来源就绪，原Role和Run不变；不扩大为飞书、模型凭据成功或停止竞争验收。
+
+后续[桌面c3030fb](https://github.com/CerrorJ/weftpilot/commit/c3030fb98ab40f5719f26fc06e0988845bb0f7b9)只补草稿入口与空白新建，仍锁该产物；Windows独立验收/审查、实际包36通过16跳过，其[CI](https://github.com/CerrorJ/weftpilot/actions/runs/40172942235)Windows成功、macOS开发恢复退出测试上下文销毁失败，未进入Mac实际包/安装器。本内核未因该测试传输问题更改状态或摘要，Keychain/真实Mac CLI/用户设备及旧停止不确定现场继续保留。最新桌面测试维护按桌面交接单独追踪。
+
+## 实现与验收过程（保留当时范围）
 
 从干净`3b1c8b65fb93cb20e14a2b290f485ae91fecd3a2`建立`feat/role-copy`，拟内核0.9.0/协议1/schema8。桌面仍固定080产物，本工作区未提交源码不参与桌面发行。
 
