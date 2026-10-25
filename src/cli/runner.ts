@@ -5,6 +5,7 @@ import { terminateCli, type ProcessStopReport } from './process-stop.js'
 import { armTimeout, envTimeoutMs } from './timeout.js'
 import { promptInputForPlatform } from './types.js'
 import { readBoundedLines } from './bounded-lines.js'
+import { writeCliInput } from './input-stream.js'
 import type {
   CliAdapter,
   CliEvent,
@@ -200,16 +201,20 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
     let termination: Promise<boolean> | undefined
 
     const terminate = () => {
-      termination ??= options.stopProcess
-        ? options.stopProcess(child)
-        : terminateCli(child, options.onProcessStop)
+      termination ??= stopCli(child, options)
     }
 
-    // stdin 模式下把 prompt 写入子进程；否则 prompt 已在命令行参数里，stdin 直接收口。
-    if (child.stdin) {
-      if (useStdin) child.stdin.end(prompt, 'utf8')
-      else child.stdin.end()
-    }
+    let inputFailed = false
+    writeCliInput({
+      stream: child.stdin,
+      prompt: useStdin && !signal?.aborted ? prompt : undefined,
+      failed: () => {
+        // 用户取消仍以终止端口确认为准；工具先请求停止不能掩盖未送达的正文。
+        if (signal?.aborted) return
+        inputFailed = true
+        terminate()
+      },
+    })
     // spawn 的 signal 选项只杀直接子进程（cmd 外壳），Windows 下 claude.exe/codex.exe 会变孤儿；
     // 额外监听 abort 用 killCli 连进程树一起清。
     const abort = terminate
@@ -357,6 +362,7 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
         fail(new Error('STATE_UNCERTAIN'))
         return
       }
+      if (inputFailed) return fail(new Error('CLI_INPUT_FAILED'))
       if (outputOverflow) return fail(new Error('CLI_OUTPUT_LIMIT'))
       if (stoppedByToolCall) {
         settled = true
@@ -437,4 +443,18 @@ const runCliOnce = (options: RunCliOptions): Promise<CliRunResult> => {
       resolve(finalResult)
     })
   })
+}
+
+/** 外部终止端口抛错也只表示无法确认，不能使收尾事件逃逸或假报整棵树已结束。 */
+const stopCli = async (
+  child: ChildProcess,
+  options: RunCliOptions,
+): Promise<boolean> => {
+  try {
+    return options.stopProcess
+      ? await options.stopProcess(child)
+      : await terminateCli(child, options.onProcessStop)
+  } catch {
+    return false
+  }
 }

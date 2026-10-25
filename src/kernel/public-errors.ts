@@ -37,6 +37,7 @@ const messages: Record<string, string> = {
   VALIDATION_FAILED: '输入格式或协议版本不兼容',
   KERNEL_STOPPED: '内核正在停止或已停止',
   CLI_CHECK_BUSY: '该CLI已有检查或尚未确认结束的检查进程，请稍后重试',
+  CLI_INPUT_FAILED: '执行输入未完整送达，已终止本次执行；请检查后创建新执行',
   VERSION_CONFLICT: '数据已变化，请刷新后操作',
   PREFLIGHT_CHANGED: '预检后配置或执行条件已变化，请重新检查并确认启动',
   IDEMPOTENCY_CONFLICT: '同一命令键对应了不同内容',
