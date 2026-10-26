@@ -153,15 +153,16 @@ test(
   'Windows原生8.3别名：Git根不误拒绝，备份仍禁止写进同一物理数据目录',
   { skip: process.platform !== 'win32' },
   (context) => {
-    const temporary = ownedTempDirectory('weftpilot native short 中文 ')
+    const temporary = ownedTempDirectory('纬舟 native short 中文 ')
     try {
-      const short = execFileSync(
+      // PowerShell原生管道的码页不能假定UTF-8，用ASCII信封保留中文短名。
+      const encoded = execFileSync(
         'powershell.exe',
         [
           '-NoProfile',
           '-NonInteractive',
           '-Command',
-          '$taskFso = New-Object -ComObject Scripting.FileSystemObject; $taskFso.GetFolder($env:WEFTPILOT_SHORT_ROOT).ShortPath',
+          '$taskFso = New-Object -ComObject Scripting.FileSystemObject; [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($taskFso.GetFolder($env:WEFTPILOT_SHORT_ROOT).ShortPath))',
         ],
         {
           encoding: 'utf8',
@@ -170,6 +171,10 @@ test(
           env: { ...process.env, WEFTPILOT_SHORT_ROOT: temporary.directory },
         },
       ).trim()
+
+      const short = Buffer.from(encoded, 'base64').toString('utf8')
+
+      assert.equal(realpathSync.native(short), temporary.directory)
 
       if (short === temporary.directory) {
         context.skip('此文件系统未提供8.3短路径，不能冒认原生短名验证')
