@@ -13,3 +13,11 @@
 独立Reviewer最终APPROVE，首轮P1已关闭，无未关闭P0—P3；亲自运行18个不同相关用例、真实Git复现修后及预检/固定Run探针，最终类型/规模/lint/格式通过。该结论仅覆盖内核源码，不继承为桌面、干净产物或平台发行结论。
 
 复现：pnpm12.3.4，`pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`；定向使用`pnpm exec tsx --test tests/project-settings.test.ts tests/project-create-settings.test.ts tests/project-schema-migration.test.ts tests/task-preflight.test.ts`。固定源码/摘要及桌面关联在独立测试与审查通过后记录，不覆盖0.10.0产物。
+
+## 固定产物与桌面开发候选
+
+固定源码`c960f484c706101410863e12349ba8341abe1f6b`已先提交推送，干净检出构建并从桌面隔离检出重复重建：0.11.0/protocol1/schema10/134文件，`weftpilot-agent-team-kernel-0.11.0.tgz` SHA-256 `b47da834a73b4e85b1bf3318cccad06184e2180f09450f04e04204f50e0979c9`一致。后续本关联文档HEAD不替代c960，不得在文档HEAD重建覆盖0110。
+
+桌面候选`7b2954b52d2d0ad219e8575cdee26e93a40a73ac`锁定该产物，实际包内外manifest/lock和134文件逐SHA一致。strict/lint/格式、51单元、8装配通过；新增只读Run上下文之前的开发/实际包完整64项各47通过17条件跳过。两轮实际Windows CLI文件测试分别1/1通过，第二轮还实际打开历史快照确认旧项目UUID、不显示后续目标，执行成功仍待验收。模型测试为明确opt-in，CI跳过不算真实模型成功。
+
+最终只读展示包追加完整回归出现两项Windows崩溃弹窗、尚未正常退出，不能记作通过；保留现场/日志并独立只读诊断，未指定根因、未强杀换绿。新[原生CI40442209173](https://github.com/CerrorJ/weftpilot/actions/runs/40442209173)及独立桌面Tester/Reviewer仍进行。此关联只记录已知事实，不将内核通过继承为桌面平台验收；M0—M4及飞书/用户设备/签名发行仍有未验项。
