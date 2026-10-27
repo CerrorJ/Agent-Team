@@ -74,4 +74,7 @@ export const initializeWorkspaceSchema = (database: DatabaseSync): void => {
   // v8扩展角色JSON快照；旧内核严格解析不认识的新字段，因此必须拒绝回退读取。
   if (version < 8)
     database.exec('BEGIN IMMEDIATE; PRAGMA user_version=8; COMMIT;')
+  // v9允许新需求版本包含元数据；仅提升读取门禁，不补写历史需求、Run或事件。
+  if (version < 9)
+    database.exec('BEGIN IMMEDIATE; PRAGMA user_version=9; COMMIT;')
 }

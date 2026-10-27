@@ -5,6 +5,19 @@ const name = z.string().trim().min(1).max(200)
 const text = z.string().trim().min(1).max(20_000)
 const version = z.number().int().positive()
 export const cliIdSchema = z.enum(['codex', 'claude'])
+export const requirementPrioritySchema = z.enum(['low', 'medium', 'high'])
+export const requirementStageSchema = z.enum([
+  'needs_clarification',
+  'awaiting_confirmation',
+  'plan_confirmed',
+  'implementing',
+])
+
+/** 旧版本缺省代表未记录；不回填历史阶段，也不将意图记录当成审批或执行证明。 */
+export const requirementMetadataFields = {
+  priority: requirementPrioritySchema.nullable().optional(),
+  stage: requirementStageSchema.nullable().optional(),
+}
 
 /** 凭据只保存主进程分配的不透明引用，不能把密钥或任意环境变量写入业务对象。 */
 export const modelProfileSchema = z
@@ -37,6 +50,7 @@ export const requirementVersionSchema = z
     title: name,
     body: text,
     acceptanceCriteria: text,
+    ...requirementMetadataFields,
     createdAt: z.string().datetime(),
   })
   .strict()

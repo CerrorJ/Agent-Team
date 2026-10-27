@@ -240,6 +240,7 @@ const createHandshake = (sourceCommit: string): KernelHandshake => {
       'graceful-shutdown',
       'local-workflow',
       'product-catalog',
+      'requirement-metadata',
       'role-trials',
       'role-configuration',
       'role-copy',

@@ -12,6 +12,7 @@ import {
   teamVersionSchema,
 } from './product-contracts.js'
 import type { WorkspaceStore } from './workspace-store.js'
+import { resolveRequirementMetadata } from './requirement-metadata.js'
 
 export type ProductCommand = Extract<
   BusinessCommand,
@@ -53,14 +54,18 @@ export const saveProductObject = (input: {
         'model.saved',
       )
       break
-    case 'requirement.save':
-      validateRequirement({ store, products, command })
+    case 'requirement.save': {
+      const previous = validateRequirement({ store, products, command })
       products.append(
         'requirement_versions',
-        requirementVersionSchema.parse(value),
+        requirementVersionSchema.parse({
+          ...value,
+          ...resolveRequirementMetadata(command, previous),
+        }),
         'requirement.saved',
       )
       break
+    }
     case 'team.save':
       validateTeam(store, command)
       products.append(
@@ -107,6 +112,7 @@ const validateRequirement = (input: {
 
   if (previous.projectId !== command.projectId)
     throw new Error('CROSS_PROJECT_REFERENCE')
+  return previous
 }
 
 const validateTeam = (

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { cliIdSchema } from './product-contracts.js'
+import { cliIdSchema, requirementMetadataFields } from './product-contracts.js'
 
 const id = z.string().uuid()
 const expectedVersion = z.number().int().nonnegative()
@@ -37,6 +37,7 @@ export const productCommandSchemas = [
       title: name,
       body: text,
       acceptanceCriteria: text,
+      ...requirementMetadataFields,
     })
     .strict(),
   z

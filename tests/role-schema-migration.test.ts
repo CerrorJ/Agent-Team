@@ -19,6 +19,7 @@ import { readSnapshot } from './helpers/local-kernel-fixture.js'
 import { backupManifestSchema } from '../src/kernel/backup-contracts.js'
 import { inspectBackup } from '../src/kernel/backup-validation.js'
 import { restoreWorkspaceBackup } from '../src/kernel/workspace-backup.js'
+import { DATA_SCHEMA_VERSION } from '../src/kernel/protocol.js'
 
 const digest = (value: Buffer): string =>
   createHash('sha256').update(value).digest('hex')
@@ -76,7 +77,7 @@ const writeLegacyManifest = (directory: string) => {
   return manifest
 }
 
-test('schema7迁移先保存一致备份，升到8但不重写旧角色JSON；重启仍可读取', async () => {
+test('schema7迁移先保存一致备份，升到当前版本但不重写旧角色JSON；重启仍可读取', async () => {
   const temporary = ownedTempDirectory('weftpilot-role-schema-')
   const directory = temporary.directory
   const data = join(directory, 'legacy-data')
@@ -111,7 +112,7 @@ test('schema7迁移先保存一致备份，升到8但不重写旧角色JSON；�
     try {
       assert.equal(
         upgraded.prepare('PRAGMA user_version').get()?.user_version,
-        8,
+        DATA_SCHEMA_VERSION,
       )
       assert.equal(
         upgraded.prepare('SELECT data FROM role_versions').get()?.data,
@@ -128,7 +129,7 @@ test('schema7迁移先保存一致备份，升到8但不重写旧角色JSON；�
   }
 })
 
-test('schema7备份只读预览与恢复到新目录，原备份字节不变，恢复后才迁移到8', async () => {
+test('schema7备份只读预览与恢复到新目录，原备份字节不变，恢复后才迁移到当前版本', async () => {
   const temporary = ownedTempDirectory('weftpilot-role-schema-')
   const directory = temporary.directory
   const backup = join(directory, 'v7-backup')
@@ -162,7 +163,7 @@ test('schema7备份只读预览与恢复到新目录，原备份字节不变，�
     })
 
     try {
-      assert.equal(kernel.handshake.dataSchemaVersion, 8)
+      assert.equal(kernel.handshake.dataSchemaVersion, DATA_SCHEMA_VERSION)
       assert.deepEqual((await readSnapshot(kernel)).roles[0], role)
     } finally {
       await kernel.shutdown()
