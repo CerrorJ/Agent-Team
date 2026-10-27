@@ -1,4 +1,4 @@
-# 需求优先级与业务阶段（0.10.0开发候选）
+# 需求优先级与业务阶段（0.10.0）
 
 2026-10-27。按固定原型c29扩展唯一内核的需求版本：优先级low/medium/high；阶段needs_clarification、awaiting_confirmation、plan_confirmed、implementing。阶段是所有者记录的需求意图，不代替人工请求决定、CLI执行、调度或交付验收；没有根据任务数量自动推断阶段。
 
@@ -10,4 +10,10 @@
 
 独立Windows内核Tester PASS：7定向和5组真实JSON/Node IPC探针、7个自有子进程正常exit0；用固定094产物实际创建schema8与归档后验证升级9、预迁移备份8、094拒读9且DB摘要不变。跨094旧命令key重放/冲突、事件失败22表整体不变后同key显式重试、旧Task/受控Run/未来pending Human原始JSON不变、无human.decided且executeCalls=0。受控历史夹具不冒称模型执行。Reviewer独立24相关测试与类型/规范/源码及构建SHA核对后APPROVE，无P0—P3。两者只写ignored证据，未修改实现。
 
-本源码通过后形成新提交/干净固定产物；桌面接入、真实飞书联调和整体M2/M4仍另验。复现：`pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm build:kernel`。定向使用`pnpm exec tsx --test tests/requirement-metadata.test.ts tests/requirement-schema-migration.test.ts tests/role-schema-migration.test.ts`。
+本内核源码通过后已形成新提交/干净固定产物，桌面关联结果见下节；真实飞书联调和整体M2/M4仍另验。复现：`pnpm test`、`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm build`、`pnpm build:kernel`。定向使用`pnpm exec tsx --test tests/requirement-metadata.test.ts tests/requirement-schema-migration.test.ts tests/role-schema-migration.test.ts`。
+
+## 固定产物与桌面关联
+
+固定源码`969b548947b0bf6d0303f4a476130d7da0bf4452`已先提交推送，再从两份干净检出重建：0.10.0/protocol1/schema9/132文件，`weftpilot-agent-team-kernel-0.10.0.tgz` SHA-256 `1ebd0ff1b81afcbf12204e9de4358462c77ab1b0c493a37468c691152d5d8732`一致。094产物保留，本关联文档HEAD不替代969，不能在文档HEAD重建并覆盖0100。
+
+桌面21401f实现后，Reviewer发现客户端trim异常枚举的P2，原REQUEST_CHANGES保留；客户端6a7340b8adc08414113ebcfaae0f780acfcbcacf已改为原值严格校验并补四个真实负值循环，本内核源码/产物不变。最终[CI40435856697](https://github.com/CerrorJ/weftpilot/actions/runs/40435856697)双平台SUCCESS：固定源Win164/164、Mac154通过10平台跳过；各51单元，装配Win8/Mac7通过1平台跳过；开发/实际应用各61项45通过16明确跳过、0失败/取消，未签名NSIS/ARM64 DMG/ZIP/blockmap装配通过。独立Windows实际094→0100升级/schema9归档/字段版本与P2补验，以及两平台完整日志、12PNG/官方摘要补验均限定增量PASS/APPROVE。没有因此宣布真实飞书/模型执行、用户Mac设备安装/真实CLI、旧故障根因或整体M0—M4完成；未自动合并或公开发布。
