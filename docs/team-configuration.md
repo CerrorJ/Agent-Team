@@ -15,3 +15,11 @@ Reviewer独立12个相关用例、双类型/全lint/规模/diff通过，运行�
 复现：固定pnpm12.3.4，`pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm test`、`pnpm build`、`pnpm build:kernel`；定向`pnpm exec tsx --test tests/team-configuration.test.ts tests/team-schema-migration.test.ts`。新固定提交、产物文件集合/摘要和桌面关联待干净重建实测，不覆盖0110。正常Git HTTPS推送目前遇本机TLS EOF，未降低证书校验或改系统；继续开发并探索已连接GitHub工具的正常验证通路。
 
 已连接GitHub工具的create_blob尝试也返回404，没有创建远端提交或分支，不将其说成发布成功或确定的权限原因。后续先保留本地经审查提交和固定开发产物，正常推送恢复前只作本地联调；远端CI及发行门禁继续拒绝不可取得的源码，不用邻仓WIP绕过。
+
+## 桌面关联与后续实测
+
+上段为构建前过程记录。网络恢复后，源码`2ab44ac861b065d306237cb8929a0d5e03daad6c`已正常推送`feat/team-catalog`；0.12.0/protocol1/schema11实际135文件。`weftpilot-agent-team-kernel-0.12.0.tgz` SHA-256 `b2da7ff131b32c16d082836c4c67452614c521d99389a5ebd790ca256476a93d`，两份干净检出重建一致，实际桌面包逐文件和内外锁一致。后续仅文档提交不重建同版本产物。
+
+桌面团队页实现`aae35a47cd464aaf2a43a45c4df9a09cb47c1078`、测试时序修正`2f448700f03706cef77deabd20ecc259a1c8cda4`已推送。首轮CI40449807913的Mac开发焦点失败及未执行打包保留；修正后[CI40452246829](https://github.com/CerrorJ/weftpilot/actions/runs/40452246829)双平台SUCCESS：固定内核Windows175通过，Mac165通过10平台跳过；各51桌面单元，装配Win8/Mac7通过1平台跳过，开发及实际包各66项49通过17跳过、0失败0取消，未签名NSIS/ARM64 DMG/ZIP装配成功。真实Codex/Claude团队专项在Windows最新本地包1/1通过，标准CI模型跳过不算真实执行。
+
+桌面独立GUI迁移/版本/CAS/12人边界与后端审查限定通过；修后本轮官方20图/逐PNG字节与摘要/完整日志已由独立Tester和Reviewer复核，最终限定PASS/APPROVE，无新P级。此增量不关闭旧Windows故障现场，不代表用户设备安装升级、真实飞书、整体八页设计或M0—M4完成；角色飞书绑定和路由继续开发，既有独立飞书入口未切换。
