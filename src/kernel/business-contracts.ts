@@ -1,4 +1,9 @@
 import { z } from 'zod'
+import {
+  projectSettingsFields,
+  projectConfigureCommandSchema,
+  projectContextSnapshotSchema,
+} from './project-contracts.js'
 import { configurationFingerprintSchema } from './preflight-fingerprint.js'
 import { teamCommandSchemas } from './team-contracts.js'
 import {
@@ -29,6 +34,7 @@ export const projectSchema = z
     version,
     name: shortText,
     repositoryPath: z.string().min(1).max(4096),
+    ...projectSettingsFields,
     gitUrl: z.string().max(4096),
     defaultBranch: shortText,
     createdAt: z.string().datetime(),
@@ -113,6 +119,7 @@ export const runSchema = z
       .regex(/^[a-f0-9]{40,64}$/)
       .optional(),
     requirementSnapshot: requirementVersionSchema.nullable().optional(),
+    projectContextSnapshot: projectContextSnapshotSchema.optional(),
     purpose: z.enum(['task', 'role_trial']).optional(),
     trial: roleTrialSchema.nullable().optional(),
     executionBranch: z.string(),
@@ -170,12 +177,14 @@ export const acceptanceSchema = z
 export const businessCommandSchema = z.discriminatedUnion('type', [
   ...humanCommandSchemas,
   ...teamCommandSchemas,
+  projectConfigureCommandSchema,
   z
     .object({
       type: z.literal('project.create'),
       name: shortText,
       repositoryPath: z.string().min(1).max(4096),
       defaultBranch: shortText,
+      ...projectSettingsFields,
     })
     .strict(),
   z

@@ -1,6 +1,10 @@
 import type { WorkspaceStore } from './workspace-store.js'
 import { ProductStore } from './product-store.js'
-import { roleVersionSchema, type Task } from './business-contracts.js'
+import {
+  projectSchema,
+  roleVersionSchema,
+  type Task,
+} from './business-contracts.js'
 import { requirementVersionSchema } from './product-contracts.js'
 import { randomUUID } from 'node:crypto'
 
@@ -12,6 +16,7 @@ export const captureBusinessConfiguration = (
   roleSnapshot: store.get('role_versions', task.roleId, roleVersionSchema),
   goalSnapshot: task.goal,
   acceptanceSnapshot: task.acceptanceCriteria,
+  projectContextSnapshot: captureProjectContext(store, task.projectId),
   requirementSnapshot: task.requirementRef
     ? new ProductStore(store).get(
         'requirement_versions',
@@ -20,6 +25,23 @@ export const captureBusinessConfiguration = (
       )
     : null,
 })
+
+const captureProjectContext = (store: WorkspaceStore, projectId: string) => {
+  const { version, name, goal, description, defaultTeamId } = store.get(
+    'projects',
+    projectId,
+    projectSchema,
+  )
+
+  return {
+    projectId,
+    projectVersion: version,
+    name,
+    goal,
+    description,
+    defaultTeamId,
+  }
+}
 
 export const captureTaskConfiguration = (
   store: WorkspaceStore,

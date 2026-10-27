@@ -43,7 +43,7 @@ const makeLegacy = (data: string) => {
   return requirement
 }
 
-test('schema8升级9先备份、不重写旧需求JSON或补造元数据，重启仍可读', async () => {
+test('schema8升级当前版本先备份、不重写旧需求JSON或补造元数据，重启仍可读', async () => {
   const temporary = ownedTempDirectory('weftpilot-requirement-schema-')
   const data = join(temporary.directory, 'legacy')
   const original = makeLegacy(data)
@@ -61,7 +61,7 @@ test('schema8升级9先备份、不重写旧需求JSON或补造元数据，重�
       try {
         assert.equal(
           database.prepare('PRAGMA user_version').get()?.user_version,
-          file === 'kernel.sqlite' ? 9 : 8,
+          file === 'kernel.sqlite' ? DATA_SCHEMA_VERSION : 8,
         )
         assert.equal(
           database.prepare('SELECT data FROM requirement_versions').get()?.data,
@@ -79,7 +79,7 @@ test('schema8升级9先备份、不重写旧需求JSON或补造元数据，重�
   }
 })
 
-test('schema8备份只读预览与恢复保留字节，恢复副本启动后才升级9', async () => {
+test('schema8备份只读预览与恢复保留字节，恢复副本启动后才升级当前版本', async () => {
   const temporary = ownedTempDirectory('weftpilot-requirement-backup-')
   const backup = join(temporary.directory, 'backup')
   const requirement = makeLegacy(backup)
@@ -121,7 +121,7 @@ test('schema8备份只读预览与恢复保留字节，恢复副本启动后才�
     })
 
     try {
-      assert.equal(kernel.handshake.dataSchemaVersion, 9)
+      assert.equal(kernel.handshake.dataSchemaVersion, DATA_SCHEMA_VERSION)
       assert.deepEqual(
         (await readSnapshot(kernel)).requirements[0],
         requirement,

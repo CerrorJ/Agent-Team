@@ -77,7 +77,7 @@ export const readBackupManifest = (directory: string): BackupManifest => {
 
   if (
     !parsed.success ||
-    ![7, 8, DATA_SCHEMA_VERSION].includes(parsed.data.dataSchemaVersion)
+    ![7, 8, 9, DATA_SCHEMA_VERSION].includes(parsed.data.dataSchemaVersion)
   )
     throw new Error('BACKUP_VERSION_INCOMPATIBLE')
   return parsed.data

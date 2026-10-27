@@ -74,7 +74,13 @@ const createTeamTask = (
 
   if (team.version !== command.expectedTeamVersion)
     throw new Error('VERSION_CONFLICT')
-  store.get('projects', command.projectId, projectSchema)
+  const project = store.get('projects', command.projectId, projectSchema)
+
+  if (
+    command.expectedProjectVersion !== undefined &&
+    project.version !== command.expectedProjectVersion
+  )
+    throw new Error('VERSION_CONFLICT')
   validatePlan(command, team.roleIds)
 
   const parent: Task = {

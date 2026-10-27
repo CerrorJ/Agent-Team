@@ -128,6 +128,7 @@ export class WorkspaceService {
     const { store, dataDirectory } = this.options
     switch (command.type) {
       case 'project.create':
+      case 'project.configure':
       case 'role.save':
       case 'role.copy':
       case 'task.create':

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { configureProject, registerProject } from './project-settings.js'
 import {
   projectSchema,
   roleVersionSchema,
@@ -20,7 +21,14 @@ import {
 
 export type CatalogCommand = Extract<
   BusinessCommand,
-  { type: 'project.create' | 'role.save' | 'role.copy' | 'task.create' }
+  {
+    type:
+      | 'project.create'
+      | 'project.configure'
+      | 'role.save'
+      | 'role.copy'
+      | 'task.create'
+  }
 >
 
 /** Git 只读预检在事务外完成；返回的闭包只执行本地业务写入。 */
@@ -32,20 +40,10 @@ export const prepareCatalogCommand = (input: {
   switch (command.type) {
     case 'project.create': {
       const inspected = inspectProjectRepository(command)
-      return () => {
-        const id = randomUUID()
-        store.addProject({
-          id,
-          version: 1,
-          name: command.name,
-          defaultBranch: command.defaultBranch,
-          repositoryPath: inspected.repositoryPath,
-          gitUrl: inspected.gitUrl,
-          createdAt: new Date().toISOString(),
-        })
-        return { id }
-      }
+      return () => registerProject({ store, command, inspected })
     }
+    case 'project.configure':
+      return () => configureProject(store, command)
     case 'role.save':
       return () => saveRole(store, command)
     case 'role.copy':

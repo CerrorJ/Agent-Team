@@ -7,6 +7,7 @@ export * from './project-inspection-contracts.js'
 export * from './cli-check-contracts.js'
 export * from './preflight-contracts.js'
 export * from './business-contracts.js'
+export * from './project-contracts.js'
 export * from './activity-contracts.js'
 export * from './product-contracts.js'
 export * from './role-contracts.js'
@@ -19,8 +20,8 @@ export * from './backup-contracts.js'
 export * from './diagnostic-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.10.0'
-export const DATA_SCHEMA_VERSION = 9
+export const KERNEL_VERSION = '0.11.0'
+export const DATA_SCHEMA_VERSION = 10
 
 const requestBase = {
   protocolVersion: z.literal(PROTOCOL_VERSION),
@@ -162,6 +163,7 @@ export const handshakeSchema = z
         'local-workflow',
         'product-catalog',
         'requirement-metadata',
+        'project-settings',
         'role-trials',
         'role-configuration',
         'role-copy',

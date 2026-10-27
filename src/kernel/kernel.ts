@@ -241,6 +241,7 @@ const createHandshake = (sourceCommit: string): KernelHandshake => {
       'local-workflow',
       'product-catalog',
       'requirement-metadata',
+      'project-settings',
       'role-trials',
       'role-configuration',
       'role-copy',

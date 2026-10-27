@@ -41,7 +41,14 @@ export const executionPrompt = (run: Run): string => {
 
   const requirements = trial ? '' : roleExpectations(role)
 
-  return `职责：${role.responsibility}${requirements}\n任务：${goal}${context}`
+  return `职责：${role.responsibility}${requirements}\n任务：${goal}${context}${trial ? '' : projectContext(run)}`
+}
+
+const projectContext = (run: Run): string => {
+  const project = run.projectContextSnapshot
+
+  if (!project?.goal && !project?.description) return ''
+  return `\n固定项目 ${project.name} / v${project.projectVersion}：${project.goal ? `\n项目目标：${project.goal}` : ''}${project.description ? `\n项目描述：${project.description}` : ''}`
 }
 
 /** 仅注入该快照明确保存的要求；旧Run缺省字段时保持原提示，不补造配置。 */

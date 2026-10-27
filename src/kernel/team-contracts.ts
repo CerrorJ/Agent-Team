@@ -12,6 +12,7 @@ export const teamCommandSchemas = [
       type: z.literal('team.createTask'),
       teamId: id,
       expectedTeamVersion: z.number().int().positive(),
+      expectedProjectVersion: z.number().int().positive().optional(),
       projectId: id,
       title,
       goal: text,
