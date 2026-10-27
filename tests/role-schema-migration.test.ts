@@ -48,7 +48,7 @@ const legacyDatabase = (
     })
 
     store.transaction(() => store.addRole(role))
-    database.exec('PRAGMA user_version=7')
+    database.exec('DROP TABLE role_feishu_messages; PRAGMA user_version=7')
     // 实际VACUUM INTO备份采用独立日志格式；直接拷贝WAL主库不是合法便携备份。
     if (options.archive) database.exec('PRAGMA journal_mode=DELETE')
     return role

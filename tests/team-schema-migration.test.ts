@@ -39,13 +39,13 @@ const legacyTeams = (directory: string) => {
     .prepare('SELECT data FROM team_versions ORDER BY rowid')
     .all()
 
-  database.exec('PRAGMA user_version=10')
+  database.exec('DROP TABLE role_feishu_messages; PRAGMA user_version=10')
   database.prepare('VACUUM INTO ?').run(join(directory, 'kernel.sqlite'))
   database.close()
   return { team, second, original }
 }
 
-test('schema10升级11前一致性备份，重名团队/旧缺省说明JSON不改，重启不补造配置', async () => {
+test('schema10升级当前契约前一致性备份，重名团队/旧缺省说明JSON不改，重启不补造配置', async () => {
   const temporary = ownedTempDirectory('weftpilot-team-schema-')
   const directory = join(temporary.directory, 'legacy')
   const { team, second, original } = legacyTeams(directory)
@@ -89,7 +89,7 @@ test('schema10升级11前一致性备份，重名团队/旧缺省说明JSON不�
   }
 })
 
-test('schema10备份只读预览与恢复不改源字节，恢复副本才升11并保留历史重名', async () => {
+test('schema10备份只读预览与恢复不改源字节，恢复副本才升级当前契约并保留历史重名', async () => {
   const temporary = ownedTempDirectory('weftpilot-team-backup-')
   const backup = join(temporary.directory, 'backup')
   const { team, second, original } = legacyTeams(backup)

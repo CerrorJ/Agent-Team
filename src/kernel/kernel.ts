@@ -13,6 +13,7 @@ import {
   type FeishuCredentialResolver,
 } from './feishu-runtime.js'
 import type { FeishuTransportFactory } from './feishu-transport.js'
+import { RoleFeishuRuntime } from './role-feishu-runtime.js'
 import type { SkillFetch } from './skill-download.js'
 import {
   WorkspaceMaintenance,
@@ -52,6 +53,7 @@ export class EmbeddedKernel {
   private readonly store: WorkspaceStore
   private readonly service: WorkspaceService
   private readonly feishu: FeishuRuntime
+  private readonly roleFeishu: RoleFeishuRuntime
   private readonly maintenance: WorkspaceMaintenance
   private readonly cliInspection: CliInspection
   private stopped = false
@@ -72,6 +74,16 @@ export class EmbeddedKernel {
         ...(options.skillFetch ? { skillFetch: options.skillFetch } : {}),
       })
       this.feishu = new FeishuRuntime({
+        store: this.store,
+        service: this.service,
+        ...(options.feishuCredentials
+          ? { credentials: options.feishuCredentials }
+          : {}),
+        ...(options.feishuTransport
+          ? { factory: options.feishuTransport }
+          : {}),
+      })
+      this.roleFeishu = new RoleFeishuRuntime({
         store: this.store,
         service: this.service,
         ...(options.feishuCredentials
@@ -181,6 +193,15 @@ export class EmbeddedKernel {
         return this.feishu.status()
       case 'feishu.status':
         return this.feishu.status()
+      case 'feishu.role.connect':
+        return this.roleFeishu
+          .connect(request)
+          .then(() => this.roleFeishu.status(request.roleId))
+      case 'feishu.role.disconnect':
+        this.roleFeishu.disconnect(request.roleId)
+        return this.roleFeishu.status(request.roleId)
+      case 'feishu.role.status':
+        return this.roleFeishu.status(request.roleId)
       default:
         throw new Error('VALIDATION_FAILED')
     }
@@ -199,9 +220,11 @@ export class EmbeddedKernel {
   private async close(): Promise<{ state: 'stopped' }> {
     if (!this.stopped) {
       this.feishu.close()
+      this.roleFeishu.close()
       await this.service.shutdown()
       await this.cliInspection.shutdown()
       await this.feishu.drain()
+      await this.roleFeishu.drain()
       this.emit('kernel.stopped')
       this.journal.close()
       this.stopped = true
@@ -251,6 +274,7 @@ const createHandshake = (sourceCommit: string): KernelHandshake => {
       'codex-and-claude',
       'human-workflow',
       'feishu-channel',
+      'role-feishu-routing',
       'skills',
       'workspace-backup',
       'environment-diagnostics',

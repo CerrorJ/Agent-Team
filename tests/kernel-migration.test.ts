@@ -16,7 +16,7 @@ test('schema5升级保留人工请求表，并在新增飞书投影前保存一�
   await first.shutdown()
   const previous = new DatabaseSync(join(dataDirectory, 'kernel.sqlite'))
   previous.exec(
-    'DROP TABLE skill_sources; DROP TABLE skill_imports; DROP TABLE skill_packages; DROP TABLE feishu_messages; DROP TABLE feishu_binding; PRAGMA user_version=5',
+    'DROP TABLE role_feishu_messages; DROP TABLE skill_sources; DROP TABLE skill_imports; DROP TABLE skill_packages; DROP TABLE feishu_messages; DROP TABLE feishu_binding; PRAGMA user_version=5',
   )
   previous.close()
   const current = createKernel({ dataDirectory, sourceCommit: 'a'.repeat(40) })
@@ -58,7 +58,7 @@ test('schema 4 升级前一致备份不含新表，升级后等待态纳入每�
   const first = createKernel({ dataDirectory, sourceCommit: 'a'.repeat(40) })
   await first.shutdown()
   const previous = new DatabaseSync(join(dataDirectory, 'kernel.sqlite'))
-  previous.exec(`DROP TABLE skill_sources; DROP TABLE skill_imports; DROP TABLE skill_packages; DROP TABLE feishu_messages; DROP TABLE feishu_binding; DROP TABLE human_requests;
+  previous.exec(`DROP TABLE role_feishu_messages; DROP TABLE skill_sources; DROP TABLE skill_imports; DROP TABLE skill_packages; DROP TABLE feishu_messages; DROP TABLE feishu_binding; DROP TABLE human_requests;
     DROP INDEX one_active_run_per_task;
     CREATE UNIQUE INDEX one_active_run_per_task ON runs(task_id)
       WHERE state IN ('queued','preparing','running','stopping');
@@ -114,7 +114,7 @@ test('schema 3 的产品对象在迁移前取得一致备份', async () => {
   await first.shutdown()
   const database = new DatabaseSync(join(dataDirectory, 'kernel.sqlite'))
   database.exec(
-    'DROP TABLE skill_sources; DROP TABLE skill_imports; DROP TABLE skill_packages; DROP TABLE feishu_messages; DROP TABLE feishu_binding; DROP TABLE human_requests; PRAGMA user_version=3',
+    'DROP TABLE role_feishu_messages; DROP TABLE skill_sources; DROP TABLE skill_imports; DROP TABLE skill_packages; DROP TABLE feishu_messages; DROP TABLE feishu_binding; DROP TABLE human_requests; PRAGMA user_version=3',
   )
   database.close()
   const migrated = createKernel({ dataDirectory, sourceCommit: 'a'.repeat(40) })
@@ -188,7 +188,7 @@ test('M1 schema 2 升级保留项目并生成独立一致备份，重新打开�
   }
 
   database.exec(
-    'DROP TABLE skill_sources; DROP TABLE skill_imports; DROP TABLE skill_packages; DROP TABLE feishu_messages; DROP TABLE feishu_binding; DROP TABLE human_requests; DROP TABLE model_profiles; DROP TABLE requirement_versions; DROP TABLE team_versions; DROP TABLE role_readiness; PRAGMA user_version=2;',
+    'DROP TABLE role_feishu_messages; DROP TABLE skill_sources; DROP TABLE skill_imports; DROP TABLE skill_packages; DROP TABLE feishu_messages; DROP TABLE feishu_binding; DROP TABLE human_requests; DROP TABLE model_profiles; DROP TABLE requirement_versions; DROP TABLE team_versions; DROP TABLE role_readiness; PRAGMA user_version=2;',
   )
   database
     .prepare('INSERT INTO projects(id,repository_path,data) VALUES(?,?,?)')

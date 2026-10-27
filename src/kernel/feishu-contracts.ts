@@ -32,6 +32,12 @@ export const feishuCommandSchema = feishuBindingSchema
   })
   .strict()
 
+/** 角色提交配置而非自报绑定身份；身份由保存版本的事务生成。 */
+export const roleFeishuInputSchema = feishuCommandSchema.omit({
+  type: true,
+  expectedVersion: true,
+})
+
 export const feishuCredentialBindingSchema = z
   .object({
     reference: z.string().regex(/^feishu-[a-f0-9-]{36}$/),
@@ -57,5 +63,17 @@ export const feishuStatusSchema = z
     bindingVersion: z.number().int().positive().nullable(),
     errorCode: z.string().max(100).nullable(),
     pendingNotifications: z.number().int().nonnegative(),
+  })
+  .strict()
+
+export const roleFeishuStatusSchema = z
+  .object({
+    roleId: z.string().uuid(),
+    roleVersion: z.number().int().positive(),
+    connections: z.array(
+      feishuStatusSchema
+        .omit({ bindingVersion: true })
+        .extend({ appId: feishuAppIdSchema }),
+    ),
   })
   .strict()

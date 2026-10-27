@@ -18,6 +18,7 @@ const messages: Record<string, string> = {
   SKILL_NOT_AVAILABLE: '角色引用的技能版本已卸载或不可用，请创建新角色版本',
   SKILL_REFERENCE_INVALID: '技能引用重复或格式不正确',
   FEISHU_NOT_CONFIGURED: '请先填写并启用专用开发飞书应用绑定',
+  FEISHU_APP_IN_USE: '该飞书应用已属于其他角色或工作空间连接，请使用独立应用',
   FEISHU_IDENTITY_MISMATCH: '飞书应用、租户、所有者、会话或绑定版本不匹配',
   FEISHU_NETWORK_FAILED: '飞书连接或消息请求未完成，业务状态已保留',
   FEISHU_DELIVERY_UNCERTAIN:

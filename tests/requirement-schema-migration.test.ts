@@ -37,7 +37,9 @@ const makeLegacy = (data: string) => {
       'requirement.saved',
     ),
   )
-  fixture.database.exec('PRAGMA user_version=8')
+  fixture.database.exec(
+    'DROP TABLE role_feishu_messages; PRAGMA user_version=8',
+  )
   fixture.database.prepare('VACUUM INTO ?').run(join(data, 'kernel.sqlite'))
   fixture.database.close()
   return requirement

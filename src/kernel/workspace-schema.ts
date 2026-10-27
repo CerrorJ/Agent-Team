@@ -3,6 +3,7 @@ import { initializeProductSchema } from './product-schema.js'
 import { initializeHumanSchema } from './human-schema.js'
 import { initializeFeishuSchema } from './feishu-schema.js'
 import { initializeSkillSchema } from './skill-schema.js'
+import { initializeRoleFeishuSchema } from './role-feishu-schema.js'
 
 /** M1 新增表与旧生命周期事件分离，迁移只新增，不改写 M0 历史。 */
 const workspaceSchemaV2 = `
@@ -72,6 +73,7 @@ export const initializeWorkspaceSchema = (database: DatabaseSync): void => {
   if (version < 6) initializeFeishuSchema(database)
   if (version < 7) initializeSkillSchema(database)
   initializeSnapshotContracts(database, version)
+  if (version < 12) initializeRoleFeishuSchema(database)
 }
 
 /** JSON 契约门禁只升版本，不重写已有业务对象；已发布迁移保持原语句。 */

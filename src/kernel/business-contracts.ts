@@ -20,7 +20,11 @@ import {
   roleConfigurationFields,
 } from './role-contracts.js'
 import { humanCommandSchemas } from './human-contracts.js'
-import { feishuCommandSchema } from './feishu-contracts.js'
+import {
+  feishuCommandSchema,
+  feishuBindingSchema,
+  roleFeishuInputSchema,
+} from './feishu-contracts.js'
 import { skillCommandSchemas, skillReferenceSchema } from './skill-contracts.js'
 
 const id = z.string().uuid()
@@ -48,6 +52,7 @@ export const roleVersionSchema = z
     name: shortText,
     responsibility: longText,
     ...roleConfigurationFields,
+    feishuBinding: feishuBindingSchema.nullable().optional(),
     cli: cliIdSchema,
     modelProfileSnapshot: modelProfileSchema.nullable().optional(),
     model: z.string().trim().max(200),
@@ -195,6 +200,7 @@ export const businessCommandSchema = z.discriminatedUnion('type', [
       name: shortText,
       responsibility: longText,
       ...roleConfigurationFields,
+      feishu: roleFeishuInputSchema.nullable().optional(),
       cli: cliIdSchema,
       modelProfileId: id.nullable().optional(),
       modelProfileRef: requirementRefSchema.nullable().optional(),

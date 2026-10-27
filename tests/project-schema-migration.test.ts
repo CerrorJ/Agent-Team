@@ -36,7 +36,9 @@ const legacyWorkspace = (directory: string) => {
     )
 
   const original = rows()
-  fixture.database.exec('PRAGMA user_version=9')
+  fixture.database.exec(
+    'DROP TABLE role_feishu_messages; PRAGMA user_version=9',
+  )
   fixture.database
     .prepare('VACUUM INTO ?')
     .run(join(directory, 'kernel.sqlite'))

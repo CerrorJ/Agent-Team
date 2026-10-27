@@ -8,10 +8,12 @@ import type { FeishuBinding } from './feishu-contracts.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import type { WorkspaceService } from './workspace-service.js'
 import { HumanStore } from './human-store.js'
+import { assertFeishuActionRoute } from './feishu-action-route.js'
 
 const actionSchema = z
   .object({
     bindingVersion: z.number().int().positive(),
+    bindingId: z.string().uuid().optional(),
     requestId: z.string().uuid(),
     expectedVersion: z.number().int().positive(),
     expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
@@ -50,10 +52,19 @@ export const applyFeishuAction = (options: {
     event.action.value.bindingVersion !== binding.version
   )
     throw new Error('FEISHU_IDENTITY_MISMATCH')
+  assertFeishuActionRoute({
+    store: options.store,
+    binding,
+    requestId: event.action.value.requestId,
+    bindingId: event.action.value.bindingId,
+  })
   const command = decisionCommand(options.store, event.action)
   // 同一平台事件必须产生同一命令键；状态与回执在共享事务提交，重投不会再次续接。
   options.service.command(
-    { key: callbackKey(binding, event.event_id), command },
+    {
+      key: callbackKey(binding, event.event_id, event.action.value.bindingId),
+      command,
+    },
     {
       channel: 'feishu',
       identity: 'local-owner',
@@ -66,7 +77,13 @@ const decisionCommand = (
   action: z.infer<typeof callbackSchema>['action'],
 ): BusinessCommand => {
   const request = new HumanStore(store).get(action.value.requestId)
-  const { bindingVersion: _binding, decision, ...fields } = action.value
+
+  const {
+    bindingVersion: _binding,
+    bindingId: _id,
+    decision,
+    ...fields
+  } = action.value
 
   const response =
     decision === 'answered'
@@ -104,9 +121,15 @@ const decisionCommand = (
   })
 }
 
-const callbackKey = (binding: FeishuBinding, eventId: string): string => {
+const callbackKey = (
+  binding: FeishuBinding,
+  eventId: string,
+  bindingId?: string,
+): string => {
   const hex = createHash('sha256')
-    .update(`${binding.appId}:${binding.version}:${eventId}`)
+    .update(
+      `${binding.appId}:${binding.version}:${bindingId ? `${bindingId}:` : ''}${eventId}`,
+    )
     .digest('hex')
 
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`

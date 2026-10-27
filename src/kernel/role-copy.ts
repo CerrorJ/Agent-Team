@@ -27,6 +27,7 @@ export const copyRole = (input: {
 
   const role = roleVersionSchema.parse({
     ...source,
+    feishuBinding: null,
     id,
     version: 1,
     name: command.name,

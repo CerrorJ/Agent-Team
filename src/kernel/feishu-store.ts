@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { WorkspaceStore } from './workspace-store.js'
+import { roleVersionSchema } from './business-contracts.js'
 import {
   feishuBindingSchema,
   type FeishuBinding,
@@ -22,6 +23,16 @@ export class FeishuStore {
     const previous = this.binding()
     if ((previous?.version ?? 0) !== command.expectedVersion)
       throw new Error('VERSION_CONFLICT')
+    if (
+      this.store
+        .list('role_versions', roleVersionSchema)
+        .some(
+          (role) =>
+            role.feishuBinding?.appId.toLowerCase() ===
+            command.appId.toLowerCase(),
+        )
+    )
+      throw new Error('FEISHU_APP_IN_USE')
     const { type: _type, expectedVersion: _version, ...fields } = command
 
     const binding = feishuBindingSchema.parse({
@@ -41,6 +52,23 @@ export class FeishuStore {
     return { id: binding.id }
   }
 
+  /** singleton覆盖不代表旧应用可转交角色；原事件中的归属仍保留。 */
+  ownsApp(appId: string): boolean {
+    const candidate = appId.toLowerCase()
+    if (this.binding()?.appId.toLowerCase() === candidate) return true
+    return this.store.database
+      .prepare(
+        "SELECT data FROM workspace_events WHERE type='feishu.binding_changed'",
+      )
+      .all()
+      .some(
+        (row) =>
+          feishuBindingSchema
+            .parse(JSON.parse(String(row.data)))
+            .appId.toLowerCase() === candidate,
+      )
+  }
+
   pending(
     binding: FeishuBinding,
     deliverableOnly = false,
@@ -54,6 +82,11 @@ export class FeishuStore {
         e.aggregate_id IN (SELECT h.id FROM human_requests h JOIN runs r ON r.id=h.run_id WHERE r.task_id=t.id)
       LEFT JOIN feishu_messages m ON m.task_id=t.id AND m.binding_version=?
       WHERE json_extract(t.data,'$.purpose') IS NOT 'role_trial' AND e.type!='run.activity'
+        AND (CASE WHEN EXISTS(SELECT 1 FROM runs r WHERE r.task_id=t.id)
+          THEN (SELECT json_type(r.data,'$.roleSnapshot.feishuBinding') FROM runs r
+            WHERE r.task_id=t.id ORDER BY r.rowid DESC LIMIT 1)
+          ELSE (SELECT json_type(v.data,'$.feishuBinding') FROM role_versions v
+            WHERE v.id=t.role_id ORDER BY v.version DESC LIMIT 1) END) IS NULL
         AND (?=0 OR m.message_id IS NOT NULL OR m.create_started_at IS NULL OR m.create_started_at>=?)
       GROUP BY t.id HAVING MAX(e.sequence)>COALESCE(m.sequence,0)
       ORDER BY sequence`,

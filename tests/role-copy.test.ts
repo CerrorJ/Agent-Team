@@ -132,7 +132,11 @@ test('复制完整固定配置但不继承受控就绪记录，独立ID/v1和不
       ...originalConfiguration
     } = f.source
 
-    assert.deepEqual(configuration, originalConfiguration)
+    assert.equal(configuration.feishuBinding, null)
+    assert.deepEqual(configuration, {
+      ...originalConfiguration,
+      feishuBinding: null,
+    })
     assert.deepEqual(f.read(f.source.id), f.source)
     const state = readiness.read(copied)
     assert.equal(state.state, 'draft')

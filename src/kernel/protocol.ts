@@ -20,8 +20,8 @@ export * from './backup-contracts.js'
 export * from './diagnostic-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.12.0'
-export const DATA_SCHEMA_VERSION = 11
+export const KERNEL_VERSION = '0.13.0'
+export const DATA_SCHEMA_VERSION = 12
 
 const requestBase = {
   protocolVersion: z.literal(PROTOCOL_VERSION),
@@ -52,6 +52,28 @@ export const requestSchema = z.discriminatedUnion('method', [
   z.object({ ...requestBase, method: z.literal('feishu.connect') }).strict(),
   z.object({ ...requestBase, method: z.literal('feishu.disconnect') }).strict(),
   z.object({ ...requestBase, method: z.literal('feishu.status') }).strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('feishu.role.connect'),
+      roleId: z.string().uuid(),
+      expectedRoleVersion: z.number().int().positive(),
+    })
+    .strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('feishu.role.disconnect'),
+      roleId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      ...requestBase,
+      method: z.literal('feishu.role.status'),
+      roleId: z.string().uuid(),
+    })
+    .strict(),
   z
     .object({
       ...requestBase,
@@ -173,6 +195,7 @@ export const handshakeSchema = z
         'codex-and-claude',
         'human-workflow',
         'feishu-channel',
+        'role-feishu-routing',
         'skills',
         'workspace-backup',
         'environment-diagnostics',

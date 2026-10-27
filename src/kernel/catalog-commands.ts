@@ -14,6 +14,7 @@ import { RoleReadinessStore } from './role-readiness-store.js'
 import { SkillStore } from './skill-store.js'
 import { resolveRoleConfiguration } from './role-configuration.js'
 import { copyRole } from './role-copy.js'
+import { resolveRoleFeishu } from './role-feishu-binding.js'
 import {
   modelProfileSchema,
   requirementVersionSchema,
@@ -68,6 +69,7 @@ const saveRole = (
 
   const role: RoleVersion = {
     ...configuration,
+    ...resolveRoleFeishu({ store, command, id }),
     id,
     version: command.expectedVersion + 1,
     name: command.name,
