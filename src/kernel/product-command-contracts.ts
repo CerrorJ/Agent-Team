@@ -46,6 +46,7 @@ export const productCommandSchemas = [
       id: id.optional(),
       expectedVersion,
       name,
+      description: z.string().trim().max(20_000).optional(),
       roleIds: z.array(id).min(1).max(12),
       coordinatorRoleId: id,
     })

@@ -247,6 +247,7 @@ const createHandshake = (sourceCommit: string): KernelHandshake => {
       'role-copy',
       'task-preflight',
       'team-workflow',
+      'team-configuration',
       'codex-and-claude',
       'human-workflow',
       'feishu-channel',

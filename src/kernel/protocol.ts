@@ -20,8 +20,8 @@ export * from './backup-contracts.js'
 export * from './diagnostic-contracts.js'
 
 export const PROTOCOL_VERSION = 1 as const
-export const KERNEL_VERSION = '0.11.0'
-export const DATA_SCHEMA_VERSION = 10
+export const KERNEL_VERSION = '0.12.0'
+export const DATA_SCHEMA_VERSION = 11
 
 const requestBase = {
   protocolVersion: z.literal(PROTOCOL_VERSION),
@@ -169,6 +169,7 @@ export const handshakeSchema = z
         'role-copy',
         'task-preflight',
         'team-workflow',
+        'team-configuration',
         'codex-and-claude',
         'human-workflow',
         'feishu-channel',

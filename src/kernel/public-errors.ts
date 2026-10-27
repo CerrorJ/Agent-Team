@@ -62,6 +62,7 @@ const messages: Record<string, string> = {
   MODEL_CREDENTIAL_REQUIRED: '模型配置尚未提供可用的安全凭据',
   CLI_MODEL_MISMATCH: '所选模型配置与角色 CLI 不兼容',
   TEAM_CONFIG_INVALID: '团队成员必须唯一，协调者必须在成员中',
+  TEAM_NAME_TAKEN: '团队名称已被其他团队使用，请修改名称后重试',
   CROSS_PROJECT_REFERENCE: '需求或依赖必须属于同一项目',
   ROLE_NOT_READY: '角色未通过本版本试运行或尚未启用',
   ROLE_TRIAL_ACTIVE: '该角色已有在途或状态待确认的试运行',

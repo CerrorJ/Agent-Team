@@ -13,6 +13,7 @@ import {
 } from './product-contracts.js'
 import type { WorkspaceStore } from './workspace-store.js'
 import { resolveRequirementMetadata } from './requirement-metadata.js'
+import { resolveTeamConfiguration } from './team-configuration.js'
 
 export type ProductCommand = Extract<
   BusinessCommand,
@@ -67,15 +68,30 @@ export const saveProductObject = (input: {
       break
     }
     case 'team.save':
-      validateTeam(store, command)
-      products.append(
-        'team_versions',
-        teamVersionSchema.parse(value),
-        'team.saved',
-      )
+      saveTeam(store, command, { id, createdAt: value.createdAt })
       break
   }
   return { id }
+}
+
+const saveTeam = (
+  store: WorkspaceStore,
+  command: Extract<ProductCommand, { type: 'team.save' }>,
+  metadata: { id: string; createdAt: string },
+): void => {
+  validateTeam(store, command)
+  new ProductStore(store).append(
+    'team_versions',
+    teamVersionSchema.parse({
+      ...metadata,
+      version: command.expectedVersion + 1,
+      name: command.name,
+      roleIds: command.roleIds,
+      coordinatorRoleId: command.coordinatorRoleId,
+      ...resolveTeamConfiguration({ store, command, id: metadata.id }),
+    }),
+    'team.saved',
+  )
 }
 
 const validateModel = (

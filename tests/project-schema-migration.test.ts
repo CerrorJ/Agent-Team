@@ -44,7 +44,7 @@ const legacyWorkspace = (directory: string) => {
   return original
 }
 
-test('schema9升级10前一致性备份，旧项目/Run/任务/事件原始JSON不变，重启不补造配置', async () => {
+test('schema9升级当前契约前一致性备份，旧项目/Run/任务/事件原始JSON不变，重启不补造配置', async () => {
   const temporary = ownedTempDirectory('weftpilot-project-schema-')
   const directory = join(temporary.directory, 'legacy')
   const original = legacyWorkspace(directory)
@@ -94,7 +94,7 @@ test('schema9升级10前一致性备份，旧项目/Run/任务/事件原始JSON�
   }
 })
 
-test('schema9备份只读预览与恢复不改源字节，恢复副本启动升级10', async () => {
+test('schema9备份只读预览与恢复不改源字节，恢复副本启动升级当前契约', async () => {
   const temporary = ownedTempDirectory('weftpilot-project-backup-')
   const backup = join(temporary.directory, 'backup')
   const original = legacyWorkspace(backup)

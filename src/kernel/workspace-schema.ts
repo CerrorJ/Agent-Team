@@ -88,4 +88,7 @@ const initializeSnapshotContracts = (
   // v10 扩展项目及 Run JSON；仅提升读取门禁，历史行不补写配置或上下文。
   if (version < 10)
     database.exec('BEGIN IMMEDIATE; PRAGMA user_version=10; COMMIT;')
+  // v11 扩展团队 JSON，旧内核应拒读新字段；保留既有团队及计划快照原文。
+  if (version < 11)
+    database.exec('BEGIN IMMEDIATE; PRAGMA user_version=11; COMMIT;')
 }
