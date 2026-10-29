@@ -23,3 +23,9 @@
 Reviewer独立25项通过后，补充探针发现P2：singleton从A改成B后角色仍能领历史A，hex大小写变体也能被不同角色领取。保留初审REQUEST_CHANGES和原探针；修正为角色分配核对当前及历史feishu.binding_changed事件，双方归属比较按App ID小写，物理连接槽也统一比较；业务快照/回调身份原文保持，不能借大小写变体建立第二个消费者。新增两回归，相关9项通过；修正后独立复验及完整检查进行中。
 
 修正后完整185/185、双类型、全lint/规模/格式、原独立服务build与build:kernel通过。Tester独立补验两新回归、built真实IPC/文件SQLite、历史A/AAAA与双向case冲突、23表无写、同角色当前upper/历史lower仅一槽、严格回调/断开迟到、自然shutdown/exit0及PID缺席，限定PASS；Reviewer在Tester之后独立27项和自有归属探针通过，31源码/测试SHA及built字节匹配，最终APPROVE，P2关闭，无剩余P0—P3。Reviewer纯内存夹具为21业务表，Tester实际文件库为23表，不能互换计数。该批准仅后端候选，不含桌面/真实租户/模型/macOS；后续固定源码、文件数和产物摘要须另在干净检出实测，不覆盖旧012。
+
+## 固定产物与桌面关联（2026-10-29）
+
+源码已正常提交推送`feat/role-feishu-routing/2750d66321d4920745c2f3f2a88428fcc73f78bd`，0.13.0/protocol1/schema12。`weftpilot-agent-team-kernel-0.13.0.tgz` SHA-256 `c5efd3cee257afa2e723f64f5a5fd6b4f3fd74dac40f51652c6b3237175e9ecd`，独立干净检出重建一致，精确142正规文件；桌面装配额外含宿主artifact-lock.json，共143文件。Tester独立解包两archive、逐文件SHA及内外锁/manifest全对象一致，固定2750运行源码与补验源码一致；直接消费桌面装配kernel.js的真实JSON IPC握手确认013/p1/schema12/2750/能力，并自然shutdown/exit0/PID缺席。
+
+桌面候选`f3ab1c6a3713573594c1a41aad0f25ed26c401d0`已正常提交推送，对接宿主密文、第5步三入口与角色独立状态。初包完整69项52通过17明确跳过、真实双CLI1/1通过；GUI发现已绑定卡片仍显示未配置的P2后，另建修正包，定向8项6通过2模型跳过。修正GUI独立补验与[CI40850060710](https://github.com/CerrorJ/weftpilot/actions/runs/40850060710)进行中，不能称已通过；初包与修正包证据保持各自归属。业务及版本真相仍在本仓，桌面不直连业务数据库。此关联文档提交不改变固定2750，也不重建同版本产物。
