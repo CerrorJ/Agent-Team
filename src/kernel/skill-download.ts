@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import type { SkillSource } from './skill-contracts.js'
 import { validateSkillFileSet, validateSkillPath } from './skill-paths.js'
+import {
+  SkillDownloadFailure,
+  skillHttpFailure,
+  skillTransportFailure,
+} from './skill-download-errors.js'
 
 export type SkillFetch = typeof fetch
 export interface SkillBlob {
@@ -123,22 +128,37 @@ const downloadBytes = async (input: {
 }): Promise<Buffer> => {
   const signal = AbortSignal.any([input.signal, AbortSignal.timeout(15_000)])
 
-  const response = await input.fetcher(input.url, {
-    redirect: 'error',
-    signal,
-    credentials: 'omit',
-    headers: {
-      accept: 'application/vnd.github+json',
-      'user-agent': 'WeftPilot-Skill-Importer',
-    },
-  })
+  try {
+    const response = await input.fetcher(input.url, {
+      redirect: 'error',
+      signal,
+      credentials: 'omit',
+      headers: {
+        accept: 'application/vnd.github+json',
+        'user-agent': 'WeftPilot-Skill-Importer',
+      },
+    })
 
-  if (!response.ok || !response.body) throw new Error('SKILL_DOWNLOAD_FAILED')
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined)
+      throw skillHttpFailure(response)
+    }
+    if (!response.body) throw new SkillDownloadFailure('SKILL_DOWNLOAD_FAILED')
+    return await readLimitedBody(response.body, input.limit)
+  } catch (error) {
+    throw skillTransportFailure(error)
+  }
+}
+
+const readLimitedBody = async (
+  body: ReadableStream<Uint8Array>,
+  limit: number,
+): Promise<Buffer> => {
   const chunks: Uint8Array[] = []
   let size = 0
-  for await (const chunk of response.body) {
+  for await (const chunk of body) {
     size += chunk.length
-    if (size > input.limit) throw new Error('SKILL_SIZE_LIMIT')
+    if (size > limit) throw new SkillDownloadFailure('SKILL_SIZE_LIMIT')
     chunks.push(chunk)
   }
   return Buffer.concat(chunks)

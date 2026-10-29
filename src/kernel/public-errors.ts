@@ -14,6 +14,17 @@ const messages: Record<string, string> = {
   SKILL_SIZE_LIMIT: '技能文件数量或大小超出安装上限',
   SKILL_DIGEST_MISMATCH: '技能内容摘要不匹配，已阻止安装或执行',
   SKILL_DOWNLOAD_FAILED: '技能下载未完成，可核对来源后重新导入',
+  SKILL_DOWNLOAD_NETWORK_FAILED: '技能下载网络未完成，请检查连接后手动重新导入',
+  SKILL_DOWNLOAD_TIMEOUT: '技能下载超时，请稍后手动重新导入',
+  SKILL_DOWNLOAD_DNS_FAILED: '无法解析技能源域名，请检查网络与DNS',
+  SKILL_DOWNLOAD_TLS_FAILED:
+    '技能源证书校验失败，请检查系统时间与可信证书，不要关闭TLS校验',
+  SKILL_DOWNLOAD_RATE_LIMITED:
+    '技能源请求被限流，请稍后手动重新导入；不会自动重试',
+  SKILL_DOWNLOAD_FORBIDDEN: '技能源拒绝访问；当前仅支持公开仓库',
+  SKILL_DOWNLOAD_NOT_FOUND: '未找到技能源文件或固定提交，请核对公开仓库与路径',
+  SKILL_DOWNLOAD_SERVER_UNAVAILABLE: '技能源服务暂时不可用，请稍后手动重新导入',
+  SKILL_DOWNLOAD_HTTP_FAILED: '技能源HTTP请求未成功，请核对来源后手动重新导入',
   SKILL_PREVIEW_REQUIRED: '请先查看本版本技能及许可证，再确认安装',
   SKILL_NOT_AVAILABLE: '角色引用的技能版本已卸载或不可用，请创建新角色版本',
   SKILL_REFERENCE_INVALID: '技能引用重复或格式不正确',
