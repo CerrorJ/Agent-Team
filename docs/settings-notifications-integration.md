@@ -10,4 +10,6 @@
 
 Windows实际包69单元/8装配、strict/lint/格式、完整默认78项61通过17明确跳过、独立GUI限定PASS及随后源码APPROVE。新增真实opt-in后默认总数变79，旧78整轮不能改写；Root与独立Tester各自真实Codex交付→worker JSON IPC→自动review原生show回执通过，隐藏窗口仍隐藏、Task待验收/0验收/进程确认结束。Root另真实workflow4项通过，覆盖退回/新Run重试/人工验收、在途停止与完全退出及三次立即停止竞争；不能据此关闭旧Windows unknown现场。
 
-[本提交原生CI40994207392](https://github.com/CerrorJ/weftpilot/actions/runs/40994207392)已触发，结果与官方产物待核，不继承ab82绿色。OS横幅可见/真实点击、其他类别的真实自动通知、macOS用户设备/Keychain、真实飞书/自定义模型、许可/签名/发行继续待验。桌面详细复现、资源SHA和历史失败见该分支`docs/development/settings-notifications.md`；M0—M4与整体八页未封板。
+[本提交原生CI40994207392](https://github.com/CerrorJ/weftpilot/actions/runs/40994207392) attempt1确切6b35双平台SUCCESS：单元69，两平台开发/实际各79项61通过18明确跳过，公共来源各1通过2CLI跳过，未签名平台安装材料装配通过。独立Tester核官方完整日志、六ZIP摘要/CRC与60张新图，Reviewer另核官方元数据/日志/归档及两代表图后限定APPROVE；全部60图查看归Tester。Mac本轮备份通过仅未复现旧Keychain失败，不关闭历史根因。
+
+原生JSON明确Win test.shown、Mac test.failed，CI绿色不能当Mac显示成功。固定Electron42[官方原文](https://github.com/electron/electron/blob/v42.0.0/docs/api/notification.md)要求macOS应用签名；当前未签名材料不满足前置，尚无签名对照，不定唯一根因。正式签名凭据仍需另行授权；可先研究无凭据的隔离开发签名。桌面docs提交`a89781803a12ebd07605e2dfe08a40068ee2d21a`保留完整CI/六归档摘要、八页核心新对象流程20图/294源SHA限定验收、Root真实双CLI团队1P和隔离NSIS安装升级卸载1P。OS横幅/真实点击、其他类别自动通知、用户设备/Keychain、真实飞书/自定义模型、许可/签名/发行继续待验；M0—M4与整体八页全状态未封板，不把本docs HEAD重新打成0.13.1。
