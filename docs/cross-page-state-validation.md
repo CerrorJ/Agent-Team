@@ -9,3 +9,9 @@ Root两种真实CLI在此前初轮均已succeeded/confirmed_ended/in_review，�
 独立Tester实际GUI九项/0CLI0Run及源码Reviewer限定PASS/APPROVE。最终新默认串行Windows包80项62P18明确跳过/0失败0取消、exit0；首并行60P2取消和相同包串行两文件5P另记，不指定超时唯一根因或删除旧结果。新确切提交的双平台CI待完整核验，不继承前一78449的79项CI。四运行资源与独立GUI包字节一致，元数据只另改测试脚本策略。
 
 本轮不证明真实飞书、有效自定义模型、plan/operation全部审批、历史未知进程、Mac真实CLI/用户安装/横幅点击或正式发行通过。相关原始证据和复现入口在桌面`docs/development/cross-page-state-validation.md`；前一78449 Mac默认开发包结果见本仓`docs/macos-notification-probe.md`及关联文档提交`050fedd0432935e184693cf85388dc3c6723876f`。
+
+## 原生失败与诊断续接
+
+02f确切[41191641941](https://github.com/CerrorJ/weftpilot/actions/runs/41191641941)的Mac job124509460313在核心179P10平台跳过/单元69P/装配8P1平台跳过及ad-hoc strict通过后，must-shown实际failed；后续开发/包80项与新Mac图未执行，不能套784绿色。唯一Mac有限JSON及官方579字节归档已独立核验，业务全0；旧step在失败后才复制签名旁证，实际没有本轮sidecar，不补造157明细。
+
+桌面续接`fix/native-notification-diagnostics/e9f042722432df4887c74670070b6312a5ba929a`只补测试侧有限授权/调度事件、错误分类+指纹、失败前sidecar保留。原生单项失败可继续独立UI，但末尾按原始outcome硬阻断，必须shown条件不放宽；当前原因未定，授权时序只是固定Electron源码候选。Root71单元、真实Winshown与独立GUI/探针/隐私及硬gate边界PASS，随后Reviewer限定APPROVE，新的Mac实际采集仍待CI。运行产物及原独立飞书入口保持73/0.13.1/p1/schema12/143/d9，不新增内核版本。
