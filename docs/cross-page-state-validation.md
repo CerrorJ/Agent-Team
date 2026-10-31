@@ -15,3 +15,7 @@ Root两种真实CLI在此前初轮均已succeeded/confirmed_ended/in_review，�
 02f确切[41191641941](https://github.com/CerrorJ/weftpilot/actions/runs/41191641941)的Mac job124509460313在核心179P10平台跳过/单元69P/装配8P1平台跳过及ad-hoc strict通过后，must-shown实际failed；后续开发/包80项与新Mac图未执行，不能套784绿色。唯一Mac有限JSON及官方579字节归档已独立核验，业务全0；旧step在失败后才复制签名旁证，实际没有本轮sidecar，不补造157明细。
 
 桌面续接`fix/native-notification-diagnostics/e9f042722432df4887c74670070b6312a5ba929a`只补测试侧有限授权/调度事件、错误分类+指纹、失败前sidecar保留。原生单项失败可继续独立UI，但末尾按原始outcome硬阻断，必须shown条件不放宽；当前原因未定，授权时序只是固定Electron源码候选。Root71单元、真实Winshown与独立GUI/探针/隐私及硬gate边界PASS，随后Reviewer限定APPROVE，新的Mac实际采集仍待CI。运行产物及原独立飞书入口保持73/0.13.1/p1/schema12/143/d9，不新增内核版本。
+
+该确切e9f的[41192789086](https://github.com/CerrorJ/weftpilot/actions/runs/41192789086) attempt1最终仍FAIL：Win成功，Mac公共来源返回SKILL_DOWNLOAD_RATE_LIMITED（0P1F2真实CLI跳过），实际网络限流原因未独立定位，Win来源1P2跳过不能替代Mac失败。两平台71单元、开发/实际80项各62P18S/0失败0取消，Mac首次probe与默认通知都shown，末原outcome=success硬gate通过；诊断只有创建59ms/调度76ms，没有授权行或真实失败实例，旧02f波动不关闭。
+
+独立Tester核六官方ZIP/63PNG元数据/四有限JSON，实际看九张；Reviewer独立补审并另看两张Mac图，APPROVE_VERIFIED_PARTIAL_CI_ONLY不等于整轮绿。Mac来源失败图仍下载中，通知图为requested时点，均不冒称图片显示了后续结果。签名旁证157项只给本轮aggregate18d39133…，不从ZIP重算整个.app、不冒正式签名/用户安装/横幅点击验收。协议/数据/产物锁及生成OpenWiki保持不变。
